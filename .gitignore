@@ -1,10 +1,22 @@
+# Environment
 .venv/
+
+# Python
 __pycache__/
 *.py[cod]
 *.egg-info/
 dist/
 build/
+
+# Testing
 .pytest_cache/
+.coverage
+htmlcov/
+
+# Runtime
 *.db
+
+# Local session files
 PLAN.md
 CLAUDE.md
+.claude/
