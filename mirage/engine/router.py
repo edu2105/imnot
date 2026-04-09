@@ -113,11 +113,33 @@ def _register_admin_routes(
         session_id = store.store_session_payload(partner_name, dp_name, payload)
         return JSONResponse({"session_id": session_id})
 
-    upload_global.__name__ = f"admin_global_{partner_name}_{dp_name}"
-    upload_session.__name__ = f"admin_session_{partner_name}_{dp_name}"
+    async def get_global(request: Request) -> JSONResponse:
+        result = store.get_global_payload(partner_name, dp_name)
+        if result is None:
+            return JSONResponse(
+                status_code=404,
+                content={"detail": f"No global payload set for {partner_name}/{dp_name}"},
+            )
+        return JSONResponse(result)
+
+    async def get_session(session_id: str) -> JSONResponse:
+        result = store.get_session_payload(session_id)
+        if result is None:
+            return JSONResponse(
+                status_code=404,
+                content={"detail": f"Session '{session_id}' not found"},
+            )
+        return JSONResponse(result)
+
+    upload_global.__name__ = f"admin_upload_global_{partner_name}_{dp_name}"
+    upload_session.__name__ = f"admin_upload_session_{partner_name}_{dp_name}"
+    get_global.__name__ = f"admin_get_global_{partner_name}_{dp_name}"
+    get_session.__name__ = f"admin_get_session_{partner_name}_{dp_name}"
 
     app.add_api_route(global_path, upload_global, methods=["POST"])
     app.add_api_route(session_path, upload_session, methods=["POST"])
+    app.add_api_route(global_path, get_global, methods=["GET"])
+    app.add_api_route(f"/mirage/admin/{partner_name}/{dp_name}/payload/session/{{session_id}}", get_session, methods=["GET"])
     logger.debug("Registered admin routes for %s/%s", partner_name, dp_name)
 
 

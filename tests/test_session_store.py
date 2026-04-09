@@ -105,6 +105,50 @@ def test_poll_request_not_found(store):
 
 
 # ---------------------------------------------------------------------------
+# Admin: get global payload
+# ---------------------------------------------------------------------------
+
+
+def test_get_global_payload(store):
+    store.store_global_payload("ohip", "reservation", {"reservationId": "R1"})
+    result = store.get_global_payload("ohip", "reservation")
+    assert result is not None
+    assert result["payload"] == {"reservationId": "R1"}
+    assert "updated_at" in result
+
+
+def test_get_global_payload_not_found(store):
+    assert store.get_global_payload("ohip", "reservation") is None
+
+
+def test_get_global_payload_reflects_latest_write(store):
+    store.store_global_payload("ohip", "reservation", {"v": 1})
+    store.store_global_payload("ohip", "reservation", {"v": 2})
+    result = store.get_global_payload("ohip", "reservation")
+    assert result["payload"] == {"v": 2}
+
+
+# ---------------------------------------------------------------------------
+# Admin: get session payload
+# ---------------------------------------------------------------------------
+
+
+def test_get_session_payload(store):
+    session_id = store.store_session_payload("ohip", "reservation", {"reservationId": "S1"})
+    result = store.get_session_payload(session_id)
+    assert result is not None
+    assert result["payload"] == {"reservationId": "S1"}
+    assert result["session_id"] == session_id
+    assert result["partner"] == "ohip"
+    assert result["datapoint"] == "reservation"
+    assert "created_at" in result
+
+
+def test_get_session_payload_not_found(store):
+    assert store.get_session_payload("nonexistent-id") is None
+
+
+# ---------------------------------------------------------------------------
 # Admin: list sessions
 # ---------------------------------------------------------------------------
 

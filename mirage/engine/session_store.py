@@ -205,6 +205,36 @@ class SessionStore:
     # Admin queries
     # ------------------------------------------------------------------
 
+    def get_global_payload(self, partner: str, datapoint: str) -> dict[str, Any] | None:
+        """Return the current global payload for (partner, datapoint), or None if not set."""
+        with self._cursor() as cur:
+            cur.execute(
+                "SELECT payload, updated_at FROM global_payloads WHERE partner = ? AND datapoint = ?",
+                (partner, datapoint),
+            )
+            row = cur.fetchone()
+        if row is None:
+            return None
+        return {"payload": json.loads(row["payload"]), "updated_at": row["updated_at"]}
+
+    def get_session_payload(self, session_id: str) -> dict[str, Any] | None:
+        """Return the payload and metadata for a session_id, or None if not found."""
+        with self._cursor() as cur:
+            cur.execute(
+                "SELECT session_id, partner, datapoint, payload, created_at FROM sessions WHERE session_id = ?",
+                (session_id,),
+            )
+            row = cur.fetchone()
+        if row is None:
+            return None
+        return {
+            "session_id": row["session_id"],
+            "partner": row["partner"],
+            "datapoint": row["datapoint"],
+            "payload": json.loads(row["payload"]),
+            "created_at": row["created_at"],
+        }
+
     def list_sessions(self) -> list[dict[str, Any]]:
         """Return all sessions ordered by creation time descending."""
         with self._cursor() as cur:
