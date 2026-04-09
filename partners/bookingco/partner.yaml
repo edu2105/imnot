@@ -1,0 +1,24 @@
+partner: bookingco
+description: BookingCo fictional partner — demonstrates static and fetch patterns
+
+datapoints:
+
+  - name: token
+    description: Session token endpoint (non-standard, returns a plain token string)
+    pattern: static
+    endpoints:
+      - method: POST
+        path: /bookingco/auth/token
+        response:
+          status: 200
+          body:
+            token: "static-token-replace-in-real-use"
+
+  - name: charges
+    description: Retrieve posted charges for a property
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /bookingco/v1/charges
+        response:
+          status: 200

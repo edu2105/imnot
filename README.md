@@ -1,6 +1,6 @@
 # Mirage
 
-[![CI](https://github.com/edu2105/mirage/actions/workflows/ci.yml/badge.svg)](https://github.com/edu2105/mirage/actions/workflows/ci.yml)
+[![CI](https://github.com/edu2105/mirage/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/edu2105/mirage/actions/workflows/ci.yml)
 
 Mirage is a stateful API mock server for integration testing.
 
@@ -70,11 +70,11 @@ non-standard auth endpoints, health checks, or any fixed response.
   pattern: static
   endpoints:
     - method: POST
-      path: /api/auth/token
+      path: /bookingco/auth/token
       response:
         status: 200
         body:
-          token: "2893e0a65fcfffcbb86e16fb1bc1c612fcd3eb78"
+          token: "static-token-replace-in-real-use"
 ```
 
 ### `fetch`
@@ -87,14 +87,14 @@ Single GET endpoint that returns the stored payload for the datapoint. Supports
   pattern: fetch
   endpoints:
     - method: GET
-      path: /api/v2/charges
+      path: /bookingco/v1/charges
       response:
         status: 200
 ```
 
 Upload a payload first, then GET returns it:
 ```bash
-curl -X POST http://localhost:8000/mirage/admin/leanpms/charges/payload \
+curl -X POST http://localhost:8000/mirage/admin/bookingco/charges/payload \
      -H "Content-Type: application/json" \
      -d '{"charges": [{"id": "C1", "amount": 150}]}'
 
@@ -136,7 +136,7 @@ Any `fetch` or `poll` endpoint supports session isolation via `X-Mirage-Session`
 
 ```bash
 # Upload a session-scoped payload — returns a session_id
-SESSION=$(curl -s -X POST http://localhost:8000/mirage/admin/leanpms/charges/payload/session \
+SESSION=$(curl -s -X POST http://localhost:8000/mirage/admin/bookingco/charges/payload/session \
                -H "Content-Type: application/json" \
                -d '{"charges": [{"id": "S1"}]}' | jq -r .session_id)
 
@@ -205,7 +205,7 @@ mirage/
 │   ├── ohip/          # OHIP reservations (oauth + poll)
 │   │   ├── partner.yaml
 │   │   └── payloads/
-│   └── leanpms/       # LeanPMS (static token + fetch charges)
+│   └── bookingco/       # BookingCo example (static token + fetch charges)
 │       └── partner.yaml
 └── tests/
 ```
