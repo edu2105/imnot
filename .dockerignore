@@ -1,0 +1,13 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+data/
+*.db
+.git
+.github
+tests/
+scripts/
+assets/
+partners/*/payloads/

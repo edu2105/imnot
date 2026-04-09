@@ -30,14 +30,21 @@ mock server — no code changes required to add new partners or endpoints.
 
 ## Quick start
 
+**With Docker (recommended):**
 ```bash
-# Install
+git clone https://github.com/edu2105/mirage.git
+cd mirage
+docker compose up
+```
+
+**Without Docker:**
+```bash
 pip install -e .
-
-# Start the server (loads all partner YAMLs from partners/)
 mirage start
+```
 
-# See what endpoints are available (no server needed)
+See what endpoints are available (no server needed):
+```bash
 mirage routes
 ```
 
@@ -178,6 +185,18 @@ Fixed infra endpoints:
 | `mirage payload get <partner> <datapoint>` | Print the current global payload |
 | `mirage payload set <partner> <datapoint> <file>` | Upload a global payload from a JSON file |
 | `mirage sessions clear` | Delete all sessions from the store |
+
+## Docker
+
+The `partners/` directory and `data/` (SQLite db) are volume-mounted — partners
+can be added without rebuilding the image, and state persists across restarts.
+
+```bash
+docker compose up                   # start
+docker compose restart              # reload after adding a partner YAML
+docker compose down                 # stop (data persists in ./data/)
+docker compose down -v              # stop and wipe all state
+```
 
 ## Adding a new partner
 

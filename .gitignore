@@ -15,6 +15,7 @@ htmlcov/
 
 # Runtime
 *.db
+data/
 
 # Local session files
 PLAN.md

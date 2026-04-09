@@ -1,0 +1,9 @@
+services:
+  mirage:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./partners:/app/partners   # partner YAMLs — edit without rebuilding
+      - ./data:/app/data           # SQLite db — persists across restarts
+    restart: unless-stopped
