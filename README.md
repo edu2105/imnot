@@ -116,20 +116,20 @@ that return `202 Accepted` and require polling.
   endpoints:
     - step: 1
       method: POST
-      path: /ohip/reservations
+      path: /staylink/reservations
       response:
         status: 202
-        location_template: /ohip/reservations/{uuid}
+        location_template: /staylink/reservations/{uuid}
     - step: 2
       method: HEAD
-      path: /ohip/reservations/{uuid}
+      path: /staylink/reservations/{uuid}
       response:
         status: 201
         headers:
           Status: COMPLETED
     - step: 3
       method: GET
-      path: /ohip/reservations/{uuid}
+      path: /staylink/reservations/{uuid}
       response:
         status: 200
 ```
@@ -206,7 +206,7 @@ mirage/
 │   ├── loader/        # YAML partner definition parser
 │   └── cli.py         # mirage CLI
 ├── partners/
-│   ├── ohip/          # OHIP reservations (oauth + poll)
+│   ├── staylink/      # StayLink example (oauth + poll)
 │   │   ├── partner.yaml
 │   │   └── payloads/
 │   └── bookingco/       # BookingCo example (static token + fetch charges)

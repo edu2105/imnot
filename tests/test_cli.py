@@ -83,10 +83,10 @@ def test_status_shows_sessions(runner, tmp_path):
     db = tmp_path / "test.db"
     store = SessionStore(db_path=db)
     store.init()
-    store.store_session_payload("ohip", "reservation", {"reservationId": "X"})
+    store.store_session_payload("staylink", "reservation", {"reservationId": "X"})
     store.close()
 
     result = runner.invoke(cli, ["status", "--db", str(db)])
     assert result.exit_code == 0
-    assert "ohip" in result.output
+    assert "staylink" in result.output
     assert "reservation" in result.output

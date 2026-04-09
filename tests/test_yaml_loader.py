@@ -19,17 +19,17 @@ PARTNERS_DIR = Path(__file__).parent.parent / "partners"
 # ---------------------------------------------------------------------------
 
 
-def test_load_ohip_partner():
+def test_load_staylink_partner():
     partners = load_partners(PARTNERS_DIR)
-    ohip = next((p for p in partners if p.partner == "ohip"), None)
-    assert ohip is not None
-    assert isinstance(ohip, PartnerDef)
-    assert len(ohip.datapoints) == 2
+    staylink = next((p for p in partners if p.partner == "staylink"), None)
+    assert staylink is not None
+    assert isinstance(staylink, PartnerDef)
+    assert len(staylink.datapoints) == 2
 
 
-def test_ohip_token_datapoint():
-    ohip = next(p for p in load_partners(PARTNERS_DIR) if p.partner == "ohip")
-    token = next(dp for dp in ohip.datapoints if dp.name == "token")
+def test_staylink_token_datapoint():
+    staylink = next(p for p in load_partners(PARTNERS_DIR) if p.partner == "staylink")
+    token = next(dp for dp in staylink.datapoints if dp.name == "token")
 
     assert isinstance(token, DatapointDef)
     assert token.pattern == "oauth"
@@ -44,9 +44,9 @@ def test_ohip_token_datapoint():
     assert ep.response["token_type"] == "Bearer"
 
 
-def test_ohip_reservation_datapoint():
-    ohip = next(p for p in load_partners(PARTNERS_DIR) if p.partner == "ohip")
-    reservation = next(dp for dp in ohip.datapoints if dp.name == "reservation")
+def test_staylink_reservation_datapoint():
+    staylink = next(p for p in load_partners(PARTNERS_DIR) if p.partner == "staylink")
+    reservation = next(dp for dp in staylink.datapoints if dp.name == "reservation")
 
     assert reservation.pattern == "poll"
     assert len(reservation.endpoints) == 3

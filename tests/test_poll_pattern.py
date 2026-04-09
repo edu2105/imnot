@@ -27,15 +27,15 @@ def store(tmp_path):
 @pytest.fixture
 def reservation_datapoint():
     partners = load_partners(Path(__file__).parent.parent / "partners")
-    ohip = next(p for p in partners if p.partner == "ohip")
-    return ohip, next(dp for dp in ohip.datapoints if dp.name == "reservation")
+    staylink = next(p for p in partners if p.partner == "staylink")
+    return staylink, next(dp for dp in staylink.datapoints if dp.name == "reservation")
 
 
 @pytest.fixture
 def handlers(reservation_datapoint, store):
-    ohip, reservation = reservation_datapoint
+    staylink, reservation = reservation_datapoint
     return make_poll_handlers(
-        partner=ohip.partner,
+        partner=staylink.partner,
         datapoint=reservation,
         store=store,
     )
@@ -70,7 +70,7 @@ async def test_step1_returns_202_and_location(handlers, store):
 
     assert response.status_code == 202
     assert "Location" in response.headers
-    assert "/ohip/reservations/" in response.headers["Location"]
+    assert "/staylink/reservations/" in response.headers["Location"]
 
 
 @pytest.mark.asyncio
@@ -83,7 +83,7 @@ async def test_step1_registers_poll_request(handlers, store):
     uuid = response.headers["Location"].split("/")[-1]
     row = store.get_poll_request(uuid)
     assert row is not None
-    assert row["partner"] == "ohip"
+    assert row["partner"] == "staylink"
     assert row["datapoint"] == "reservation"
     assert row["session_id"] is None
 
@@ -140,7 +140,7 @@ async def test_step3_returns_global_payload(handlers, store):
     uuid = step1_response.headers["Location"].split("/")[-1]
 
     # Upload global payload
-    store.store_global_payload("ohip", "reservation", {"reservationId": "RES001"})
+    store.store_global_payload("staylink", "reservation", {"reservationId": "RES001"})
 
     # Fetch via step 3
     response = await handlers[3](uuid=uuid, request=Request(scope))
@@ -154,7 +154,7 @@ async def test_step3_returns_global_payload(handlers, store):
 @pytest.mark.asyncio
 async def test_step3_returns_session_payload(handlers, store):
     # Upload session payload and get session_id
-    session_id = store.store_session_payload("ohip", "reservation", {"reservationId": "SES001"})
+    session_id = store.store_session_payload("staylink", "reservation", {"reservationId": "SES001"})
 
     # Step 1 with session header
     headers = [(b"x-mirage-session", session_id.encode())]
@@ -185,7 +185,7 @@ async def test_step3_no_payload_returns_404(handlers, store):
 
 @pytest.mark.asyncio
 async def test_step3_session_header_but_no_session_payload_returns_404(handlers, store):
-    store.store_global_payload("ohip", "reservation", {"source": "global"})
+    store.store_global_payload("staylink", "reservation", {"source": "global"})
 
     scope = {"type": "http", "headers": []}
     step1_response = await handlers[1](Request(scope))

@@ -30,7 +30,7 @@ SUPPORTED_PATTERNS = {"oauth", "poll", "push", "static", "fetch"}
 @dataclass
 class EndpointDef:
     method: str                        # HTTP verb, upper-cased
-    path: str                          # e.g. /ohip/reservations/{uuid}
+    path: str                          # e.g. /staylink/reservations/{uuid}
     step: int | None                   # poll step number (1/2/3); None for oauth
     response: dict[str, Any]           # raw response config from YAML
 
@@ -45,7 +45,7 @@ class DatapointDef:
 
 @dataclass
 class PartnerDef:
-    partner: str                       # e.g. "ohip"
+    partner: str                       # e.g. "staylink"
     description: str
     datapoints: list[DatapointDef]
     source_path: Path                  # absolute path to the partner.yaml file

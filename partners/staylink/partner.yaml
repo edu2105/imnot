@@ -1,10 +1,10 @@
-partner: ohip
-description: Oracle Hospitality Integration Platform mock
+partner: staylink
+description: StayLink fictional partner — demonstrates oauth and poll patterns
 
 datapoints:
 
   - name: token
-    description: OAuth 2.0 token endpoint
+    description: OAuth 2.0 client credentials token endpoint
     pattern: oauth
     endpoints:
       - method: POST
@@ -21,14 +21,14 @@ datapoints:
       # Step 1 — submit reservation request
       - step: 1
         method: POST
-        path: /ohip/reservations
+        path: /staylink/reservations
         response:
           status: 202
-          location_template: /ohip/reservations/{uuid}
+          location_template: /staylink/reservations/{uuid}
       # Step 2 — poll for completion status
       - step: 2
         method: HEAD
-        path: /ohip/reservations/{uuid}
+        path: /staylink/reservations/{uuid}
         response:
           status: 201
           headers:
@@ -36,6 +36,6 @@ datapoints:
       # Step 3 — retrieve stored payload
       - step: 3
         method: GET
-        path: /ohip/reservations/{uuid}
+        path: /staylink/reservations/{uuid}
         response:
           status: 200

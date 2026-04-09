@@ -43,10 +43,10 @@ def test_list_partners(client):
     r = client.get("/mirage/admin/partners")
     assert r.status_code == 200
     body = r.json()
-    ohip = next((p for p in body if p["partner"] == "ohip"), None)
-    assert ohip is not None
-    assert "reservation" in ohip["datapoints"]
-    assert "token" in ohip["datapoints"]
+    staylink = next((p for p in body if p["partner"] == "staylink"), None)
+    assert staylink is not None
+    assert "reservation" in staylink["datapoints"]
+    assert "token" in staylink["datapoints"]
 
 
 def test_list_sessions_empty(client):
@@ -57,7 +57,7 @@ def test_list_sessions_empty(client):
 
 def test_list_sessions_after_upload(client):
     client.post(
-        "/mirage/admin/ohip/reservation/payload/session",
+        "/mirage/admin/staylink/reservation/payload/session",
         json={"reservationId": "X"},
     )
     r = client.get("/mirage/admin/sessions")
@@ -71,7 +71,7 @@ def test_list_sessions_after_upload(client):
 
 def test_upload_global_payload(client):
     r = client.post(
-        "/mirage/admin/ohip/reservation/payload",
+        "/mirage/admin/staylink/reservation/payload",
         json={"reservationId": "RES001"},
     )
     assert r.status_code == 200
@@ -80,7 +80,7 @@ def test_upload_global_payload(client):
 
 def test_upload_invalid_json_returns_400(client):
     r = client.post(
-        "/mirage/admin/ohip/reservation/payload",
+        "/mirage/admin/staylink/reservation/payload",
         content=b"not json",
         headers={"Content-Type": "application/json"},
     )
@@ -90,7 +90,7 @@ def test_upload_invalid_json_returns_400(client):
 
 def test_upload_session_payload_returns_session_id(client):
     r = client.post(
-        "/mirage/admin/ohip/reservation/payload/session",
+        "/mirage/admin/staylink/reservation/payload/session",
         json={"reservationId": "RES002"},
     )
     assert r.status_code == 200
@@ -105,8 +105,8 @@ def test_upload_session_payload_returns_session_id(client):
 
 
 def test_get_global_payload(client):
-    client.post("/mirage/admin/ohip/reservation/payload", json={"reservationId": "R1"})
-    r = client.get("/mirage/admin/ohip/reservation/payload")
+    client.post("/mirage/admin/staylink/reservation/payload", json={"reservationId": "R1"})
+    r = client.get("/mirage/admin/staylink/reservation/payload")
     assert r.status_code == 200
     body = r.json()
     assert body["payload"] == {"reservationId": "R1"}
@@ -114,17 +114,17 @@ def test_get_global_payload(client):
 
 
 def test_get_global_payload_not_set_returns_404(client):
-    r = client.get("/mirage/admin/ohip/reservation/payload")
+    r = client.get("/mirage/admin/staylink/reservation/payload")
     assert r.status_code == 404
 
 
 def test_get_session_payload(client):
     session_id = client.post(
-        "/mirage/admin/ohip/reservation/payload/session",
+        "/mirage/admin/staylink/reservation/payload/session",
         json={"reservationId": "S1"},
     ).json()["session_id"]
 
-    r = client.get(f"/mirage/admin/ohip/reservation/payload/session/{session_id}")
+    r = client.get(f"/mirage/admin/staylink/reservation/payload/session/{session_id}")
     assert r.status_code == 200
     body = r.json()
     assert body["payload"] == {"reservationId": "S1"}
@@ -133,7 +133,7 @@ def test_get_session_payload(client):
 
 
 def test_get_session_payload_not_found_returns_404(client):
-    r = client.get("/mirage/admin/ohip/reservation/payload/session/nonexistent")
+    r = client.get("/mirage/admin/staylink/reservation/payload/session/nonexistent")
     assert r.status_code == 404
 
 
@@ -157,43 +157,43 @@ def test_oauth_token(client):
 
 
 def test_poll_step1_returns_202_and_location(client):
-    r = client.post("/ohip/reservations")
+    r = client.post("/staylink/reservations")
     assert r.status_code == 202
     assert "Location" in r.headers
-    assert "/ohip/reservations/" in r.headers["Location"]
+    assert "/staylink/reservations/" in r.headers["Location"]
 
 
 def test_poll_step2_returns_201_and_status(client):
     # Step 1 to get a UUID
-    r1 = client.post("/ohip/reservations")
+    r1 = client.post("/staylink/reservations")
     uuid = r1.headers["Location"].split("/")[-1]
 
-    r2 = client.head(f"/ohip/reservations/{uuid}")
+    r2 = client.head(f"/staylink/reservations/{uuid}")
     assert r2.status_code == 201
     assert r2.headers.get("Status") == "COMPLETED"
 
 
 def test_poll_step3_returns_global_payload(client):
-    client.post("/mirage/admin/ohip/reservation/payload", json={"reservationId": "RES001"})
+    client.post("/mirage/admin/staylink/reservation/payload", json={"reservationId": "RES001"})
 
-    r1 = client.post("/ohip/reservations")
+    r1 = client.post("/staylink/reservations")
     uuid = r1.headers["Location"].split("/")[-1]
 
-    r3 = client.get(f"/ohip/reservations/{uuid}")
+    r3 = client.get(f"/staylink/reservations/{uuid}")
     assert r3.status_code == 200
     assert r3.json() == {"reservationId": "RES001"}
 
 
 def test_poll_step3_unknown_uuid_returns_404(client):
-    r = client.get("/ohip/reservations/nonexistent-uuid")
+    r = client.get("/staylink/reservations/nonexistent-uuid")
     assert r.status_code == 404
 
 
 def test_poll_step3_no_payload_returns_404(client):
-    r1 = client.post("/ohip/reservations")
+    r1 = client.post("/staylink/reservations")
     uuid = r1.headers["Location"].split("/")[-1]
 
-    r3 = client.get(f"/ohip/reservations/{uuid}")
+    r3 = client.get(f"/staylink/reservations/{uuid}")
     assert r3.status_code == 404
 
 
@@ -205,18 +205,18 @@ def test_poll_step3_no_payload_returns_404(client):
 def test_full_session_flow(client):
     # Upload session payload
     r = client.post(
-        "/mirage/admin/ohip/reservation/payload/session",
+        "/mirage/admin/staylink/reservation/payload/session",
         json={"reservationId": "SES001"},
     )
     session_id = r.json()["session_id"]
 
     # Step 1 with session header
-    r1 = client.post("/ohip/reservations", headers={"X-Mirage-Session": session_id})
+    r1 = client.post("/staylink/reservations", headers={"X-Mirage-Session": session_id})
     assert r1.status_code == 202
     uuid = r1.headers["Location"].split("/")[-1]
 
     # Step 3 with session header
-    r3 = client.get(f"/ohip/reservations/{uuid}", headers={"X-Mirage-Session": session_id})
+    r3 = client.get(f"/staylink/reservations/{uuid}", headers={"X-Mirage-Session": session_id})
     assert r3.status_code == 200
     assert r3.json() == {"reservationId": "SES001"}
 
@@ -224,29 +224,29 @@ def test_full_session_flow(client):
 def test_session_does_not_leak_to_global(client):
     # Upload session payload only — no global
     r = client.post(
-        "/mirage/admin/ohip/reservation/payload/session",
+        "/mirage/admin/staylink/reservation/payload/session",
         json={"reservationId": "SES001"},
     )
     session_id = r.json()["session_id"]
 
-    r1 = client.post("/ohip/reservations")
+    r1 = client.post("/staylink/reservations")
     uuid = r1.headers["Location"].split("/")[-1]
 
     # GET without session header → no global payload → 404
-    r3 = client.get(f"/ohip/reservations/{uuid}")
+    r3 = client.get(f"/staylink/reservations/{uuid}")
     assert r3.status_code == 404
 
 
 def test_two_sessions_are_isolated(client):
     s1 = client.post(
-        "/mirage/admin/ohip/reservation/payload/session", json={"user": "alice"}
+        "/mirage/admin/staylink/reservation/payload/session", json={"user": "alice"}
     ).json()["session_id"]
     s2 = client.post(
-        "/mirage/admin/ohip/reservation/payload/session", json={"user": "bob"}
+        "/mirage/admin/staylink/reservation/payload/session", json={"user": "bob"}
     ).json()["session_id"]
 
-    uuid1 = client.post("/ohip/reservations", headers={"X-Mirage-Session": s1}).headers["Location"].split("/")[-1]
-    uuid2 = client.post("/ohip/reservations", headers={"X-Mirage-Session": s2}).headers["Location"].split("/")[-1]
+    uuid1 = client.post("/staylink/reservations", headers={"X-Mirage-Session": s1}).headers["Location"].split("/")[-1]
+    uuid2 = client.post("/staylink/reservations", headers={"X-Mirage-Session": s2}).headers["Location"].split("/")[-1]
 
-    assert client.get(f"/ohip/reservations/{uuid1}", headers={"X-Mirage-Session": s1}).json() == {"user": "alice"}
-    assert client.get(f"/ohip/reservations/{uuid2}", headers={"X-Mirage-Session": s2}).json() == {"user": "bob"}
+    assert client.get(f"/staylink/reservations/{uuid1}", headers={"X-Mirage-Session": s1}).json() == {"user": "alice"}
+    assert client.get(f"/staylink/reservations/{uuid2}", headers={"X-Mirage-Session": s2}).json() == {"user": "bob"}

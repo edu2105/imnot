@@ -25,7 +25,7 @@ def client(tmp_path):
 def test_app_starts_and_lists_partners(client):
     r = client.get("/mirage/admin/partners")
     assert r.status_code == 200
-    assert any(p["partner"] == "ohip" for p in r.json())
+    assert any(p["partner"] == "staylink" for p in r.json())
 
 
 def test_app_has_openapi_schema(client):
@@ -42,7 +42,7 @@ def test_app_has_openapi_schema(client):
 def test_full_global_flow(client):
     # Upload payload
     client.post(
-        "/mirage/admin/ohip/reservation/payload",
+        "/mirage/admin/staylink/reservation/payload",
         json={"reservationId": "GLOBAL001", "status": "CONFIRMED"},
     )
 
@@ -52,17 +52,17 @@ def test_full_global_flow(client):
     assert token_r.json()["token_type"] == "Bearer"
 
     # Poll step 1
-    r1 = client.post("/ohip/reservations")
+    r1 = client.post("/staylink/reservations")
     assert r1.status_code == 202
     uuid = r1.headers["Location"].split("/")[-1]
 
     # Poll step 2
-    r2 = client.head(f"/ohip/reservations/{uuid}")
+    r2 = client.head(f"/staylink/reservations/{uuid}")
     assert r2.status_code == 201
     assert r2.headers["Status"] == "COMPLETED"
 
     # Poll step 3
-    r3 = client.get(f"/ohip/reservations/{uuid}")
+    r3 = client.get(f"/staylink/reservations/{uuid}")
     assert r3.status_code == 200
     assert r3.json() == {"reservationId": "GLOBAL001", "status": "CONFIRMED"}
 
@@ -70,21 +70,21 @@ def test_full_global_flow(client):
 def test_full_session_flow(client):
     # Upload session payload
     session_id = client.post(
-        "/mirage/admin/ohip/reservation/payload/session",
+        "/mirage/admin/staylink/reservation/payload/session",
         json={"reservationId": "SES001"},
     ).json()["session_id"]
 
     # Poll step 1 with session
-    r1 = client.post("/ohip/reservations", headers={"X-Mirage-Session": session_id})
+    r1 = client.post("/staylink/reservations", headers={"X-Mirage-Session": session_id})
     uuid = r1.headers["Location"].split("/")[-1]
 
     # Poll step 3 with session
-    r3 = client.get(f"/ohip/reservations/{uuid}", headers={"X-Mirage-Session": session_id})
+    r3 = client.get(f"/staylink/reservations/{uuid}", headers={"X-Mirage-Session": session_id})
     assert r3.status_code == 200
     assert r3.json() == {"reservationId": "SES001"}
 
     # Same UUID without session header → no global payload → 404
-    r_no_session = client.get(f"/ohip/reservations/{uuid}")
+    r_no_session = client.get(f"/staylink/reservations/{uuid}")
     assert r_no_session.status_code == 404
 
 
@@ -94,14 +94,14 @@ def test_multiple_app_instances_do_not_share_state(tmp_path):
     app2 = create_app(partners_dir=PARTNERS_DIR, db_path=tmp_path / "b.db")
 
     with TestClient(app1) as c1, TestClient(app2) as c2:
-        c1.post("/mirage/admin/ohip/reservation/payload", json={"src": "app1"})
+        c1.post("/mirage/admin/staylink/reservation/payload", json={"src": "app1"})
 
         # app2 has no payload
-        r1 = c1.post("/ohip/reservations")
-        r2 = c2.post("/ohip/reservations")
+        r1 = c1.post("/staylink/reservations")
+        r2 = c2.post("/staylink/reservations")
 
         uuid1 = r1.headers["Location"].split("/")[-1]
         uuid2 = r2.headers["Location"].split("/")[-1]
 
-        assert c1.get(f"/ohip/reservations/{uuid1}").status_code == 200
-        assert c2.get(f"/ohip/reservations/{uuid2}").status_code == 404
+        assert c1.get(f"/staylink/reservations/{uuid1}").status_code == 200
+        assert c2.get(f"/staylink/reservations/{uuid2}").status_code == 404
