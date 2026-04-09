@@ -1,7 +1,7 @@
 # Mirage
 
 <p align="center">
-  <img src="assets/logo.svg" alt="Mirage logo" width="320"/>
+  <img src="assets/mirage-logo.png" alt="Mirage" width="600"/>
 </p>
 
 [![CI](https://github.com/edu2105/mirage/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/edu2105/mirage/actions/workflows/ci.yml)
@@ -109,7 +109,7 @@ curl -X POST http://localhost:8000/mirage/admin/bookingco/charges/payload \
      -H "Content-Type: application/json" \
      -d '{"charges": [{"id": "C1", "amount": 150}]}'
 
-curl http://localhost:8000/api/v2/charges
+curl http://localhost:8000/bookingco/v1/charges
 ```
 
 ### `poll`
@@ -152,7 +152,7 @@ SESSION=$(curl -s -X POST http://localhost:8000/mirage/admin/bookingco/charges/p
                -d '{"charges": [{"id": "S1"}]}' | jq -r .session_id)
 
 # Use the session in your request
-curl http://localhost:8000/api/v2/charges -H "X-Mirage-Session: $SESSION"
+curl http://localhost:8000/bookingco/v1/charges -H "X-Mirage-Session: $SESSION"
 ```
 
 Multiple test users can run in parallel with isolated payloads — each gets their own `session_id`.
