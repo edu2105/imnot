@@ -57,7 +57,7 @@ datapoints:
 |-------|----------|-------|
 | `name` | Yes | Used in admin URLs: `/mirage/admin/{partner}/{name}/...` |
 | `description` | No | |
-| `pattern` | Yes | Must be one of: `oauth`, `poll`, `push` |
+| `pattern` | Yes | Must be one of: `oauth`, `async`, `static`, `fetch`, `push` |
 | `endpoints` | Yes | At least one required |
 
 **Rule:** one datapoint = one payload stored. If two API resources need separate
@@ -72,8 +72,8 @@ Each endpoint maps to one HTTP route registered by Mirage.
 ```yaml
 endpoints:
   - method: <string>        # HTTP verb: GET, POST, HEAD, PUT, PATCH, DELETE
-    path: <string>          # URL path, may contain {uuid} placeholder
-    step: <int>             # poll pattern only: 1, 2, or 3
+    path: <string>          # URL path, may contain {id} placeholder
+    step: <int>             # async pattern only: step number (1, 2, 3, ...)
     response:               # response configuration (fields vary by pattern)
       status: <int>
       ...
@@ -82,8 +82,8 @@ endpoints:
 | Field | Required | Notes |
 |-------|----------|-------|
 | `method` | Yes | Case-insensitive, stored as uppercase |
-| `path` | Yes | Leading `/` required. Use `{uuid}` for dynamic segments |
-| `step` | Poll only | Identifies which step of the poll sequence this endpoint handles |
+| `path` | Yes | Leading `/` required. Use `{id}` for dynamic segments |
+| `step` | Async only | Identifies the step number within the async sequence |
 | `response` | Yes | At minimum must contain `status` |
 
 ---
@@ -137,101 +137,201 @@ Choose the pattern that matches how the real partner API behaves.
 
 ---
 
-### Pattern: `poll`
+### Pattern: `static`
 
-**Use when:** the partner API is asynchronous — the consumer submits a request,
-polls to check if it's ready, then fetches the result.
+**Use when:** the endpoint always returns a fixed JSON body regardless of input.
+Use for non-standard auth endpoints, health checks, or any fixed response.
 
-**How it works:** three coordinated endpoints implement a POST → HEAD → GET sequence.
-The consumer drives the sequence; Mirage handles state internally.
+**How it works:** Mirage returns exactly what is defined under `response.body`. No payload storage.
 
-**Required endpoints:** exactly three, with `step: 1`, `step: 2`, and `step: 3`.
+**Response config fields:**
 
-#### Step 1 — Submit (POST)
+| Field | Required | Description |
+|-------|----------|-------------|
+| `status` | Yes | HTTP status code |
+| `body` | Yes | JSON body to return verbatim |
 
-Consumer sends a request. Mirage registers it and returns a `Location` header
-pointing to the polling URL.
-
-| Response field | Required | Description |
-|----------------|----------|-------------|
-| `status` | No (default `202`) | HTTP status code |
-| `location_template` | Yes | URL template for the Location header. Must contain `{uuid}` |
+**Example:**
 
 ```yaml
-- step: 1
-  method: POST
-  path: /partner/resources
-  response:
-    status: 202
-    location_template: /partner/resources/{uuid}
+- name: token
+  pattern: static
+  endpoints:
+    - method: POST
+      path: /bookingco/auth/token
+      response:
+        status: 200
+        body:
+          token: "static-token-replace-in-real-use"
 ```
 
-#### Step 2 — Poll (HEAD)
+---
 
-Consumer checks whether the result is ready. Mirage always signals completion immediately.
+### Pattern: `fetch`
 
-| Response field | Required | Description |
-|----------------|----------|-------------|
-| `status` | No (default `201`) | HTTP status code |
-| `headers` | No | Extra response headers as key-value pairs |
+**Use when:** the endpoint is a synchronous GET that returns the stored payload for the datapoint.
+
+**How it works:** consumer uploads a payload via the admin API, then GET returns it.
+Supports session isolation via `X-Mirage-Session`.
+
+**Required endpoints:** exactly one `GET` endpoint.
+
+**Example:**
 
 ```yaml
-- step: 2
-  method: HEAD
-  path: /partner/resources/{uuid}
-  response:
-    status: 201
-    headers:
-      Status: COMPLETED
+- name: charges
+  pattern: fetch
+  endpoints:
+    - method: GET
+      path: /bookingco/v1/charges
+      response:
+        status: 200
 ```
 
-#### Step 3 — Fetch (GET)
+---
 
-Consumer retrieves the result. Mirage resolves and returns the stored payload.
+### Pattern: `async`
 
-| Response field | Required | Description |
-|----------------|----------|-------------|
-| `status` | No (default `200`) | HTTP status code |
+**Use when:** the partner API is asynchronous — the consumer submits a request and later
+fetches the result, with any number of steps in between.
+
+**How it works:** steps are defined as an ordered list in YAML. Behavior is opt-in via
+two response-level flags. Mirage never simulates a "not ready yet" state — every status
+step responds as completed immediately.
+
+**Required endpoints:** two or more, each with a `step` number.
+
+#### Response flags
+
+| Flag | Step type | Behavior |
+|------|-----------|----------|
+| `generates_id: true` | Submit | Generate UUID, persist to store, deliver via header or body |
+| `returns_payload: true` | Fetch | Validate `{id}` in store (404 if unknown), return session/global payload |
+| *(neither)* | Static | Return configured status, headers, and body verbatim |
+
+#### ID delivery (submit step)
+
+**Header delivery** — UUID returned in a response header:
 
 ```yaml
-- step: 3
-  method: GET
-  path: /partner/resources/{uuid}
-  response:
-    status: 200
+response:
+  status: 202
+  generates_id: true
+  id_header: Location
+  id_header_value: /partner/resources/{id}
 ```
 
-**Session behaviour on step 3:**
-- If the request includes `X-Mirage-Session: {session_id}` → returns the session payload
-- If no header → returns the global payload
-- If the matching payload is not found → returns `404`
+`{id}` in `id_header_value` is replaced with the generated UUID at request time.
 
-**Full poll example:**
+**Body delivery** — UUID returned as a JSON field in the response body:
+
+```yaml
+response:
+  status: 200
+  generates_id: true
+  id_body_field: JobReferenceID
+```
+
+One of `id_header` or `id_body_field` is required when `generates_id: true`.
+
+#### Path parameter
+
+Use `{id}` as the dynamic segment in paths for steps that reference the generated UUID.
+The same `{id}` token appears in the submit step's `id_header_value` and in subsequent step paths.
+
+---
+
+#### OHIP-style example (header delivery, 3 steps)
 
 ```yaml
 - name: reservation
-  description: Async reservation creation and retrieval
-  pattern: poll
+  description: Async reservation flow
+  pattern: async
   endpoints:
     - step: 1
       method: POST
-      path: /ohip/reservations
+      path: /staylink/reservations
       response:
         status: 202
-        location_template: /ohip/reservations/{uuid}
+        generates_id: true
+        id_header: Location
+        id_header_value: /staylink/reservations/{id}
+
     - step: 2
       method: HEAD
-      path: /ohip/reservations/{uuid}
+      path: /staylink/reservations/{id}
       response:
         status: 201
         headers:
           Status: COMPLETED
+
     - step: 3
       method: GET
-      path: /ohip/reservations/{uuid}
+      path: /staylink/reservations/{id}
       response:
         status: 200
+        returns_payload: true
 ```
+
+#### Cloudbeds-style example (body delivery, 3 steps)
+
+```yaml
+- name: rate-push
+  description: Async rate push to Cloudbeds
+  pattern: async
+  endpoints:
+    - step: 1
+      method: POST
+      path: /cloudbeds/rates
+      response:
+        status: 200
+        generates_id: true
+        id_body_field: JobReferenceID
+
+    - step: 2
+      method: GET
+      path: /cloudbeds/jobs/{id}/status
+      response:
+        status: 200
+        body:
+          status: COMPLETED
+
+    - step: 3
+      method: GET
+      path: /cloudbeds/jobs/{id}/results
+      response:
+        status: 200
+        returns_payload: true
+```
+
+#### 2-step example (no status check)
+
+```yaml
+- name: booking
+  pattern: async
+  endpoints:
+    - step: 1
+      method: POST
+      path: /partner/bookings
+      response:
+        status: 202
+        generates_id: true
+        id_header: Location
+        id_header_value: /partner/bookings/{id}
+
+    - step: 2
+      method: GET
+      path: /partner/bookings/{id}
+      response:
+        status: 200
+        returns_payload: true
+```
+
+**Session behaviour on fetch step:**
+- If the request includes `X-Mirage-Session: {session_id}` → returns the session payload
+- If no header → returns the global payload
+- If the matching payload is not found → returns `404`
+- If the path `{id}` was not registered by a prior submit → returns `404`
 
 ---
 
@@ -263,36 +363,17 @@ Fixed infra endpoints (always available regardless of partners loaded):
 
 ---
 
-## Path parameter rules
-
-- Use `{uuid}` as the dynamic segment in paths for poll steps 2 and 3.
-- The same `{uuid}` used in `location_template` (step 1) must appear in the paths
-  of steps 2 and 3.
-- Do not introduce other path parameters — Mirage currently only resolves `{uuid}`.
-
-**Correct:**
-```yaml
-location_template: /partner/bookings/{uuid}
-# step 2 and 3 path:
-path: /partner/bookings/{uuid}
-```
-
-**Incorrect:**
-```yaml
-location_template: /partner/bookings/{id}   # ← wrong placeholder name
-```
-
----
-
 ## Checklist before saving a partner.yaml
 
 - [ ] `partner` value is lowercase with no spaces or special characters
 - [ ] Each datapoint has a unique `name` within the file
-- [ ] `pattern` is one of `oauth`, `poll` (push is reserved)
+- [ ] `pattern` is one of `oauth`, `async`, `static`, `fetch` (`push` is reserved)
 - [ ] Every `oauth` datapoint has exactly one `POST` endpoint
-- [ ] Every `poll` datapoint has exactly three endpoints with `step: 1`, `2`, and `3`
-- [ ] Poll step 1 has a `location_template` containing `{uuid}`
-- [ ] Poll steps 2 and 3 paths contain `{uuid}`
+- [ ] Every `async` datapoint has at least two endpoints, each with a unique `step` number
+- [ ] The async submit step has `generates_id: true` with either `id_header` or `id_body_field`
+- [ ] If `id_header` is used, `id_header_value` contains `{id}`
+- [ ] Async steps that reference the generated UUID use `{id}` in their path
+- [ ] The async fetch step has `returns_payload: true`
 - [ ] All `response` blocks are nested inside their endpoint, not at the datapoint level
 - [ ] No two endpoints across the whole file share the same `method` + `path` combination
 
@@ -304,17 +385,20 @@ When generating a `partner.yaml` from a Swagger/OpenAPI spec, Confluence page,
 or API documentation, follow this process:
 
 1. **Identify authentication** — if the API uses OAuth 2.0 client credentials,
-   map the token endpoint to the `oauth` pattern.
+   map the token endpoint to the `oauth` pattern. If it uses a non-standard fixed
+   token response, use the `static` pattern.
 
-2. **Identify async resources** — if an endpoint returns `202 Accepted` with a
-   `Location` header and requires polling, map the full sequence (submit / poll / fetch)
-   to the `poll` pattern. All three steps must be defined even if the real API uses
-   different status codes — use the actual codes in the `response.status` fields.
+2. **Identify async resources** — if an endpoint submits work and the result is fetched
+   later (by polling a status endpoint or following a location header), map the full
+   sequence to the `async` pattern. Define as many steps as the real API uses.
 
-3. **One datapoint per independent resource** — if the API has `/reservations` and
-   `/guests` as separate async resources with separate payloads, define two datapoints.
+3. **Identify sync resources** — if an endpoint simply returns the current state of a
+   resource, use the `fetch` pattern.
 
-4. **Do not invent patterns** — only use patterns listed in this guide. If the API
-   behaviour does not fit `oauth` or `poll`, flag it rather than forcing a fit.
+4. **One datapoint per independent resource** — if the API has `/reservations` and
+   `/guests` as separate resources with separate payloads, define two datapoints.
 
-5. **Use the checklist above** before finalising the output.
+5. **Do not invent patterns** — only use patterns listed in this guide. If the API
+   behaviour does not fit any listed pattern, flag it rather than forcing a fit.
+
+6. **Use the checklist above** before finalising the output.

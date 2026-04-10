@@ -29,7 +29,7 @@ happens when your code talks to a real partner API.
   - `oauth` — client-credentials token endpoint that returns a static JWT.
   - `static` — endpoint that always returns a fixed JSON body defined in the YAML.
   - `fetch` — synchronous GET that returns the stored payload for a datapoint, with optional session isolation.
-  - `poll` — three-step async flow: submit (POST) → poll for readiness (HEAD) → fetch result (GET).
+  - `async` — flexible N-step async flow defined in YAML: submit → optional status check(s) → fetch result.
   - `push` — Mirage proactively delivers a payload to a callback URL (future).
 - **Payload storage** supports two modes:
   - *Global* — one payload per datapoint, last write wins.
@@ -37,7 +37,7 @@ happens when your code talks to a real partner API.
 - **Admin API** is always available at `/mirage/admin/` for uploading payloads and
   inspecting sessions.
 
-### Interaction sequence (poll pattern)
+### Interaction sequence (async pattern)
 
 ```
 Test Harness                       Mirage
@@ -50,19 +50,22 @@ Test Harness                       Mirage
      |  POST /partner/resource       |   step 1 — submit
      |------------------------------>|
      |  202 Accepted                 |
-     |  Location: .../resource/uuid  |
+     |  Location: .../resource/{id}  |
      |<------------------------------|
      |                               |
-     |  HEAD /partner/resource/uuid  |   step 2 — poll for readiness
+     |  HEAD /partner/resource/{id}  |   step 2 — status check (optional)
      |------------------------------>|
      |  201  Status: COMPLETED       |
      |<------------------------------|
      |                               |
-     |  GET  /partner/resource/uuid  |   step 3 — fetch result
+     |  GET  /partner/resource/{id}  |   step 3 — fetch result
      |------------------------------>|
      |  200  { ...payload }          |
      |<------------------------------|
 ```
+
+The number and shape of steps is configurable per partner — 2-step, 3-step, and
+body-delivered IDs are all supported. See the `async` pattern documentation below.
 
 ## Quick start
 
@@ -164,38 +167,75 @@ curl -X POST http://localhost:8000/mirage/admin/bookingco/charges/payload \
 curl http://localhost:8000/bookingco/v1/charges
 ```
 
-### `poll`
+### `async`
 
-Three-step async flow: submit → poll for readiness → fetch result. Use for partners
-that return `202 Accepted` and require polling.
+Flexible N-step async flow. Use for partners that submit work asynchronously and
+return the result via a separate endpoint. Step count and HTTP methods are fully
+configurable. Behavior is opt-in via two response flags:
+
+- `generates_id: true` — generate a UUID and deliver it via header or body field
+- `returns_payload: true` — return the stored payload for this datapoint
+
+**OHIP-style (header delivery, 3 steps):**
 
 ```yaml
 - name: reservation
-  pattern: poll
+  pattern: async
   endpoints:
     - step: 1
       method: POST
       path: /staylink/reservations
       response:
         status: 202
-        location_template: /staylink/reservations/{uuid}
+        generates_id: true
+        id_header: Location
+        id_header_value: /staylink/reservations/{id}
     - step: 2
       method: HEAD
-      path: /staylink/reservations/{uuid}
+      path: /staylink/reservations/{id}
       response:
         status: 201
         headers:
           Status: COMPLETED
     - step: 3
       method: GET
-      path: /staylink/reservations/{uuid}
+      path: /staylink/reservations/{id}
       response:
         status: 200
+        returns_payload: true
+```
+
+**Cloudbeds-style (body delivery, separate status and results endpoints):**
+
+```yaml
+- name: rate-push
+  pattern: async
+  endpoints:
+    - step: 1
+      method: POST
+      path: /cloudbeds/rates
+      response:
+        status: 200
+        generates_id: true
+        id_body_field: JobReferenceID
+    - step: 2
+      method: GET
+      path: /cloudbeds/jobs/{id}/status
+      response:
+        status: 200
+        body:
+          status: COMPLETED
+    - step: 3
+      method: GET
+      path: /cloudbeds/jobs/{id}/results
+      response:
+        status: 200
+        returns_payload: true
 ```
 
 ## Session-isolated testing
 
-Any `fetch` or `poll` endpoint supports session isolation via `X-Mirage-Session`.
+Any `fetch` or `async` endpoint supports session isolation via `X-Mirage-Session`.
 
 ```bash
 # Upload a session-scoped payload — returns a session_id
@@ -340,16 +380,16 @@ mirage/
 ├── mirage/
 │   ├── api/           # FastAPI app factory
 │   ├── engine/
-│   │   ├── patterns/  # oauth / static / fetch / poll handlers
+│   │   ├── patterns/  # oauth / static / fetch / async handlers
 │   │   ├── router.py  # dynamic route registration
 │   │   └── session_store.py  # SQLite persistence
 │   ├── loader/        # YAML partner definition parser
 │   └── cli.py         # mirage CLI
 ├── partners/
-│   ├── staylink/      # StayLink example (oauth + poll)
+│   ├── staylink/      # StayLink example (oauth + async)
 │   │   ├── partner.yaml
 │   │   └── payloads/
-│   └── bookingco/       # BookingCo example (static token + fetch charges)
+│   └── bookingco/     # BookingCo example (static token + fetch charges)
 │       └── partner.yaml
 └── tests/
 ```
@@ -373,9 +413,9 @@ pytest
 
 **Add a new pattern:**
 Patterns live in `mirage/engine/patterns/`. Each pattern is a module that registers one or
-more FastAPI route handlers given an `EndpointDef`. Look at `fetch.py` or `poll.py` for the
-interface — the router calls `register(app, partner, datapoint, endpoint, store)` for each
-endpoint whose pattern matches. Add your module there and wire it into `router.py`.
+more FastAPI route handlers given an `EndpointDef`. Look at `fetch.py` or `async_.py` for the
+interface — the router calls the pattern's handler factory for each datapoint whose pattern
+matches. Add your module there and wire it into `router.py`.
 
 **Add a new partner:**
 No code required — write a `partner.yaml` under `partners/<name>/`. The full schema and
