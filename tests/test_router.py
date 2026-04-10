@@ -34,6 +34,46 @@ def client(store):
     return TestClient(app, raise_server_exceptions=True)
 
 
+@pytest.fixture
+def async_client(tmp_path, store):
+    partner_dir = tmp_path / "asyncpartner"
+    partner_dir.mkdir()
+    (partner_dir / "partner.yaml").write_text(
+        "partner: asyncpartner\n"
+        "description: Async test partner\n"
+        "datapoints:\n"
+        "  - name: job\n"
+        "    description: Async job\n"
+        "    pattern: async\n"
+        "    endpoints:\n"
+        "      - step: 1\n"
+        "        method: POST\n"
+        "        path: /asyncpartner/jobs\n"
+        "        response:\n"
+        "          status: 202\n"
+        "          generates_id: true\n"
+        "          id_header: Location\n"
+        "          id_header_value: /asyncpartner/jobs/{id}\n"
+        "      - step: 2\n"
+        "        method: HEAD\n"
+        "        path: /asyncpartner/jobs/{id}\n"
+        "        response:\n"
+        "          status: 201\n"
+        "          headers:\n"
+        "            Status: COMPLETED\n"
+        "      - step: 3\n"
+        "        method: GET\n"
+        "        path: /asyncpartner/jobs/{id}\n"
+        "        response:\n"
+        "          status: 200\n"
+        "          returns_payload: true\n"
+    )
+    app = FastAPI()
+    partners = load_partners(tmp_path)
+    register_routes(app, partners, store)
+    return TestClient(app, raise_server_exceptions=True)
+
+
 # ---------------------------------------------------------------------------
 # Infra routes
 # ---------------------------------------------------------------------------
@@ -250,3 +290,60 @@ def test_two_sessions_are_isolated(client):
 
     assert client.get(f"/staylink/reservations/{uuid1}", headers={"X-Mirage-Session": s1}).json() == {"user": "alice"}
     assert client.get(f"/staylink/reservations/{uuid2}", headers={"X-Mirage-Session": s2}).json() == {"user": "bob"}
+
+
+# ---------------------------------------------------------------------------
+# Async consumer routes
+# ---------------------------------------------------------------------------
+
+
+def test_async_step1_returns_202_and_location(async_client):
+    r = async_client.post("/asyncpartner/jobs")
+    assert r.status_code == 202
+    assert "Location" in r.headers
+    assert "/asyncpartner/jobs/" in r.headers["Location"]
+
+
+def test_async_step2_returns_201_and_status_header(async_client):
+    r1 = async_client.post("/asyncpartner/jobs")
+    uuid = r1.headers["Location"].split("/")[-1]
+
+    r2 = async_client.head(f"/asyncpartner/jobs/{uuid}")
+    assert r2.status_code == 201
+    assert r2.headers.get("Status") == "COMPLETED"
+
+
+def test_async_step3_returns_global_payload(async_client):
+    async_client.post("/mirage/admin/asyncpartner/job/payload", json={"result": "ok"})
+    r1 = async_client.post("/asyncpartner/jobs")
+    uuid = r1.headers["Location"].split("/")[-1]
+
+    r3 = async_client.get(f"/asyncpartner/jobs/{uuid}")
+    assert r3.status_code == 200
+    assert r3.json() == {"result": "ok"}
+
+
+def test_async_step3_unknown_uuid_returns_404(async_client):
+    r = async_client.get("/asyncpartner/jobs/nonexistent-uuid")
+    assert r.status_code == 404
+
+
+def test_async_step3_no_payload_returns_404(async_client):
+    r1 = async_client.post("/asyncpartner/jobs")
+    uuid = r1.headers["Location"].split("/")[-1]
+    r3 = async_client.get(f"/asyncpartner/jobs/{uuid}")
+    assert r3.status_code == 404
+
+
+def test_async_full_session_flow(async_client):
+    session_id = async_client.post(
+        "/mirage/admin/asyncpartner/job/payload/session",
+        json={"result": "session-ok"},
+    ).json()["session_id"]
+
+    r1 = async_client.post("/asyncpartner/jobs", headers={"X-Mirage-Session": session_id})
+    uuid = r1.headers["Location"].split("/")[-1]
+
+    r3 = async_client.get(f"/asyncpartner/jobs/{uuid}", headers={"X-Mirage-Session": session_id})
+    assert r3.status_code == 200
+    assert r3.json() == {"result": "session-ok"}

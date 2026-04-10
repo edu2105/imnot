@@ -21,6 +21,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from mirage.engine.patterns.async_ import make_async_handlers
 from mirage.engine.patterns.fetch import make_fetch_handler
 from mirage.engine.patterns.oauth import make_oauth_handler
 from mirage.engine.patterns.poll import make_poll_handlers
@@ -124,6 +125,21 @@ def _register_consumer_routes(
             app.add_api_route(endpoint.path, handler, methods=[endpoint.method])
             logger.debug(
                 "Registered poll step %d route %s %s",
+                step_num, endpoint.method, endpoint.path,
+            )
+
+    elif datapoint.pattern == "async":
+        step_map: dict[int, EndpointDef] = {ep.step: ep for ep in datapoint.endpoints}
+        handlers = make_async_handlers(
+            partner=partner.partner,
+            datapoint=datapoint,
+            store=store,
+        )
+        for step_num, handler in handlers.items():
+            endpoint = step_map[step_num]
+            app.add_api_route(endpoint.path, handler, methods=[endpoint.method])
+            logger.debug(
+                "Registered async step %d route %s %s",
                 step_num, endpoint.method, endpoint.path,
             )
 
