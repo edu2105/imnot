@@ -1,0 +1,50 @@
+partner: apaleo
+description: Apaleo mocking endpoints
+
+datapoints:
+  - name: access_token
+    description: Oauth access token endpoint
+    pattern: oauth
+    endpoints:
+      - method: POST
+        path: /apaleo/connect/token
+        response:
+          status: 200
+          token_type: Bearer
+          expires_in: 3600
+
+  - name: reservation-by-id
+    description: Get reservation by id
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /apaleo/booking/v1/reservations/{id}
+        response:
+          status: 200
+
+  - name: fixed-response
+    description: Fixed response endpoint
+    pattern: static
+    endpoints:
+      - method: GET
+        path: /apaleo/finance/v1/folios
+        response:
+          status: 200
+          body:
+            charges:
+              - id: "1234567890"
+                amount: 100.00
+                currency: "USD"
+                status: "pending"
+                created: "2026-01-01"
+                updated: "2026-01-01"
+                charge_type: "accommodation"
+                currency: "USD"
+              - id: "1234567891"
+                amount: 200.00
+                currency: "USD"
+                status: "pending"
+                created: "2026-01-02"
+                updated: "2026-01-02"
+                charge_type: "accommodation"
+                currency: "USD"
