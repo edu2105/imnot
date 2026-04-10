@@ -31,7 +31,7 @@ SUPPORTED_PATTERNS = {"oauth", "async", "push", "static", "fetch"}
 class EndpointDef:
     method: str                        # HTTP verb, upper-cased
     path: str                          # e.g. /staylink/reservations/{uuid}
-    step: int | None                   # poll step number (1/2/3); None for oauth
+    step: int | None                   # async step number (1/2/3); None for oauth/static/fetch
     response: dict[str, Any]           # raw response config from YAML
 
 
@@ -39,7 +39,7 @@ class EndpointDef:
 class DatapointDef:
     name: str                          # e.g. "reservation"
     description: str
-    pattern: str                       # "oauth" | "poll" | "push"
+    pattern: str                       # "oauth" | "async" | "fetch" | "static" | "push"
     endpoints: list[EndpointDef]
 
 
@@ -68,7 +68,7 @@ def _parse_endpoint(raw: dict[str, Any]) -> EndpointDef:
     return EndpointDef(
         method=method.upper(),
         path=path,
-        step=raw.get("step"),          # optional; only poll endpoints carry this
+        step=raw.get("step"),          # optional; only async endpoints carry this
         response=raw.get("response") or {},
     )
 

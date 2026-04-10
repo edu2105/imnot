@@ -6,7 +6,7 @@ Responsibilities:
   a DatapointDef, a single EndpointDef, and a SessionStore instance, and returns
   a FastAPI route coroutine.
 - The handler resolves and returns the stored payload for the datapoint, respecting
-  the X-Mirage-Session header (same session logic as poll step 3).
+  the X-Mirage-Session header (same session logic as async step 3).
 - Use this pattern for synchronous GET endpoints that return a stored payload
   with no async polling sequence (no UUID, no Location header).
 

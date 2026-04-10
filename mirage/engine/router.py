@@ -4,7 +4,7 @@ Dynamic router: registers FastAPI routes at startup from partner definitions.
 Responsibilities:
 - Accept a list of PartnerDef objects and a SessionStore instance.
 - For each datapoint in each partner, delegate to the matching pattern factory
-  (oauth, poll) to obtain route handlers, then register them on the FastAPI app.
+  to obtain route handlers, then register them on the FastAPI app.
 - Register admin payload endpoints dynamically per datapoint:
     POST /mirage/admin/{partner}/{datapoint}/payload         (global)
     POST /mirage/admin/{partner}/{datapoint}/payload/session (session-scoped)
@@ -24,7 +24,6 @@ from fastapi.responses import JSONResponse
 from mirage.engine.patterns.async_ import make_async_handlers
 from mirage.engine.patterns.fetch import make_fetch_handler
 from mirage.engine.patterns.oauth import make_oauth_handler
-from mirage.engine.patterns.poll import make_poll_handlers
 from mirage.engine.patterns.static import make_static_handler
 from mirage.engine.session_store import SessionStore
 from mirage.loader.yaml_loader import DatapointDef, EndpointDef, PartnerDef
@@ -112,21 +111,6 @@ def _register_consumer_routes(
             handler = make_fetch_handler(partner.partner, datapoint, endpoint, store)
             app.add_api_route(endpoint.path, handler, methods=[endpoint.method])
             logger.debug("Registered fetch route %s %s", endpoint.method, endpoint.path)
-
-    elif datapoint.pattern == "poll":
-        step_map: dict[int, EndpointDef] = {ep.step: ep for ep in datapoint.endpoints}
-        handlers = make_poll_handlers(
-            partner=partner.partner,
-            datapoint=datapoint,
-            store=store,
-        )
-        for step_num, handler in handlers.items():
-            endpoint = step_map[step_num]
-            app.add_api_route(endpoint.path, handler, methods=[endpoint.method])
-            logger.debug(
-                "Registered poll step %d route %s %s",
-                step_num, endpoint.method, endpoint.path,
-            )
 
     elif datapoint.pattern == "async":
         step_map: dict[int, EndpointDef] = {ep.step: ep for ep in datapoint.endpoints}
