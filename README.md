@@ -122,6 +122,9 @@ Response body:
 Returns whatever JSON body is defined under `response.body` in the YAML. Use for
 non-standard auth endpoints, health checks, or any fixed response.
 
+Use `static` instead of `oauth` when the partner token endpoint returns **custom fields**
+that don't match the standard `access_token / token_type / expires_in` shape:
+
 ```yaml
 - name: token
   pattern: static
@@ -132,7 +135,11 @@ non-standard auth endpoints, health checks, or any fixed response.
         status: 200
         body:
           token: "static-token-replace-in-real-use"
+          my_custom_field: "some-value"
 ```
+
+Static responses can be updated without restarting the server: edit the YAML, then call
+`POST /mirage/admin/reload`.
 
 ### `fetch`
 
@@ -242,7 +249,7 @@ Multiple test users can run in parallel with isolated payloads — each gets the
 
 ## Admin endpoints
 
-For every datapoint, Mirage auto-generates:
+For every `fetch`, `async`, or `push` datapoint, Mirage auto-generates payload endpoints:
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -251,12 +258,16 @@ For every datapoint, Mirage auto-generates:
 | `POST` | `/mirage/admin/{partner}/{datapoint}/payload/session` | Upload session payload → returns `session_id` |
 | `GET`  | `/mirage/admin/{partner}/{datapoint}/payload/session/{session_id}` | Inspect a session payload |
 
-Fixed infra endpoints:
+`oauth` and `static` datapoints do **not** get payload endpoints — their responses are
+fully defined by the YAML and never use the payload store.
+
+Fixed infra endpoints (always available regardless of which partners are loaded):
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/mirage/admin/partners` | List all loaded partners and their datapoints |
-| `GET` | `/mirage/admin/sessions` | List all active sessions |
+| `GET`  | `/mirage/admin/partners` | List all loaded partners and their datapoints |
+| `GET`  | `/mirage/admin/sessions` | List all active sessions |
+| `POST` | `/mirage/admin/reload`   | Hot-reload partner YAMLs without restarting the server |
 
 ### Securing admin endpoints
 
@@ -283,12 +294,15 @@ Set `MIRAGE_ADMIN_KEY` in `docker-compose.yml` for Docker deployments.
 
 | Command | Description |
 |---------|-------------|
-| `mirage start` | Load all partner YAMLs and start the server (`--admin-key` / `MIRAGE_ADMIN_KEY` to protect admin endpoints) |
+| `mirage start` | Load all partner YAMLs and start the server |
+| `mirage start --reload` | Start with auto-restart on any YAML change (recommended for development) |
 | `mirage status` | Show active sessions in the store |
-| `mirage routes` | List all consumer and admin endpoints per partner (no server needed) |
+| `mirage routes` | List all consumer and admin endpoints per partner (works from any subdirectory) |
 | `mirage payload get <partner> <datapoint>` | Print the current global payload |
 | `mirage payload set <partner> <datapoint> <file>` | Upload a global payload from a JSON file |
 | `mirage sessions clear` | Delete all sessions from the store |
+
+`mirage start` accepts `--admin-key` / `MIRAGE_ADMIN_KEY` to protect all `/mirage/admin/*` endpoints with a Bearer token.
 
 ## Docker
 
@@ -366,7 +380,11 @@ partners/
     └── payloads/       # optional example payload files
 ```
 
-Restart `mirage start` and the new partner's endpoints are live.
+**With `--reload` (recommended for development):** the server detects the new file automatically
+and restarts. No manual action needed.
+
+**Without `--reload`:** call `POST /mirage/admin/reload` to register the new partner's routes
+without restarting the server. Or simply restart `mirage start`.
 
 ## Project structure
 

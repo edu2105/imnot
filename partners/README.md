@@ -97,9 +97,15 @@ Choose the pattern that matches how the real partner API behaves.
 
 ### Pattern: `oauth`
 
-**Use when:** the partner requires a token endpoint that returns an access token.
+**Use when:** the partner uses a standard OAuth 2.0 client-credentials token endpoint that
+returns a JWT-shaped response (`access_token`, `token_type`, `expires_in`).
 
 **How it works:** Mirage returns a static JWT-shaped response. No payload storage involved.
+The `access_token` value is always the same stable token — integration test systems only need
+a non-empty Bearer token to proceed.
+
+**If the partner returns custom fields** (e.g. `my_custom_token`, `session_token`) that don't
+fit the standard shape, use the `static` pattern with a `body:` block instead.
 
 **Required endpoints:** exactly one `POST` endpoint.
 
@@ -140,9 +146,11 @@ Choose the pattern that matches how the real partner API behaves.
 ### Pattern: `static`
 
 **Use when:** the endpoint always returns a fixed JSON body regardless of input.
-Use for non-standard auth endpoints, health checks, or any fixed response.
+Use for non-standard auth endpoints, health checks, or any endpoint with a fully known fixed response.
 
 **How it works:** Mirage returns exactly what is defined under `response.body`. No payload storage.
+The response body can be updated without restarting the server: edit the YAML and call
+`POST /mirage/admin/reload`.
 
 **Response config fields:**
 
@@ -151,7 +159,7 @@ Use for non-standard auth endpoints, health checks, or any fixed response.
 | `status` | Yes | HTTP status code |
 | `body` | Yes | JSON body to return verbatim |
 
-**Example:**
+**Example — non-standard token endpoint:**
 
 ```yaml
 - name: token
@@ -163,6 +171,23 @@ Use for non-standard auth endpoints, health checks, or any fixed response.
         status: 200
         body:
           token: "static-token-replace-in-real-use"
+          my_custom_field: "some-value"
+```
+
+**Example — custom token response with non-standard fields** (use this instead of `oauth`):
+
+```yaml
+- name: token
+  pattern: static
+  endpoints:
+    - method: POST
+      path: /partner/connect/token
+      response:
+        status: 200
+        body:
+          access_token: "my-stable-token"
+          session_key: "abc123"
+          expires_at: 9999999999
 ```
 
 ---
@@ -344,7 +369,7 @@ The same `{id}` token appears in the submit step's `id_header_value` and in subs
 
 ## Auto-generated admin endpoints
 
-For every datapoint defined in a partner YAML, Mirage automatically registers these
+For every `fetch`, `async`, or `push` datapoint, Mirage automatically registers these
 admin endpoints — no extra YAML required:
 
 | Method | Path | Description |
@@ -354,12 +379,16 @@ admin endpoints — no extra YAML required:
 | `POST` | `/mirage/admin/{partner}/{datapoint}/payload/session` | Upload session payload → returns `session_id` |
 | `GET`  | `/mirage/admin/{partner}/{datapoint}/payload/session/{session_id}` | Inspect a session payload |
 
+`oauth` and `static` datapoints do **not** get these endpoints. Their responses are fully
+defined by the YAML and never use the payload store.
+
 Fixed infra endpoints (always available regardless of partners loaded):
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/mirage/admin/partners` | List all loaded partners and their datapoints |
-| `GET` | `/mirage/admin/sessions` | List all active sessions |
+| `GET`  | `/mirage/admin/partners` | List all loaded partners and their datapoints |
+| `GET`  | `/mirage/admin/sessions` | List all active sessions |
+| `POST` | `/mirage/admin/reload`   | Hot-reload partner YAMLs — updates static response bodies in place, registers new partners/datapoints |
 
 ---
 
@@ -368,6 +397,7 @@ Fixed infra endpoints (always available regardless of partners loaded):
 - [ ] `partner` value is lowercase with no spaces or special characters
 - [ ] Each datapoint has a unique `name` within the file
 - [ ] `pattern` is one of `oauth`, `async`, `static`, `fetch` (`push` is reserved)
+- [ ] If the token endpoint returns non-standard fields, use `static` not `oauth`
 - [ ] Every `oauth` datapoint has exactly one `POST` endpoint
 - [ ] Every `async` datapoint has at least two endpoints, each with a unique `step` number
 - [ ] The async submit step has `generates_id: true` with either `id_header` or `id_body_field`
@@ -376,6 +406,7 @@ Fixed infra endpoints (always available regardless of partners loaded):
 - [ ] The async fetch step has `returns_payload: true`
 - [ ] All `response` blocks are nested inside their endpoint, not at the datapoint level
 - [ ] No two endpoints across the whole file share the same `method` + `path` combination
+- [ ] After saving, call `POST /mirage/admin/reload` or restart the server to pick up changes
 
 ---
 
@@ -384,9 +415,9 @@ Fixed infra endpoints (always available regardless of partners loaded):
 When generating a `partner.yaml` from a Swagger/OpenAPI spec, Confluence page,
 or API documentation, follow this process:
 
-1. **Identify authentication** — if the API uses OAuth 2.0 client credentials,
-   map the token endpoint to the `oauth` pattern. If it uses a non-standard fixed
-   token response, use the `static` pattern.
+1. **Identify authentication** — if the API uses OAuth 2.0 client credentials and returns
+   the standard `access_token / token_type / expires_in` shape, use the `oauth` pattern.
+   If the token response contains **any custom fields**, use `static` with a `body:` block.
 
 2. **Identify async resources** — if an endpoint submits work and the result is fetched
    later (by polling a status endpoint or following a location header), map the full

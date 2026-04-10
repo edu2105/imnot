@@ -30,7 +30,7 @@ def store(tmp_path):
 def client(store):
     app = FastAPI()
     partners = load_partners(PARTNERS_DIR)
-    register_routes(app, partners, store)
+    register_routes(app, partners, store, partners_dir=PARTNERS_DIR)
     return TestClient(app, raise_server_exceptions=True)
 
 
@@ -174,6 +174,33 @@ def test_get_session_payload(client):
 
 def test_get_session_payload_not_found_returns_404(client):
     r = client.get("/mirage/admin/staylink/reservation/payload/session/nonexistent")
+    assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Verify oauth and static patterns have NO admin payload routes
+# ---------------------------------------------------------------------------
+
+
+def test_oauth_has_no_admin_payload_route(client):
+    """oauth pattern must not expose admin payload endpoints."""
+    r = client.post("/mirage/admin/staylink/token/payload", json={"token": "x"})
+    assert r.status_code == 404
+
+
+def test_oauth_has_no_admin_session_route(client):
+    r = client.post("/mirage/admin/staylink/token/payload/session", json={"token": "x"})
+    assert r.status_code == 404
+
+
+def test_static_has_no_admin_payload_route(client):
+    """static pattern must not expose admin payload endpoints."""
+    r = client.post("/mirage/admin/apaleo/fixed-response/payload", json={"foo": "bar"})
+    assert r.status_code == 404
+
+
+def test_static_has_no_admin_session_route(client):
+    r = client.post("/mirage/admin/apaleo/fixed-response/payload/session", json={"foo": "bar"})
     assert r.status_code == 404
 
 
@@ -335,3 +362,136 @@ def test_async_full_session_flow(async_client):
     r3 = async_client.get(f"/asyncpartner/jobs/{uuid}", headers={"X-Mirage-Session": session_id})
     assert r3.status_code == 200
     assert r3.json() == {"result": "session-ok"}
+
+
+# ---------------------------------------------------------------------------
+# Reload endpoint
+# ---------------------------------------------------------------------------
+
+
+def test_reload_returns_ok(client):
+    r = client.post("/mirage/admin/reload")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "ok"
+    assert isinstance(body["updated"], list)
+    assert isinstance(body["added"], list)
+
+
+def test_reload_without_partners_dir_returns_400(store, tmp_path):
+    """When partners_dir is not set (e.g. routes registered without it), reload returns 400."""
+    app = FastAPI()
+    partners = load_partners(PARTNERS_DIR)
+    # Omit partners_dir — app.state.partners_dir will be None
+    register_routes(app, partners, store)
+    c = TestClient(app, raise_server_exceptions=True)
+    r = c.post("/mirage/admin/reload")
+    assert r.status_code == 400
+
+
+def test_reload_updates_static_config_in_place(store, tmp_path):
+    """Editing a static response body in YAML is picked up by POST /mirage/admin/reload."""
+    partner_dir = tmp_path / "reloadpartner"
+    partner_dir.mkdir()
+    yaml_path = partner_dir / "partner.yaml"
+    yaml_path.write_text(
+        "partner: reloadpartner\n"
+        "description: Reload test\n"
+        "datapoints:\n"
+        "  - name: info\n"
+        "    description: Info endpoint\n"
+        "    pattern: static\n"
+        "    endpoints:\n"
+        "      - method: GET\n"
+        "        path: /reloadpartner/info\n"
+        "        response:\n"
+        "          status: 200\n"
+        "          body:\n"
+        "            version: '1.0'\n"
+    )
+
+    app = FastAPI()
+    partners = load_partners(tmp_path)
+    register_routes(app, partners, store, partners_dir=tmp_path)
+    c = TestClient(app, raise_server_exceptions=True)
+
+    # Initial response
+    assert c.get("/reloadpartner/info").json() == {"version": "1.0"}
+
+    # Simulate YAML edit
+    yaml_path.write_text(
+        "partner: reloadpartner\n"
+        "description: Reload test\n"
+        "datapoints:\n"
+        "  - name: info\n"
+        "    description: Info endpoint\n"
+        "    pattern: static\n"
+        "    endpoints:\n"
+        "      - method: GET\n"
+        "        path: /reloadpartner/info\n"
+        "        response:\n"
+        "          status: 200\n"
+        "          body:\n"
+        "            version: '2.0'\n"
+    )
+
+    r = c.post("/mirage/admin/reload")
+    assert r.status_code == 200
+    updated = r.json()["updated"]
+    assert any("reloadpartner/info" in u or "/reloadpartner/info" in u for u in updated)
+
+    # Handler now serves new body without restart
+    assert c.get("/reloadpartner/info").json() == {"version": "2.0"}
+
+
+def test_reload_registers_new_partner(store, tmp_path):
+    """Adding a new partner YAML and calling reload makes its routes available."""
+    partner_dir = tmp_path / "firstpartner"
+    partner_dir.mkdir()
+    (partner_dir / "partner.yaml").write_text(
+        "partner: firstpartner\n"
+        "description: First\n"
+        "datapoints:\n"
+        "  - name: ping\n"
+        "    description: Ping\n"
+        "    pattern: static\n"
+        "    endpoints:\n"
+        "      - method: GET\n"
+        "        path: /firstpartner/ping\n"
+        "        response:\n"
+        "          status: 200\n"
+        "          body:\n"
+        "            ok: true\n"
+    )
+
+    app = FastAPI()
+    partners = load_partners(tmp_path)
+    register_routes(app, partners, store, partners_dir=tmp_path)
+    c = TestClient(app, raise_server_exceptions=True)
+
+    assert c.get("/firstpartner/ping").status_code == 200
+
+    # Add a second partner while server is "running"
+    second_dir = tmp_path / "secondpartner"
+    second_dir.mkdir()
+    (second_dir / "partner.yaml").write_text(
+        "partner: secondpartner\n"
+        "description: Second\n"
+        "datapoints:\n"
+        "  - name: hello\n"
+        "    description: Hello\n"
+        "    pattern: static\n"
+        "    endpoints:\n"
+        "      - method: GET\n"
+        "        path: /secondpartner/hello\n"
+        "        response:\n"
+        "          status: 200\n"
+        "          body:\n"
+        "            hello: world\n"
+    )
+
+    r = c.post("/mirage/admin/reload")
+    assert r.status_code == 200
+    assert any("/secondpartner/hello" in a for a in r.json()["added"])
+
+    assert c.get("/secondpartner/hello").json() == {"hello": "world"}

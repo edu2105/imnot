@@ -5,17 +5,19 @@ Responsibilities:
 - Accept a list of PartnerDef objects and a SessionStore instance.
 - For each datapoint in each partner, delegate to the matching pattern factory
   to obtain route handlers, then register them on the FastAPI app.
-- Register admin payload endpoints dynamically per datapoint:
+- Register admin payload endpoints dynamically per datapoint (payload-patterns only):
     POST /mirage/admin/{partner}/{datapoint}/payload         (global)
     POST /mirage/admin/{partner}/{datapoint}/payload/session (session-scoped)
 - Register fixed infra endpoints:
-    GET /mirage/admin/sessions
-    GET /mirage/admin/partners
+    GET  /mirage/admin/sessions
+    GET  /mirage/admin/partners
+    POST /mirage/admin/reload
 """
 
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -26,9 +28,14 @@ from mirage.engine.patterns.fetch import make_fetch_handler
 from mirage.engine.patterns.oauth import make_oauth_handler
 from mirage.engine.patterns.static import make_static_handler
 from mirage.engine.session_store import SessionStore
-from mirage.loader.yaml_loader import DatapointDef, EndpointDef, PartnerDef
+from mirage.loader.yaml_loader import DatapointDef, EndpointDef, PartnerDef, load_partners
 
 logger = logging.getLogger(__name__)
+
+# Patterns that store payload in the session store and therefore need admin
+# payload endpoints (GET/POST global + session).  oauth and static are fully
+# defined by the YAML and never consult the store, so they get no admin routes.
+_PAYLOAD_PATTERNS = {"fetch", "async", "push"}
 
 
 def register_routes(
@@ -36,19 +43,40 @@ def register_routes(
     partners: list[PartnerDef],
     store: SessionStore,
     admin_key: str | None = None,
+    partners_dir: Path | None = None,
 ) -> None:
     """Register all routes on *app* derived from *partners*, plus fixed infra routes.
 
     If *admin_key* is provided, all ``/mirage/admin/*`` requests must include
     ``Authorization: Bearer <admin_key>`` or receive a 401 response.
+
+    *partners_dir* is stored on ``app.state`` so the reload endpoint can re-read
+    YAML files without needing the original path passed again.
     """
+    # Mutable config dict shared with all static handlers.  The reload endpoint
+    # overwrites entries here so running handlers immediately serve fresh config.
+    configs: dict[tuple, dict[str, Any]] = {}
+
+    # Track which (METHOD, path) pairs and (partner, dp) admin pairs are already
+    # registered so the reload endpoint can safely add new ones without duplication.
+    registered_routes: set[tuple[str, str]] = set()
+    registered_admin_dps: set[tuple[str, str]] = set()
+
+    app.state.configs = configs
+    app.state.store = store
+    app.state.partners_dir = partners_dir
+    app.state.registered_routes = registered_routes
+    app.state.registered_admin_dps = registered_admin_dps
+
     if admin_key:
         _register_admin_auth_middleware(app, admin_key)
     _register_infra_routes(app, partners, store)
     for partner in partners:
         for datapoint in partner.datapoints:
-            _register_consumer_routes(app, partner, datapoint, store)
-            _register_admin_routes(app, partner, datapoint, store)
+            _register_consumer_routes(app, partner, datapoint, store, configs, registered_routes)
+            if datapoint.pattern in _PAYLOAD_PATTERNS:
+                _register_admin_routes(app, partner, datapoint, store)
+                registered_admin_dps.add((partner.partner, datapoint.name))
     logger.info(
         "Registered routes for %d partner(s): %s",
         len(partners),
@@ -93,23 +121,28 @@ def _register_consumer_routes(
     partner: PartnerDef,
     datapoint: DatapointDef,
     store: SessionStore,
+    configs: dict[tuple, dict[str, Any]],
+    registered_routes: set[tuple[str, str]],
 ) -> None:
     if datapoint.pattern == "oauth":
         for endpoint in datapoint.endpoints:
             handler = make_oauth_handler(endpoint)
             app.add_api_route(endpoint.path, handler, methods=[endpoint.method])
+            registered_routes.add((endpoint.method.upper(), endpoint.path))
             logger.debug("Registered oauth route %s %s", endpoint.method, endpoint.path)
 
     elif datapoint.pattern == "static":
         for endpoint in datapoint.endpoints:
-            handler = make_static_handler(endpoint)
+            handler = make_static_handler(partner.partner, datapoint.name, endpoint, configs)
             app.add_api_route(endpoint.path, handler, methods=[endpoint.method])
+            registered_routes.add((endpoint.method.upper(), endpoint.path))
             logger.debug("Registered static route %s %s", endpoint.method, endpoint.path)
 
     elif datapoint.pattern == "fetch":
         for endpoint in datapoint.endpoints:
             handler = make_fetch_handler(partner.partner, datapoint, endpoint, store)
             app.add_api_route(endpoint.path, handler, methods=[endpoint.method])
+            registered_routes.add((endpoint.method.upper(), endpoint.path))
             logger.debug("Registered fetch route %s %s", endpoint.method, endpoint.path)
 
     elif datapoint.pattern == "async":
@@ -122,6 +155,7 @@ def _register_consumer_routes(
         for step_num, handler in handlers.items():
             endpoint = step_map[step_num]
             app.add_api_route(endpoint.path, handler, methods=[endpoint.method])
+            registered_routes.add((endpoint.method.upper(), endpoint.path))
             logger.debug(
                 "Registered async step %d route %s %s",
                 step_num, endpoint.method, endpoint.path,
@@ -214,6 +248,74 @@ def _register_infra_routes(
             for p in partners
         ])
 
+    async def reload_partners(request: Request) -> JSONResponse:
+        """Re-read all partner YAML files and hot-swap config for existing routes.
+
+        - For ``static`` pattern datapoints: the response config (status + body)
+          is updated in place so the very next request serves the new YAML body.
+        - For entirely new partners or datapoints: consumer routes (and admin routes
+          for payload patterns) are registered dynamically on the running app.
+        - Removed partners/datapoints are NOT unregistered (existing routes stay
+          active but serve their last-known config).  Restart the server to
+          fully purge removed definitions.
+        """
+        partners_dir: Path | None = request.app.state.partners_dir
+        if partners_dir is None:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "No partners_dir configured — server was not started via `mirage start`."},
+            )
+
+        try:
+            new_partners = load_partners(partners_dir)
+        except Exception as exc:
+            return JSONResponse(status_code=500, content={"detail": str(exc)})
+
+        configs: dict = request.app.state.configs
+        store_: SessionStore = request.app.state.store
+        registered: set[tuple[str, str]] = request.app.state.registered_routes
+        registered_admin: set[tuple[str, str]] = request.app.state.registered_admin_dps
+
+        updated: list[str] = []
+        added: list[str] = []
+
+        for partner in new_partners:
+            for dp in partner.datapoints:
+                # Hot-swap static response configs for already-registered routes
+                if dp.pattern == "static":
+                    for ep in dp.endpoints:
+                        key = (partner.partner, dp.name, ep.method.upper(), ep.path)
+                        if key in configs:
+                            configs[key] = ep.response
+                            updated.append(f"{ep.method.upper()} {ep.path}")
+
+                # Register brand-new consumer routes (new partners or new datapoints)
+                new_eps = [
+                    ep for ep in dp.endpoints
+                    if (ep.method.upper(), ep.path) not in registered
+                ]
+                if new_eps:
+                    _register_consumer_routes(
+                        request.app, partner, dp, store_, configs, registered
+                    )
+                    for ep in new_eps:
+                        added.append(f"{ep.method.upper()} {ep.path}")
+
+                # Register admin routes for new payload-pattern datapoints
+                if (
+                    dp.pattern in _PAYLOAD_PATTERNS
+                    and (partner.partner, dp.name) not in registered_admin
+                ):
+                    _register_admin_routes(request.app, partner, dp, store_)
+                    registered_admin.add((partner.partner, dp.name))
+                    added.append(f"admin routes for {partner.partner}/{dp.name}")
+
+        logger.info("Reload: updated=%s added=%s", updated, added)
+        return JSONResponse({"status": "ok", "updated": updated, "added": added})
+
+    reload_partners.__name__ = "admin_reload_partners"
+
     app.add_api_route("/mirage/admin/sessions", list_sessions, methods=["GET"])
     app.add_api_route("/mirage/admin/partners", list_partners, methods=["GET"])
+    app.add_api_route("/mirage/admin/reload", reload_partners, methods=["POST"])
     logger.debug("Registered infra routes")

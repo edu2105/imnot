@@ -14,17 +14,47 @@ Responsibilities:
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import click
 import uvicorn
 
 from mirage.api.server import create_app
+from mirage.engine.router import _PAYLOAD_PATTERNS
 from mirage.engine.session_store import SessionStore
 from mirage.loader.yaml_loader import load_partners
 
-DEFAULT_PARTNERS_DIR = Path("partners")
+DEFAULT_PARTNERS_DIR = "partners"
 DEFAULT_DB = Path("mirage.db")
+
+
+def _resolve_partners_dir(given: str) -> Path:
+    """Resolve the partners directory path.
+
+    If *given* exists relative to the current working directory, return it.
+    Otherwise walk up the directory tree until a matching subdirectory is found.
+    Raises ``FileNotFoundError`` if nothing is found.
+    """
+    given_path = Path(given)
+    if given_path.is_absolute():
+        return given_path
+    if given_path.is_dir():
+        return given_path.resolve()
+    # Walk up from CWD looking for the directory name
+    current = Path.cwd()
+    while True:
+        candidate = current / given
+        if candidate.is_dir():
+            return candidate
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    raise FileNotFoundError(
+        f"Partners directory '{given}' not found in {Path.cwd()} or any parent directory. "
+        f"Run from inside a Mirage project or pass --partners-dir explicitly."
+    )
 
 
 @click.group()
@@ -62,13 +92,39 @@ def cli() -> None:
 )
 def start(partners_dir: str, db: str, host: str, port: int, reload: bool, admin_key: str | None) -> None:
     """Load partner definitions and start the mock server."""
-    app = create_app(
-        partners_dir=Path(partners_dir),
-        db_path=Path(db),
-        admin_key=admin_key or None,
-    )
+    try:
+        resolved_partners_dir = _resolve_partners_dir(partners_dir)
+    except FileNotFoundError as exc:
+        click.echo(str(exc), err=True)
+        raise SystemExit(1)
+
+    db_path = Path(db)
+    effective_admin_key = admin_key or None
+
     click.echo(f"Starting Mirage on http://{host}:{port}")
-    uvicorn.run(app, host=host, port=port, reload=reload)
+
+    if reload:
+        # uvicorn reload mode requires a factory import string, not an app object.
+        # Export configuration via env vars so create_app_from_env() can pick them up.
+        os.environ["MIRAGE_PARTNERS_DIR"] = str(resolved_partners_dir)
+        os.environ["MIRAGE_DB_PATH"] = str(db_path)
+        if effective_admin_key:
+            os.environ["MIRAGE_ADMIN_KEY"] = effective_admin_key
+        uvicorn.run(
+            "mirage.api.server:create_app_from_env",
+            host=host,
+            port=port,
+            reload=True,
+            reload_includes=["*.yaml"],
+            factory=True,
+        )
+    else:
+        app = create_app(
+            partners_dir=resolved_partners_dir,
+            db_path=db_path,
+            admin_key=effective_admin_key,
+        )
+        uvicorn.run(app, host=host, port=port)
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +166,12 @@ def status(db: str) -> None:
 )
 def routes(partners_dir: str) -> None:
     """List all consumer and admin endpoints for loaded partners."""
-    partners = load_partners(Path(partners_dir))
+    try:
+        resolved = _resolve_partners_dir(partners_dir)
+    except FileNotFoundError as exc:
+        click.echo(str(exc), err=True)
+        raise SystemExit(1)
+    partners = load_partners(resolved)
     if not partners:
         click.echo("No partners loaded.")
         return
@@ -124,19 +185,22 @@ def routes(partners_dir: str) -> None:
             for ep in dp.endpoints:
                 click.echo(f"    {ep.method:<7} {ep.path}  [{dp.pattern}]")
 
-        click.echo()
-        click.echo(f"  {'ADMIN ENDPOINTS':}")
-        for dp in partner.datapoints:
-            base = f"/mirage/admin/{partner.partner}/{dp.name}/payload"
-            click.echo(f"    {'POST':<7} {base}")
-            click.echo(f"    {'GET':<7} {base}")
-            click.echo(f"    {'POST':<7} {base}/session")
-            click.echo(f"    {'GET':<7} {base}/session/{{session_id}}")
+        payload_dps = [dp for dp in partner.datapoints if dp.pattern in _PAYLOAD_PATTERNS]
+        if payload_dps:
+            click.echo()
+            click.echo(f"  {'ADMIN ENDPOINTS':}")
+            for dp in payload_dps:
+                base = f"/mirage/admin/{partner.partner}/{dp.name}/payload"
+                click.echo(f"    {'POST':<7} {base}")
+                click.echo(f"    {'GET':<7} {base}")
+                click.echo(f"    {'POST':<7} {base}/session")
+                click.echo(f"    {'GET':<7} {base}/session/{{session_id}}")
 
     click.echo()
     click.echo("  INFRA ENDPOINTS")
     click.echo(f"    {'GET':<7} /mirage/admin/partners")
     click.echo(f"    {'GET':<7} /mirage/admin/sessions")
+    click.echo(f"    {'POST':<7} /mirage/admin/reload")
 
 
 # ---------------------------------------------------------------------------
