@@ -76,32 +76,32 @@ def test_session_takes_priority_over_global(store):
 
 
 # ---------------------------------------------------------------------------
-# Poll request tracking
+# Async request tracking
 # ---------------------------------------------------------------------------
 
 
-def test_register_and_get_poll_request(store):
-    poll_uuid = store.register_poll_request("staylink", "reservation", session_id=None)
+def test_register_and_get_async_request(store):
+    async_uuid = store.register_async_request("staylink", "reservation", session_id=None)
 
-    assert isinstance(poll_uuid, str) and len(poll_uuid) == 36
+    assert isinstance(async_uuid, str) and len(async_uuid) == 36
 
-    row = store.get_poll_request(poll_uuid)
+    row = store.get_async_request(async_uuid)
     assert row is not None
     assert row["partner"] == "staylink"
     assert row["datapoint"] == "reservation"
     assert row["session_id"] is None
 
 
-def test_poll_request_with_session(store):
+def test_async_request_with_session(store):
     session_id = store.store_session_payload("staylink", "reservation", {"x": 1})
-    poll_uuid = store.register_poll_request("staylink", "reservation", session_id=session_id)
+    async_uuid = store.register_async_request("staylink", "reservation", session_id=session_id)
 
-    row = store.get_poll_request(poll_uuid)
+    row = store.get_async_request(async_uuid)
     assert row["session_id"] == session_id
 
 
-def test_poll_request_not_found(store):
-    assert store.get_poll_request("nonexistent-uuid") is None
+def test_async_request_not_found(store):
+    assert store.get_async_request("nonexistent-uuid") is None
 
 
 # ---------------------------------------------------------------------------

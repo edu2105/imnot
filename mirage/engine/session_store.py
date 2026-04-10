@@ -6,7 +6,7 @@ Responsibilities:
 - Store and retrieve global payloads keyed by (partner, datapoint).
 - Create sessions and store per-session payloads keyed by (session_id, partner, datapoint).
 - Look up the correct payload for an incoming request given an optional session_id.
-- Map poll UUIDs to their originating session so step 3 can resolve the right payload.
+- Map async request UUIDs to their originating session so fetch steps can resolve the right payload.
 - List active sessions for the admin API.
 """
 
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at  TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS poll_requests (
+CREATE TABLE IF NOT EXISTS async_requests (
     uuid        TEXT PRIMARY KEY,
     partner     TEXT NOT NULL,
     datapoint   TEXT NOT NULL,
@@ -81,6 +81,14 @@ class SessionStore:
         """Open the database connection and create tables if they don't exist."""
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        # Migrate poll_requests → async_requests for existing databases
+        old_table = self._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='poll_requests'"
+        ).fetchone()
+        if old_table:
+            self._conn.execute("ALTER TABLE poll_requests RENAME TO async_requests")
+            self._conn.commit()
+            logger.info("Migrated poll_requests table to async_requests")
         self._conn.executescript(_DDL)
         self._conn.commit()
         logger.info("Session store initialised at %s", self.db_path)
@@ -145,30 +153,30 @@ class SessionStore:
         return session_id
 
     # ------------------------------------------------------------------
-    # Poll request tracking
+    # Async request tracking
     # ------------------------------------------------------------------
 
-    def register_poll_request(
+    def register_async_request(
         self, partner: str, datapoint: str, session_id: str | None
     ) -> str:
-        """Record a new poll request (step 1). Returns the generated UUID."""
-        poll_uuid = _new_id()
+        """Record a new async request (submit step). Returns the generated UUID."""
+        async_uuid = _new_id()
         now = _now()
         with self._cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO poll_requests (uuid, partner, datapoint, session_id, created_at)
+                INSERT INTO async_requests (uuid, partner, datapoint, session_id, created_at)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (poll_uuid, partner, datapoint, session_id, now),
+                (async_uuid, partner, datapoint, session_id, now),
             )
-        logger.debug("Registered poll request %s for %s/%s", poll_uuid, partner, datapoint)
-        return poll_uuid
+        logger.debug("Registered async request %s for %s/%s", async_uuid, partner, datapoint)
+        return async_uuid
 
-    def get_poll_request(self, poll_uuid: str) -> sqlite3.Row | None:
-        """Return the poll_requests row for a UUID, or None if not found."""
+    def get_async_request(self, async_uuid: str) -> sqlite3.Row | None:
+        """Return the async_requests row for a UUID, or None if not found."""
         with self._cursor() as cur:
-            cur.execute("SELECT * FROM poll_requests WHERE uuid = ?", (poll_uuid,))
+            cur.execute("SELECT * FROM async_requests WHERE uuid = ?", (async_uuid,))
             return cur.fetchone()
 
     # ------------------------------------------------------------------
