@@ -21,3 +21,7 @@ data/
 PLAN.md
 CLAUDE.md
 .claude/
+
+# Superpowers plugin output
+docs/superpowers/
+superpowers/
