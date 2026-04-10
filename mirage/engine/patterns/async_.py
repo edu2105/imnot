@@ -63,6 +63,12 @@ def _make_submit_handler(
     id_body_field: str | None = endpoint.response.get("id_body_field")
     static_body: dict[str, Any] = endpoint.response.get("body") or {}
 
+    if not (id_header and id_header_value) and not id_body_field:
+        raise ValueError(
+            f"Endpoint step {endpoint.step} has generates_id=true but neither "
+            "'id_header'/'id_header_value' nor 'id_body_field' is set"
+        )
+
     async def handler(request: Request) -> Response:
         session_id: str | None = request.headers.get("X-Mirage-Session")
         async_uuid = store.register_async_request(
@@ -93,7 +99,11 @@ def _make_static_handler(
     datapoint: DatapointDef,
     endpoint: EndpointDef,
 ) -> Callable:
-    raise NotImplementedError("static handler not yet implemented")
+    async def handler(request: Request) -> Response:
+        raise NotImplementedError("static handler not yet implemented")
+
+    handler.__name__ = f"async_static_{datapoint.name}_{endpoint.step}"
+    return handler
 
 
 # ---------------------------------------------------------------------------
@@ -107,4 +117,8 @@ def _make_fetch_handler(
     endpoint: EndpointDef,
     store: SessionStore,
 ) -> Callable:
-    raise NotImplementedError("fetch handler not yet implemented")
+    async def handler(request: Request) -> Response:
+        raise NotImplementedError("fetch handler not yet implemented")
+
+    handler.__name__ = f"async_fetch_{partner}_{datapoint.name}_{endpoint.step}"
+    return handler
