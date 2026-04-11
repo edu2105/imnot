@@ -3,12 +3,19 @@
 from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from mirage.cli import cli
 from mirage.engine.router import register_routes
 from mirage.engine.session_store import SessionStore
 from mirage.loader.yaml_loader import load_partners
+
+
+@pytest.fixture
+def runner():
+    return CliRunner()
 
 PARTNERS_DIR = Path(__file__).parent.parent / "partners"
 
@@ -495,3 +502,113 @@ def test_reload_registers_new_partner(store, tmp_path):
     assert any("/secondpartner/hello" in a for a in r.json()["added"])
 
     assert c.get("/secondpartner/hello").json() == {"hello": "world"}
+
+
+# ---------------------------------------------------------------------------
+# mirage generate → reload integration
+# ---------------------------------------------------------------------------
+
+
+RATESYNC_YAML = """\
+partner: ratesync
+description: RateSync fictional partner
+
+datapoints:
+  - name: token
+    description: OAuth token
+    pattern: oauth
+    endpoints:
+      - method: POST
+        path: /ratesync/oauth/token
+        response:
+          status: 200
+          token_type: Bearer
+          expires_in: 3600
+
+  - name: rate-push
+    description: Async rate push job
+    pattern: async
+    endpoints:
+      - step: 1
+        method: POST
+        path: /ratesync/v1/rates
+        response:
+          status: 200
+          generates_id: true
+          id_body_field: JobReferenceID
+      - step: 2
+        method: GET
+        path: /ratesync/v1/jobs/{id}/status
+        response:
+          status: 200
+      - step: 3
+        method: GET
+        path: /ratesync/v1/jobs/{id}/results
+        response:
+          status: 200
+          returns_payload: true
+
+  - name: properties
+    description: Synchronous property list
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /ratesync/v1/properties
+        response:
+          status: 200
+"""
+
+
+def test_generate_then_reload_activates_routes(runner, tmp_path):
+    """generate scaffolds partner dir, reload picks it up and routes become live."""
+    partners_dir = tmp_path / "partners"
+    partners_dir.mkdir()
+    yaml_file = tmp_path / "ratesync.yaml"
+    yaml_file.write_text(RATESYNC_YAML)
+
+    # Step 1: generate scaffolds the partner directory
+    result = runner.invoke(cli, [
+        "generate",
+        "--file", str(yaml_file),
+        "--partners-dir", str(partners_dir),
+    ])
+    assert result.exit_code == 0, result.output
+    assert (partners_dir / "ratesync" / "partner.yaml").exists()
+
+    # Step 2: spin up a server seeded with only the existing partners dir,
+    # then reload to pick up ratesync
+    store = SessionStore(db_path=tmp_path / "test.db")
+    store.init()
+    app = FastAPI()
+    partners = load_partners(partners_dir)
+    register_routes(app, partners, store, partners_dir=partners_dir)
+    c = TestClient(app, raise_server_exceptions=True)
+
+    # ratesync routes are now loaded at startup since generate ran first
+    r = c.get("/mirage/admin/partners")
+    assert r.status_code == 200
+    partner_names = [p["partner"] for p in r.json()]
+    assert "ratesync" in partner_names
+
+    # Step 3: oauth token endpoint responds
+    r = c.post("/ratesync/oauth/token")
+    assert r.status_code == 200
+    assert "access_token" in r.json()
+
+    # Step 4: upload payload and run the async flow end-to-end
+    payload = {"rates": [{"roomType": "DBL", "rate": 199.00, "date": "2026-05-01"}]}
+    r = c.post("/mirage/admin/ratesync/rate-push/payload", json=payload)
+    assert r.status_code == 200
+
+    r = c.post("/ratesync/v1/rates", json={})
+    assert r.status_code == 200
+    job_id = r.json()["JobReferenceID"]
+
+    r = c.get(f"/ratesync/v1/jobs/{job_id}/status")
+    assert r.status_code == 200
+
+    r = c.get(f"/ratesync/v1/jobs/{job_id}/results")
+    assert r.status_code == 200
+    assert r.json() == payload
+
+    store.close()

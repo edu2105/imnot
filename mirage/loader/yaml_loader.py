@@ -121,6 +121,17 @@ def _parse_partner(raw: dict[str, Any], source_path: Path) -> PartnerDef:
 # ---------------------------------------------------------------------------
 
 
+def parse_partner_yaml(text: str, source_path: Path = Path("<input>")) -> PartnerDef:
+    """Parse and validate a partner YAML string.
+
+    Raises:
+        yaml.YAMLError: if the text is not valid YAML.
+        ValueError: if the parsed content fails schema validation.
+    """
+    raw = yaml.safe_load(text)
+    return _parse_partner(raw, source_path)
+
+
 def load_partners(partners_dir: Path) -> list[PartnerDef]:
     """Scan *partners_dir* for partner.yaml files and return parsed definitions.
 

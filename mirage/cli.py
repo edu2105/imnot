@@ -15,15 +15,17 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
 import click
 import uvicorn
+import yaml
 
 from mirage.api.server import create_app
 from mirage.engine.router import _PAYLOAD_PATTERNS
 from mirage.engine.session_store import SessionStore
-from mirage.loader.yaml_loader import load_partners
+from mirage.loader.yaml_loader import load_partners, parse_partner_yaml
 
 DEFAULT_PARTNERS_DIR = "partners"
 DEFAULT_DB = Path("mirage.db")
@@ -38,6 +40,10 @@ def _resolve_partners_dir(given: str) -> Path:
     """
     given_path = Path(given)
     if given_path.is_absolute():
+        if not given_path.is_dir():
+            raise FileNotFoundError(
+                f"Partners directory '{given}' not found."
+            )
         return given_path
     if given_path.is_dir():
         return given_path.resolve()
@@ -201,6 +207,118 @@ def routes(partners_dir: str) -> None:
     click.echo(f"    {'GET':<7} /mirage/admin/partners")
     click.echo(f"    {'GET':<7} /mirage/admin/sessions")
     click.echo(f"    {'POST':<7} /mirage/admin/reload")
+
+
+# ---------------------------------------------------------------------------
+# mirage generate
+# ---------------------------------------------------------------------------
+
+
+def _fail(msg: str, json_output: bool, code: int) -> None:
+    if json_output:
+        click.echo(json.dumps({"status": "error", "error": msg}))
+    else:
+        click.echo(msg, err=True)
+    raise SystemExit(code)
+
+
+@cli.command()
+@click.option("--file", "file_path", required=True, help="Path to partner.yaml to validate and register. Use '-' to read from stdin.")
+@click.option("--partners-dir", default=str(DEFAULT_PARTNERS_DIR), show_default=True, help="Directory containing partner YAML definitions.")
+@click.option("--dry-run", is_flag=True, default=False, help="Validate only — print what would happen, write nothing.")
+@click.option("--json", "json_output", is_flag=True, default=False, help="Output result as JSON.")
+@click.option("--force", is_flag=True, default=False, help="Overwrite existing partner.yaml if it already exists.")
+def generate(file_path: str, partners_dir: str, dry_run: bool, json_output: bool, force: bool) -> None:
+    """Validate and register a partner YAML definition."""
+    try:
+        resolved_partners_dir = _resolve_partners_dir(partners_dir)
+    except FileNotFoundError as exc:
+        _fail(str(exc), json_output, 3)
+
+    if file_path == "-":
+        raw = sys.stdin.read()
+    else:
+        try:
+            raw = Path(file_path).read_text()
+        except OSError as exc:
+            _fail(str(exc), json_output, 1)
+
+    try:
+        partner = parse_partner_yaml(raw)
+    except (yaml.YAMLError, ValueError) as exc:
+        _fail(str(exc), json_output, 1)
+
+    dest_dir = resolved_partners_dir / partner.partner
+    dest_file = dest_dir / "partner.yaml"
+    file_exists = dest_file.exists()
+
+    if file_exists and not force:
+        _fail(
+            f"partners/{partner.partner}/partner.yaml already exists. Use --force to overwrite.",
+            json_output,
+            2,
+        )
+
+    if not dry_run:
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest_file.write_text(raw)
+
+    payload_dps = [dp for dp in partner.datapoints if dp.pattern in _PAYLOAD_PATTERNS]
+    payload_dp_names = {dp.name for dp in payload_dps}
+
+    if json_output:
+        click.echo(json.dumps({
+            "status": "ok",
+            "partner": partner.partner,
+            "description": partner.description,
+            "directory": f"partners/{partner.partner}",
+            "file": f"partners/{partner.partner}/partner.yaml",
+            "created": False if dry_run else not file_exists,
+            "datapoints": [
+                {
+                    "name": dp.name,
+                    "pattern": dp.pattern,
+                    "endpoints": [{"method": ep.method, "path": ep.path} for ep in dp.endpoints],
+                    "admin_routes": dp.name in payload_dp_names,
+                }
+                for dp in partner.datapoints
+            ],
+        }, indent=2))
+        return
+
+    if dry_run:
+        dir_note, file_note = "(dry run)", "(dry run)"
+    elif file_exists:
+        dir_note, file_note = "(exists)", "(overwritten)"
+    else:
+        dir_note, file_note = "(created)", "(written)"
+
+    click.echo(f"Partner:     {partner.partner}")
+    click.echo(f"Description: {partner.description}")
+    click.echo(f"Directory:   partners/{partner.partner}/ {dir_note}")
+    click.echo(f"File:        partners/{partner.partner}/partner.yaml {file_note}")
+    click.echo()
+    click.echo("Consumer endpoints:")
+    for dp in partner.datapoints:
+        for ep in dp.endpoints:
+            tag = dp.pattern if ep.step is None else f"{dp.pattern} step {ep.step}"
+            click.echo(f"  {ep.method:<7} {ep.path:<45} [{tag}]")
+
+    if payload_dps:
+        click.echo()
+        click.echo("Admin endpoints:")
+        for dp in payload_dps:
+            base = f"/mirage/admin/{partner.partner}/{dp.name}/payload"
+            click.echo(f"  {'POST':<7} {base}")
+            click.echo(f"  {'GET':<7} {base}")
+            click.echo(f"  {'POST':<7} {base}/session")
+            click.echo(f"  {'GET':<7} {base}/session/{{session_id}}")
+
+    click.echo()
+    if dry_run:
+        click.echo("Dry run — no files written.")
+    else:
+        click.echo("Run `mirage start` or call POST /mirage/admin/reload to activate.")
 
 
 # ---------------------------------------------------------------------------

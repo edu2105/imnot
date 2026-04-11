@@ -296,6 +296,8 @@ Set `MIRAGE_ADMIN_KEY` in `docker-compose.yml` for Docker deployments.
 |---------|-------------|
 | `mirage start` | Load all partner YAMLs and start the server |
 | `mirage start --reload` | Start with auto-restart on any YAML change (recommended for development) |
+| `mirage generate --file <path>` | Validate and scaffold a partner YAML into `partners/` |
+| `mirage generate --file <path> --dry-run --json` | Validate only — print structured result, write nothing |
 | `mirage status` | Show active sessions in the store |
 | `mirage routes` | List all consumer and admin endpoints per partner (works from any subdirectory) |
 | `mirage payload get <partner> <datapoint>` | Print the current global payload |
@@ -370,8 +372,22 @@ no container access.
 
 ## Adding a new partner
 
-Create a directory under `partners/` with a `partner.yaml` file — no code changes required.
-See `partners/README.md` for the full authoring guide.
+Use `mirage generate` to validate and scaffold a partner YAML in one step — no need to know
+the directory layout or manually create files.
+
+```bash
+# Write your partner.yaml (see partners/README.md for the schema), then:
+mirage generate --file /path/to/partner.yaml
+
+# Dry-run first to validate without writing anything:
+mirage generate --dry-run --file /path/to/partner.yaml --json
+```
+
+`mirage generate` validates the YAML using the same loader that runs at startup, creates
+`partners/<name>/` if it does not exist, writes the file, and prints a summary of all
+consumer and admin endpoints that will be registered.
+
+You can also write the YAML manually. Either way, the directory structure is:
 
 ```
 partners/
