@@ -54,6 +54,16 @@ CREATE TABLE IF NOT EXISTS async_requests (
     session_id  TEXT,                    -- NULL for global-mode requests
     created_at  TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS push_requests (
+    uuid            TEXT PRIMARY KEY,
+    partner         TEXT NOT NULL,
+    datapoint       TEXT NOT NULL,
+    session_id      TEXT,               -- NULL for global-mode requests
+    callback_url    TEXT NOT NULL,
+    callback_method TEXT NOT NULL,
+    created_at      TEXT NOT NULL
+);
 """
 
 
@@ -180,6 +190,42 @@ class SessionStore:
         """Return the async_requests row for a UUID, or None if not found."""
         with self._cursor() as cur:
             cur.execute("SELECT * FROM async_requests WHERE uuid = ?", (async_uuid,))
+            return cur.fetchone()
+
+    # ------------------------------------------------------------------
+    # Push request tracking
+    # ------------------------------------------------------------------
+
+    def store_push_request(
+        self,
+        partner: str,
+        datapoint: str,
+        session_id: str | None,
+        callback_url: str,
+        callback_method: str,
+    ) -> str:
+        """Record a new push submit request. Returns the generated UUID."""
+        push_uuid = _new_id()
+        now = _now()
+        with self._cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO push_requests
+                    (uuid, partner, datapoint, session_id, callback_url, callback_method, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (push_uuid, partner, datapoint, session_id, callback_url, callback_method, now),
+            )
+        logger.debug(
+            "Stored push request %s for %s/%s → %s",
+            push_uuid, partner, datapoint, callback_url,
+        )
+        return push_uuid
+
+    def get_push_request(self, push_uuid: str) -> sqlite3.Row | None:
+        """Return the push_requests row for a UUID, or None if not found."""
+        with self._cursor() as cur:
+            cur.execute("SELECT * FROM push_requests WHERE uuid = ?", (push_uuid,))
             return cur.fetchone()
 
     # ------------------------------------------------------------------

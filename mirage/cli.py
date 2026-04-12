@@ -201,6 +201,9 @@ def routes(partners_dir: str) -> None:
                 click.echo(f"    {'GET':<7} {base}")
                 click.echo(f"    {'POST':<7} {base}/session")
                 click.echo(f"    {'GET':<7} {base}/session/{{session_id}}")
+                if dp.pattern == "push":
+                    retrigger = f"/mirage/admin/{partner.partner}/{dp.name}/push/{{request_id}}/retrigger"
+                    click.echo(f"    {'POST':<7} {retrigger}")
 
     click.echo()
     click.echo("  INFRA ENDPOINTS")
@@ -313,6 +316,9 @@ def generate(file_path: str, partners_dir: str, dry_run: bool, json_output: bool
             click.echo(f"  {'GET':<7} {base}")
             click.echo(f"  {'POST':<7} {base}/session")
             click.echo(f"  {'GET':<7} {base}/session/{{session_id}}")
+            if dp.pattern == "push":
+                retrigger = f"/mirage/admin/{partner.partner}/{dp.name}/push/{{request_id}}/retrigger"
+                click.echo(f"  {'POST':<7} {retrigger}")
 
     click.echo()
     if dry_run:

@@ -30,7 +30,7 @@ happens when your code talks to a real partner API.
   - `static` — endpoint that always returns a fixed JSON body defined in the YAML.
   - `fetch` — synchronous GET that returns the stored payload for a datapoint, with optional session isolation.
   - `async` — flexible N-step async flow defined in YAML: submit → optional status check(s) → fetch result.
-  - `push` — Mirage proactively delivers a payload to a callback URL (future).
+  - `push` — Mirage proactively delivers a payload to a callback URL after receiving a submit request.
 - **Payload storage** supports two modes:
   - *Global* — one payload per datapoint, last write wins.
   - *Session* — isolated payload per test run, selected via `X-Mirage-Session` header.
@@ -231,6 +231,69 @@ configurable. Behavior is opt-in via two response flags:
         returns_payload: true
 ```
 
+### `push`
+
+Mirage receives a submit request, returns immediately, then fires an outbound HTTP call
+to a callback URL with the stored payload — simulating the partner calling back your
+webhook endpoint.
+
+**Callback URL from request body field:**
+
+```yaml
+- name: rate-push
+  pattern: push
+  endpoints:
+    - method: POST
+      path: /partner/rates
+      response:
+        status: 202
+        callback_url_field: callbackUrl     # body JSON field containing the callback URL
+        callback_method: POST               # default: POST
+        callback_delay_seconds: 0           # default: 0 (immediate)
+```
+
+**Callback URL from request header:**
+
+```yaml
+- name: rate-push
+  pattern: push
+  endpoints:
+    - method: POST
+      path: /partner/rates
+      response:
+        status: 202
+        callback_url_header: X-Callback-URL
+```
+
+Exactly one of `callback_url_field` or `callback_url_header` is required. The submit
+response body always includes a `request_id` (UUID) that can be used with the retrigger
+admin endpoint.
+
+**Interaction sequence:**
+
+```
+Test Harness                    Mirage                    Test Harness Webhook
+     |                             |                               |
+     |  POST /admin/.../payload    |                               |
+     |---------------------------->|                               |
+     |  POST /partner/rates        |                               |
+     |  { "callbackUrl": "..." }   |                               |
+     |---------------------------->|                               |
+     |  202 { "request_id": "..." }|                               |
+     |<----------------------------|                               |
+     |                             |  POST http://.../webhook      |
+     |                             |  { ...payload... }            |
+     |                             |------------------------------>|
+```
+
+To re-fire the callback without restarting the flow:
+```bash
+curl -X POST http://localhost:8000/mirage/admin/{partner}/{datapoint}/push/{request_id}/retrigger
+```
+
+The retrigger always uses the **current** stored payload, so you can update the payload
+between attempts.
+
 ## Session-isolated testing
 
 Any `fetch` or `async` endpoint supports session isolation via `X-Mirage-Session`.
@@ -257,6 +320,7 @@ For every `fetch`, `async`, or `push` datapoint, Mirage auto-generates payload e
 | `GET`  | `/mirage/admin/{partner}/{datapoint}/payload` | Inspect current global payload |
 | `POST` | `/mirage/admin/{partner}/{datapoint}/payload/session` | Upload session payload → returns `session_id` |
 | `GET`  | `/mirage/admin/{partner}/{datapoint}/payload/session/{session_id}` | Inspect a session payload |
+| `POST` | `/mirage/admin/{partner}/{datapoint}/push/{request_id}/retrigger` | Re-fire callback for a prior push submit (`push` pattern only) |
 
 `oauth` and `static` datapoints do **not** get payload endpoints — their responses are
 fully defined by the YAML and never use the payload store.
@@ -425,7 +489,7 @@ mirage/
 
 ## Limitations & Roadmap
 
-- `push` pattern is not yet implemented — Mirage cannot proactively deliver payloads to a callback URL.
+- `push` callbacks have no retry logic — if the callback URL is unreachable, the failure is logged and the retrigger endpoint can be used to re-fire.
 - No native HTTPS support — use a reverse proxy (Nginx, Caddy) to terminate TLS.
 - No web UI — all admin interactions are via the REST API or CLI.
 - XML response bodies are not supported — responses are always JSON.

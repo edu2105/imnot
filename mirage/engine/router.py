@@ -20,12 +20,13 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from mirage.engine.patterns.async_ import make_async_handlers
 from mirage.engine.patterns.fetch import make_fetch_handler
 from mirage.engine.patterns.oauth import make_oauth_handler
+from mirage.engine.patterns.push import fire_callback, make_push_handler
 from mirage.engine.patterns.static import make_static_handler
 from mirage.engine.session_store import SessionStore
 from mirage.loader.yaml_loader import DatapointDef, EndpointDef, PartnerDef, load_partners
@@ -185,6 +186,14 @@ def _register_consumer_routes(
                 step_num, endpoint.method, endpoint.path,
             )
 
+    elif datapoint.pattern == "push":
+        for endpoint in datapoint.endpoints:
+            _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
+            handler = make_push_handler(partner.partner, datapoint, endpoint, store)
+            app.add_api_route(endpoint.path, handler, methods=[endpoint.method])
+            registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
+            logger.debug("Registered push route %s %s", endpoint.method, endpoint.path)
+
 
 # ---------------------------------------------------------------------------
 # Admin payload routes (dynamic per datapoint)
@@ -246,6 +255,32 @@ def _register_admin_routes(
     app.add_api_route(session_path, upload_session, methods=["POST"])
     app.add_api_route(global_path, get_global, methods=["GET"])
     app.add_api_route(f"/mirage/admin/{partner_name}/{dp_name}/payload/session/{{session_id}}", get_session, methods=["GET"])
+
+    if datapoint.pattern == "push":
+        retrigger_path = f"/mirage/admin/{partner_name}/{dp_name}/push/{{request_id}}/retrigger"
+
+        async def retrigger(request: Request, background_tasks: BackgroundTasks) -> JSONResponse:
+            request_id: str = request.path_params["request_id"]
+            row = store.get_push_request(request_id)
+            if row is None:
+                return JSONResponse(
+                    status_code=404,
+                    content={"detail": f"Unknown request_id: {request_id}"},
+                )
+            background_tasks.add_task(
+                fire_callback,
+                store=store,
+                partner=partner_name,
+                datapoint=dp_name,
+                session_id=row["session_id"],
+                callback_url=row["callback_url"],
+                callback_method=row["callback_method"],
+            )
+            return JSONResponse({"status": "dispatched", "request_id": request_id})
+
+        retrigger.__name__ = f"admin_retrigger_{partner_name}_{dp_name}"
+        app.add_api_route(retrigger_path, retrigger, methods=["POST"])
+
     logger.debug("Registered admin routes for %s/%s", partner_name, dp_name)
 
 

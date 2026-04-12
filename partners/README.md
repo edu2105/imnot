@@ -362,8 +362,92 @@ The same `{id}` token appears in the submit step's `id_header_value` and in subs
 
 ### Pattern: `push`
 
-> **Not yet implemented.** Reserved for future use when Mirage needs to proactively
-> deliver a payload to a callback URL after receiving an initial request.
+**Use when:** the partner API calls back your webhook endpoint with a result instead of
+waiting for you to poll. You submit a request, the partner returns immediately, and later
+POSTs the result to a URL you provided.
+
+**How it works:** Mirage receives the submit request, extracts the callback URL (from a
+body field or header), stores the request, returns the configured status code with a
+`request_id`, then fires an outbound HTTP call to the callback URL with the stored payload.
+
+**Required endpoints:** exactly one endpoint (the submit).
+
+**Response config fields:**
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `status` | No | `202` | HTTP status code returned to the submitter |
+| `callback_url_field` | One of these two | — | JSON body field in the submit request that contains the callback URL |
+| `callback_url_header` | One of these two | — | Request header that contains the callback URL |
+| `callback_method` | No | `POST` | HTTP method used for the outbound callback |
+| `callback_delay_seconds` | No | `0` | Seconds to wait before firing the callback |
+
+Exactly one of `callback_url_field` or `callback_url_header` must be present — specifying
+both or neither is a validation error caught at startup.
+
+**Example — callback URL in request body:**
+
+```yaml
+- name: rate-push
+  description: Partner confirms rate update via webhook
+  pattern: push
+  endpoints:
+    - method: POST
+      path: /partner/rates
+      response:
+        status: 202
+        callback_url_field: callbackUrl
+        callback_method: POST
+        callback_delay_seconds: 0
+```
+
+Submit request your consumer sends:
+```json
+{ "callbackUrl": "http://your-service/webhook", "rates": [...] }
+```
+
+Mirage returns:
+```json
+{ "request_id": "<uuid>" }
+```
+
+Then fires `POST http://your-service/webhook` with the stored payload.
+
+**Example — callback URL in request header:**
+
+```yaml
+- name: rate-push
+  description: Partner confirms rate update via webhook
+  pattern: push
+  endpoints:
+    - method: POST
+      path: /partner/rates
+      response:
+        status: 202
+        callback_url_header: X-Callback-URL
+```
+
+**Retrigger admin endpoint:**
+
+For every `push` datapoint, Mirage registers an additional admin route:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/mirage/admin/{partner}/{datapoint}/push/{request_id}/retrigger` | Re-fire the callback for a prior submit |
+
+Use this when the callback failed or you need to test how your service handles a repeated
+delivery, without restarting the whole flow. The retrigger always uses the **current**
+stored payload, so you can update the payload between attempts.
+
+```bash
+curl -X POST http://localhost:8000/mirage/admin/partner/rate-push/push/<request_id>/retrigger
+```
+
+**Session behaviour:**
+- `X-Mirage-Session` on the submit request → session payload used for the callback
+- No session header → global payload used
+- No payload found → callback is skipped (warning logged); submit still returns the configured status
+- The retrigger uses the `session_id` from the original submit — no need to re-specify it
 
 ---
 
@@ -396,7 +480,7 @@ Fixed infra endpoints (always available regardless of partners loaded):
 
 - [ ] `partner` value is lowercase with no spaces or special characters
 - [ ] Each datapoint has a unique `name` within the file
-- [ ] `pattern` is one of `oauth`, `async`, `static`, `fetch` (`push` is reserved)
+- [ ] `pattern` is one of `oauth`, `async`, `static`, `fetch`, `push`
 - [ ] If the token endpoint returns non-standard fields, use `static` not `oauth`
 - [ ] Every `oauth` datapoint has exactly one `POST` endpoint
 - [ ] Every `async` datapoint has at least two endpoints, each with a unique `step` number
@@ -404,6 +488,7 @@ Fixed infra endpoints (always available regardless of partners loaded):
 - [ ] If `id_header` is used, `id_header_value` contains `{id}`
 - [ ] Async steps that reference the generated UUID use `{id}` in their path
 - [ ] The async fetch step has `returns_payload: true`
+- [ ] Every `push` datapoint has exactly one endpoint with exactly one of `callback_url_field` or `callback_url_header` set (not both, not neither)
 - [ ] All `response` blocks are nested inside their endpoint, not at the datapoint level
 - [ ] No two endpoints across the whole file share the same `method` + `path` combination
 - [ ] No endpoint in this file shares `method` + `path` with an endpoint in any other partner file — Mirage enforces this at startup and will refuse to start if a conflict is detected
