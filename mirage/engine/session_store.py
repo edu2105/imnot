@@ -113,7 +113,7 @@ class SessionStore:
 
     @contextmanager
     def _cursor(self) -> Generator[sqlite3.Cursor, None, None]:
-        assert self._conn is not None, "SessionStore.init() must be called before use"
+        assert self._conn is not None, "SessionStore.init() must be called before use"  # nosec B101
         cur = self._conn.cursor()
         try:
             yield cur
