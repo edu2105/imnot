@@ -365,6 +365,7 @@ Set `MIRAGE_ADMIN_KEY` in `docker-compose.yml` for Docker deployments.
 | `mirage generate --file <path> --dry-run --json` | Validate only — print structured result, write nothing |
 | `mirage export postman` | Generate a Postman collection v2.1 JSON from all loaded partners |
 | `mirage export postman --out <file>` | Write the collection to a specific file (default: `mirage-collection.json`) |
+| `mirage export postman --partner <name>` | Include only the named partner (repeatable: `--partner a --partner b`) |
 | `mirage status` | Show active sessions in the store |
 | `mirage routes` | List all consumer and admin endpoints per partner (works from any subdirectory) |
 | `mirage payload get <partner> <datapoint>` | Print the current global payload |
