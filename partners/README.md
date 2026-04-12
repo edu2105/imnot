@@ -406,6 +406,7 @@ Fixed infra endpoints (always available regardless of partners loaded):
 - [ ] The async fetch step has `returns_payload: true`
 - [ ] All `response` blocks are nested inside their endpoint, not at the datapoint level
 - [ ] No two endpoints across the whole file share the same `method` + `path` combination
+- [ ] No endpoint in this file shares `method` + `path` with an endpoint in any other partner file — Mirage enforces this at startup and will refuse to start if a conflict is detected
 - [ ] After saving, call `POST /mirage/admin/reload` or restart the server to pick up changes
 
 ---

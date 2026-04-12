@@ -57,9 +57,10 @@ def register_routes(
     # overwrites entries here so running handlers immediately serve fresh config.
     configs: dict[tuple, dict[str, Any]] = {}
 
-    # Track which (METHOD, path) pairs and (partner, dp) admin pairs are already
-    # registered so the reload endpoint can safely add new ones without duplication.
-    registered_routes: set[tuple[str, str]] = set()
+    # Maps (METHOD, path) → "partner/datapoint" for every registered consumer route.
+    # Used both for duplicate-prevention at startup (raises ValueError on collision)
+    # and for the reload endpoint (skips already-claimed routes).
+    registered_routes: dict[tuple[str, str], str] = {}
     registered_admin_dps: set[tuple[str, str]] = set()
 
     app.state.configs = configs
@@ -116,33 +117,55 @@ def _register_admin_auth_middleware(app: FastAPI, admin_key: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _check_route_collision(
+    method: str,
+    path: str,
+    partner: str,
+    datapoint: str,
+    registered_routes: dict[tuple[str, str], str],
+) -> None:
+    """Raise ValueError if (method, path) is already claimed by another partner/datapoint."""
+    key = (method.upper(), path)
+    owner = registered_routes.get(key)
+    if owner is not None and owner != f"{partner}/{datapoint}":
+        raise ValueError(
+            f"Route conflict: {method.upper()} {path} is already registered by "
+            f"'{owner}'. Cannot register it for '{partner}/{datapoint}'."
+        )
+
+
 def _register_consumer_routes(
     app: FastAPI,
     partner: PartnerDef,
     datapoint: DatapointDef,
     store: SessionStore,
     configs: dict[tuple, dict[str, Any]],
-    registered_routes: set[tuple[str, str]],
+    registered_routes: dict[tuple[str, str], str],
 ) -> None:
+    owner = f"{partner.partner}/{datapoint.name}"
+
     if datapoint.pattern == "oauth":
         for endpoint in datapoint.endpoints:
+            _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             handler = make_oauth_handler(endpoint)
             app.add_api_route(endpoint.path, handler, methods=[endpoint.method])
-            registered_routes.add((endpoint.method.upper(), endpoint.path))
+            registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered oauth route %s %s", endpoint.method, endpoint.path)
 
     elif datapoint.pattern == "static":
         for endpoint in datapoint.endpoints:
+            _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             handler = make_static_handler(partner.partner, datapoint.name, endpoint, configs)
             app.add_api_route(endpoint.path, handler, methods=[endpoint.method])
-            registered_routes.add((endpoint.method.upper(), endpoint.path))
+            registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered static route %s %s", endpoint.method, endpoint.path)
 
     elif datapoint.pattern == "fetch":
         for endpoint in datapoint.endpoints:
+            _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             handler = make_fetch_handler(partner.partner, datapoint, endpoint, store)
             app.add_api_route(endpoint.path, handler, methods=[endpoint.method])
-            registered_routes.add((endpoint.method.upper(), endpoint.path))
+            registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered fetch route %s %s", endpoint.method, endpoint.path)
 
     elif datapoint.pattern == "async":
@@ -154,8 +177,9 @@ def _register_consumer_routes(
         )
         for step_num, handler in handlers.items():
             endpoint = step_map[step_num]
+            _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             app.add_api_route(endpoint.path, handler, methods=[endpoint.method])
-            registered_routes.add((endpoint.method.upper(), endpoint.path))
+            registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug(
                 "Registered async step %d route %s %s",
                 step_num, endpoint.method, endpoint.path,
@@ -273,11 +297,12 @@ def _register_infra_routes(
 
         configs: dict = request.app.state.configs
         store_: SessionStore = request.app.state.store
-        registered: set[tuple[str, str]] = request.app.state.registered_routes
+        registered: dict[tuple[str, str], str] = request.app.state.registered_routes
         registered_admin: set[tuple[str, str]] = request.app.state.registered_admin_dps
 
         updated: list[str] = []
         added: list[str] = []
+        conflicts: list[str] = []
 
         for partner in new_partners:
             for dp in partner.datapoints:
@@ -295,11 +320,14 @@ def _register_infra_routes(
                     if (ep.method.upper(), ep.path) not in registered
                 ]
                 if new_eps:
-                    _register_consumer_routes(
-                        request.app, partner, dp, store_, configs, registered
-                    )
-                    for ep in new_eps:
-                        added.append(f"{ep.method.upper()} {ep.path}")
+                    try:
+                        _register_consumer_routes(
+                            request.app, partner, dp, store_, configs, registered
+                        )
+                        for ep in new_eps:
+                            added.append(f"{ep.method.upper()} {ep.path}")
+                    except ValueError as exc:
+                        conflicts.append(str(exc))
 
                 # Register admin routes for new payload-pattern datapoints
                 if (
@@ -310,8 +338,9 @@ def _register_infra_routes(
                     registered_admin.add((partner.partner, dp.name))
                     added.append(f"admin routes for {partner.partner}/{dp.name}")
 
-        logger.info("Reload: updated=%s added=%s", updated, added)
-        return JSONResponse({"status": "ok", "updated": updated, "added": added})
+        logger.info("Reload: updated=%s added=%s conflicts=%s", updated, added, conflicts)
+        status = "ok" if not conflicts else "partial"
+        return JSONResponse({"status": status, "updated": updated, "added": added, "conflicts": conflicts})
 
     reload_partners.__name__ = "admin_reload_partners"
 
