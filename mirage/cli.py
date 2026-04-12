@@ -26,6 +26,7 @@ from mirage.api.server import create_app
 from mirage.engine.router import _PAYLOAD_PATTERNS
 from mirage.engine.session_store import SessionStore
 from mirage.loader.yaml_loader import load_partners, parse_partner_yaml
+from mirage.postman import build_postman_collection, collection_stats
 
 DEFAULT_PARTNERS_DIR = "partners"
 DEFAULT_DB = Path("mirage.db")
@@ -325,6 +326,55 @@ def generate(file_path: str, partners_dir: str, dry_run: bool, json_output: bool
         click.echo("Dry run — no files written.")
     else:
         click.echo("Run `mirage start` or call POST /mirage/admin/reload to activate.")
+
+
+# ---------------------------------------------------------------------------
+# mirage export
+# ---------------------------------------------------------------------------
+
+
+@cli.group()
+def export() -> None:
+    """Export Mirage configuration to external formats."""
+
+
+@export.command("postman")
+@click.option(
+    "--out",
+    default="mirage-collection.json",
+    show_default=True,
+    help="Output file path.",
+)
+@click.option(
+    "--partners-dir",
+    default=str(DEFAULT_PARTNERS_DIR),
+    show_default=True,
+    help="Directory containing partner YAML definitions.",
+)
+def export_postman(out: str, partners_dir: str) -> None:
+    """Generate a Postman collection v2.1 JSON file from loaded partner definitions."""
+    try:
+        resolved = _resolve_partners_dir(partners_dir)
+    except FileNotFoundError as exc:
+        click.echo(str(exc), err=True)
+        raise SystemExit(1)
+
+    partners = load_partners(resolved)
+    if not partners:
+        click.echo("No partners loaded — nothing to export.", err=True)
+        raise SystemExit(1)
+
+    collection = build_postman_collection(partners)
+    out_path = Path(out)
+    out_path.write_text(json.dumps(collection, indent=2))
+
+    stats = collection_stats(partners)
+    click.echo(f"Collection written to {out_path}")
+    click.echo(f"  Partners : {stats['partners']} ({', '.join(stats['partner_names'])})")
+    click.echo(
+        f"  Requests : {stats['total_requests']}"
+        f" ({stats['consumer_requests']} consumer, {stats['admin_requests']} admin)"
+    )
 
 
 # ---------------------------------------------------------------------------

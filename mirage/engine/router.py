@@ -30,6 +30,7 @@ from mirage.engine.patterns.push import fire_callback, make_push_handler
 from mirage.engine.patterns.static import make_static_handler
 from mirage.engine.session_store import SessionStore
 from mirage.loader.yaml_loader import DatapointDef, EndpointDef, PartnerDef, load_partners
+from mirage.postman import build_postman_collection
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,7 @@ def register_routes(
 
     app.state.configs = configs
     app.state.store = store
+    app.state.partners = partners
     app.state.partners_dir = partners_dir
     app.state.registered_routes = registered_routes
     app.state.registered_admin_dps = registered_admin_dps
@@ -377,9 +379,13 @@ def _register_infra_routes(
         status = "ok" if not conflicts else "partial"
         return JSONResponse({"status": status, "updated": updated, "added": added, "conflicts": conflicts})
 
+    async def postman_collection(request: Request) -> JSONResponse:
+        return JSONResponse(build_postman_collection(request.app.state.partners))
+
     reload_partners.__name__ = "admin_reload_partners"
 
     app.add_api_route("/mirage/admin/sessions", list_sessions, methods=["GET"])
     app.add_api_route("/mirage/admin/partners", list_partners, methods=["GET"])
     app.add_api_route("/mirage/admin/reload", reload_partners, methods=["POST"])
+    app.add_api_route("/mirage/admin/postman", postman_collection, methods=["GET"])
     logger.debug("Registered infra routes")
