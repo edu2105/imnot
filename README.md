@@ -334,6 +334,13 @@ Fixed infra endpoints (always available regardless of which partners are loaded)
 | `POST` | `/mirage/admin/reload`   | Hot-reload partner YAMLs without restarting the server |
 | `GET`  | `/mirage/admin/postman`  | Download a Postman collection v2.1 JSON for all loaded partners |
 
+Docs endpoints (public, no auth required):
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET`  | `/mirage/docs` | Serve `README.md` as plain text |
+| `GET`  | `/mirage/docs/partners` | Serve `partners/README.md` as plain text |
+
 ### Securing admin endpoints
 
 By default admin endpoints are open — suitable for local development only.

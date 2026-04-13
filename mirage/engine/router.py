@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 
 from mirage.engine.patterns.async_ import make_async_handlers
 from mirage.engine.patterns.fetch import make_fetch_handler
@@ -74,6 +74,7 @@ def register_routes(
 
     if admin_key:
         _register_admin_auth_middleware(app, admin_key)
+    _register_docs_routes(app, partners_dir)
     _register_infra_routes(app, partners, store)
     for partner in partners:
         for datapoint in partner.datapoints:
@@ -284,6 +285,41 @@ def _register_admin_routes(
         app.add_api_route(retrigger_path, retrigger, methods=["POST"])
 
     logger.debug("Registered admin routes for %s/%s", partner_name, dp_name)
+
+
+# ---------------------------------------------------------------------------
+# Docs routes
+# ---------------------------------------------------------------------------
+
+
+def _register_docs_routes(app: FastAPI, partners_dir: Path | None) -> None:
+    """Register public read-only endpoints that serve README files as plain text.
+
+    Path resolution: prefer ``partners_dir.parent`` (reliable in Docker where the
+    package is installed into site-packages but files live under ``/app/``).
+    Falls back to a package-relative path for editable installs and local dev.
+    """
+    if partners_dir is not None:
+        project_root = partners_dir.parent
+    else:
+        project_root = Path(__file__).parents[2]
+
+    readme_path = project_root / "README.md"
+    partners_readme_path = project_root / "partners" / "README.md"
+
+    async def serve_readme() -> PlainTextResponse:
+        if not readme_path.exists():
+            return PlainTextResponse("README.md not found.", status_code=404)
+        return PlainTextResponse(readme_path.read_text(encoding="utf-8"))
+
+    async def serve_partners_readme() -> PlainTextResponse:
+        if not partners_readme_path.exists():
+            return PlainTextResponse("partners/README.md not found.", status_code=404)
+        return PlainTextResponse(partners_readme_path.read_text(encoding="utf-8"))
+
+    app.add_api_route("/mirage/docs", serve_readme, methods=["GET"])
+    app.add_api_route("/mirage/docs/partners", serve_partners_readme, methods=["GET"])
+    logger.debug("Registered docs routes")
 
 
 # ---------------------------------------------------------------------------
