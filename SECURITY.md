@@ -15,15 +15,16 @@ a fix will be prioritised and a CVE will be requested where appropriate.
 
 ## Scope
 
-Mirage is a local integration-testing mock server. It is not designed to be exposed to
-the public internet. The expected deployment model is:
+Mirage is an integration-testing mock server. While local use is the default, it can be
+deployed for team or company-internal use — including cloud platforms (e.g. Railway) and
+infrastructure runtimes (e.g. a Helm-managed NiFi cluster). The expected deployment models are:
 
 - **Local development** — bound to `127.0.0.1`, no authentication required
-- **Shared / team deployment** — bound behind a private network, protected with
-  `MIRAGE_ADMIN_KEY`
+- **Shared / team deployment** — exposed within a private network or cloud environment,
+  protected with `MIRAGE_ADMIN_KEY`
 
 Reports are most valuable for vulnerabilities that affect deployments where Mirage is
-accessible within a network (e.g. a team staging environment).
+accessible over a network (e.g. a shared staging environment or a cloud deployment).
 
 ## Supported Versions
 
