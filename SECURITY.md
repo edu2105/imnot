@@ -16,8 +16,8 @@ a fix will be prioritised and a CVE will be requested where appropriate.
 ## Scope
 
 Mirage is an integration-testing mock server. While local use is the default, it can be
-deployed for team or company-internal use — including cloud platforms (e.g. Railway) and
-infrastructure runtimes (e.g. a Helm-managed NiFi cluster). The expected deployment models are:
+deployed for team or company-internal use — including cloud environments. The expected
+deployment models are:
 
 - **Local development** — bound to `127.0.0.1`, no authentication required
 - **Shared / team deployment** — exposed within a private network or cloud environment,
