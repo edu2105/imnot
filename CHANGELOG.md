@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-14
+
+### Changed
+
+- Project renamed from `mirage` to `imnot` — package, CLI entry point, all admin routes (`/mirage/` → `/imnot/`), session header (`X-Mirage-Session` → `X-Imnot-Session`), env var (`MIRAGE_ADMIN_KEY` → `IMNOT_ADMIN_KEY`), and Docker image (`ghcr.io/edu2105/mirage` → `ghcr.io/edu2105/imnot`). This is a breaking change for existing deployments.
+
 ## [0.2.0] - 2026-04-14
 
 ### Added
