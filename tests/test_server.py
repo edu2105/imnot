@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from mirage.api.server import create_app
+from imnot.api.server import create_app
 
 PARTNERS_DIR = Path(__file__).parent.parent / "partners"
 
@@ -23,7 +23,7 @@ def client(tmp_path):
 
 
 def test_app_starts_and_lists_partners(client):
-    r = client.get("/mirage/admin/partners")
+    r = client.get("/imnot/admin/partners")
     assert r.status_code == 200
     assert any(p["partner"] == "staylink" for p in r.json())
 
@@ -31,7 +31,7 @@ def test_app_starts_and_lists_partners(client):
 def test_app_has_openapi_schema(client):
     r = client.get("/openapi.json")
     assert r.status_code == 200
-    assert r.json()["info"]["title"] == "Mirage"
+    assert r.json()["info"]["title"] == "imnot"
 
 
 # ---------------------------------------------------------------------------
@@ -42,7 +42,7 @@ def test_app_has_openapi_schema(client):
 def test_full_global_flow(client):
     # Upload payload
     client.post(
-        "/mirage/admin/staylink/reservation/payload",
+        "/imnot/admin/staylink/reservation/payload",
         json={"reservationId": "GLOBAL001", "status": "CONFIRMED"},
     )
 
@@ -70,16 +70,16 @@ def test_full_global_flow(client):
 def test_full_session_flow(client):
     # Upload session payload
     session_id = client.post(
-        "/mirage/admin/staylink/reservation/payload/session",
+        "/imnot/admin/staylink/reservation/payload/session",
         json={"reservationId": "SES001"},
     ).json()["session_id"]
 
     # Poll step 1 with session
-    r1 = client.post("/staylink/reservations", headers={"X-Mirage-Session": session_id})
+    r1 = client.post("/staylink/reservations", headers={"X-Imnot-Session": session_id})
     uuid = r1.headers["Location"].split("/")[-1]
 
     # Poll step 3 with session
-    r3 = client.get(f"/staylink/reservations/{uuid}", headers={"X-Mirage-Session": session_id})
+    r3 = client.get(f"/staylink/reservations/{uuid}", headers={"X-Imnot-Session": session_id})
     assert r3.status_code == 200
     assert r3.json() == {"reservationId": "SES001"}
 
@@ -94,7 +94,7 @@ def test_multiple_app_instances_do_not_share_state(tmp_path):
     app2 = create_app(partners_dir=PARTNERS_DIR, db_path=tmp_path / "b.db")
 
     with TestClient(app1) as c1, TestClient(app2) as c2:
-        c1.post("/mirage/admin/staylink/reservation/payload", json={"src": "app1"})
+        c1.post("/imnot/admin/staylink/reservation/payload", json={"src": "app1"})
 
         # app2 has no payload
         r1 = c1.post("/staylink/reservations")
@@ -121,27 +121,27 @@ def authed_client(tmp_path):
 
 def test_admin_open_when_no_key_set(client):
     """Without admin_key, all admin endpoints are open."""
-    r = client.get("/mirage/admin/partners")
+    r = client.get("/imnot/admin/partners")
     assert r.status_code == 200
 
 
 def test_admin_requires_auth_when_key_set(authed_client):
-    r = authed_client.get("/mirage/admin/partners")
+    r = authed_client.get("/imnot/admin/partners")
     assert r.status_code == 401
 
 
 def test_admin_accepts_correct_bearer_token(authed_client):
-    r = authed_client.get("/mirage/admin/partners", headers={"Authorization": "Bearer secret"})
+    r = authed_client.get("/imnot/admin/partners", headers={"Authorization": "Bearer secret"})
     assert r.status_code == 200
 
 
 def test_admin_rejects_wrong_token(authed_client):
-    r = authed_client.get("/mirage/admin/partners", headers={"Authorization": "Bearer wrong"})
+    r = authed_client.get("/imnot/admin/partners", headers={"Authorization": "Bearer wrong"})
     assert r.status_code == 401
 
 
 def test_admin_rejects_missing_bearer_prefix(authed_client):
-    r = authed_client.get("/mirage/admin/partners", headers={"Authorization": "secret"})
+    r = authed_client.get("/imnot/admin/partners", headers={"Authorization": "secret"})
     assert r.status_code == 401
 
 

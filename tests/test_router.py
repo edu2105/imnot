@@ -7,10 +7,10 @@ from click.testing import CliRunner
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from mirage.cli import cli
-from mirage.engine.router import register_routes
-from mirage.engine.session_store import SessionStore
-from mirage.loader.yaml_loader import load_partners
+from imnot.cli import cli
+from imnot.engine.router import register_routes
+from imnot.engine.session_store import SessionStore
+from imnot.loader.yaml_loader import load_partners
 
 
 @pytest.fixture
@@ -87,7 +87,7 @@ def async_client(tmp_path, store):
 
 
 def test_list_partners(client):
-    r = client.get("/mirage/admin/partners")
+    r = client.get("/imnot/admin/partners")
     assert r.status_code == 200
     body = r.json()
     staylink = next((p for p in body if p["partner"] == "staylink"), None)
@@ -97,17 +97,17 @@ def test_list_partners(client):
 
 
 def test_list_sessions_empty(client):
-    r = client.get("/mirage/admin/sessions")
+    r = client.get("/imnot/admin/sessions")
     assert r.status_code == 200
     assert r.json() == []
 
 
 def test_list_sessions_after_upload(client):
     client.post(
-        "/mirage/admin/staylink/reservation/payload/session",
+        "/imnot/admin/staylink/reservation/payload/session",
         json={"reservationId": "X"},
     )
-    r = client.get("/mirage/admin/sessions")
+    r = client.get("/imnot/admin/sessions")
     assert len(r.json()) == 1
 
 
@@ -118,7 +118,7 @@ def test_list_sessions_after_upload(client):
 
 def test_upload_global_payload(client):
     r = client.post(
-        "/mirage/admin/staylink/reservation/payload",
+        "/imnot/admin/staylink/reservation/payload",
         json={"reservationId": "RES001"},
     )
     assert r.status_code == 200
@@ -127,7 +127,7 @@ def test_upload_global_payload(client):
 
 def test_upload_invalid_json_returns_400(client):
     r = client.post(
-        "/mirage/admin/staylink/reservation/payload",
+        "/imnot/admin/staylink/reservation/payload",
         content=b"not json",
         headers={"Content-Type": "application/json"},
     )
@@ -137,7 +137,7 @@ def test_upload_invalid_json_returns_400(client):
 
 def test_upload_session_payload_returns_session_id(client):
     r = client.post(
-        "/mirage/admin/staylink/reservation/payload/session",
+        "/imnot/admin/staylink/reservation/payload/session",
         json={"reservationId": "RES002"},
     )
     assert r.status_code == 200
@@ -152,8 +152,8 @@ def test_upload_session_payload_returns_session_id(client):
 
 
 def test_get_global_payload(client):
-    client.post("/mirage/admin/staylink/reservation/payload", json={"reservationId": "R1"})
-    r = client.get("/mirage/admin/staylink/reservation/payload")
+    client.post("/imnot/admin/staylink/reservation/payload", json={"reservationId": "R1"})
+    r = client.get("/imnot/admin/staylink/reservation/payload")
     assert r.status_code == 200
     body = r.json()
     assert body["payload"] == {"reservationId": "R1"}
@@ -161,17 +161,17 @@ def test_get_global_payload(client):
 
 
 def test_get_global_payload_not_set_returns_404(client):
-    r = client.get("/mirage/admin/staylink/reservation/payload")
+    r = client.get("/imnot/admin/staylink/reservation/payload")
     assert r.status_code == 404
 
 
 def test_get_session_payload(client):
     session_id = client.post(
-        "/mirage/admin/staylink/reservation/payload/session",
+        "/imnot/admin/staylink/reservation/payload/session",
         json={"reservationId": "S1"},
     ).json()["session_id"]
 
-    r = client.get(f"/mirage/admin/staylink/reservation/payload/session/{session_id}")
+    r = client.get(f"/imnot/admin/staylink/reservation/payload/session/{session_id}")
     assert r.status_code == 200
     body = r.json()
     assert body["payload"] == {"reservationId": "S1"}
@@ -180,7 +180,7 @@ def test_get_session_payload(client):
 
 
 def test_get_session_payload_not_found_returns_404(client):
-    r = client.get("/mirage/admin/staylink/reservation/payload/session/nonexistent")
+    r = client.get("/imnot/admin/staylink/reservation/payload/session/nonexistent")
     assert r.status_code == 404
 
 
@@ -191,23 +191,23 @@ def test_get_session_payload_not_found_returns_404(client):
 
 def test_oauth_has_no_admin_payload_route(client):
     """oauth pattern must not expose admin payload endpoints."""
-    r = client.post("/mirage/admin/staylink/token/payload", json={"token": "x"})
+    r = client.post("/imnot/admin/staylink/token/payload", json={"token": "x"})
     assert r.status_code == 404
 
 
 def test_oauth_has_no_admin_session_route(client):
-    r = client.post("/mirage/admin/staylink/token/payload/session", json={"token": "x"})
+    r = client.post("/imnot/admin/staylink/token/payload/session", json={"token": "x"})
     assert r.status_code == 404
 
 
 def test_static_has_no_admin_payload_route(client):
     """static pattern must not expose admin payload endpoints."""
-    r = client.post("/mirage/admin/apaleo/fixed-response/payload", json={"foo": "bar"})
+    r = client.post("/imnot/admin/apaleo/fixed-response/payload", json={"foo": "bar"})
     assert r.status_code == 404
 
 
 def test_static_has_no_admin_session_route(client):
-    r = client.post("/mirage/admin/apaleo/fixed-response/payload/session", json={"foo": "bar"})
+    r = client.post("/imnot/admin/apaleo/fixed-response/payload/session", json={"foo": "bar"})
     assert r.status_code == 404
 
 
@@ -247,7 +247,7 @@ def test_staylink_step2_returns_201_and_status(client):
 
 
 def test_staylink_step3_returns_global_payload(client):
-    client.post("/mirage/admin/staylink/reservation/payload", json={"reservationId": "RES001"})
+    client.post("/imnot/admin/staylink/reservation/payload", json={"reservationId": "RES001"})
 
     r1 = client.post("/staylink/reservations")
     uuid = r1.headers["Location"].split("/")[-1]
@@ -271,23 +271,23 @@ def test_staylink_step3_no_payload_returns_404(client):
 
 def test_staylink_full_session_flow(client):
     r = client.post(
-        "/mirage/admin/staylink/reservation/payload/session",
+        "/imnot/admin/staylink/reservation/payload/session",
         json={"reservationId": "SES001"},
     )
     session_id = r.json()["session_id"]
 
-    r1 = client.post("/staylink/reservations", headers={"X-Mirage-Session": session_id})
+    r1 = client.post("/staylink/reservations", headers={"X-Imnot-Session": session_id})
     assert r1.status_code == 202
     uuid = r1.headers["Location"].split("/")[-1]
 
-    r3 = client.get(f"/staylink/reservations/{uuid}", headers={"X-Mirage-Session": session_id})
+    r3 = client.get(f"/staylink/reservations/{uuid}", headers={"X-Imnot-Session": session_id})
     assert r3.status_code == 200
     assert r3.json() == {"reservationId": "SES001"}
 
 
 def test_staylink_session_does_not_leak_to_global(client):
     r = client.post(
-        "/mirage/admin/staylink/reservation/payload/session",
+        "/imnot/admin/staylink/reservation/payload/session",
         json={"reservationId": "SES001"},
     )
     session_id = r.json()["session_id"]
@@ -301,17 +301,17 @@ def test_staylink_session_does_not_leak_to_global(client):
 
 def test_staylink_two_sessions_are_isolated(client):
     s1 = client.post(
-        "/mirage/admin/staylink/reservation/payload/session", json={"user": "alice"}
+        "/imnot/admin/staylink/reservation/payload/session", json={"user": "alice"}
     ).json()["session_id"]
     s2 = client.post(
-        "/mirage/admin/staylink/reservation/payload/session", json={"user": "bob"}
+        "/imnot/admin/staylink/reservation/payload/session", json={"user": "bob"}
     ).json()["session_id"]
 
-    uuid1 = client.post("/staylink/reservations", headers={"X-Mirage-Session": s1}).headers["Location"].split("/")[-1]
-    uuid2 = client.post("/staylink/reservations", headers={"X-Mirage-Session": s2}).headers["Location"].split("/")[-1]
+    uuid1 = client.post("/staylink/reservations", headers={"X-Imnot-Session": s1}).headers["Location"].split("/")[-1]
+    uuid2 = client.post("/staylink/reservations", headers={"X-Imnot-Session": s2}).headers["Location"].split("/")[-1]
 
-    assert client.get(f"/staylink/reservations/{uuid1}", headers={"X-Mirage-Session": s1}).json() == {"user": "alice"}
-    assert client.get(f"/staylink/reservations/{uuid2}", headers={"X-Mirage-Session": s2}).json() == {"user": "bob"}
+    assert client.get(f"/staylink/reservations/{uuid1}", headers={"X-Imnot-Session": s1}).json() == {"user": "alice"}
+    assert client.get(f"/staylink/reservations/{uuid2}", headers={"X-Imnot-Session": s2}).json() == {"user": "bob"}
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +336,7 @@ def test_async_step2_returns_201_and_status_header(async_client):
 
 
 def test_async_step3_returns_global_payload(async_client):
-    async_client.post("/mirage/admin/asyncpartner/job/payload", json={"result": "ok"})
+    async_client.post("/imnot/admin/asyncpartner/job/payload", json={"result": "ok"})
     r1 = async_client.post("/asyncpartner/jobs")
     uuid = r1.headers["Location"].split("/")[-1]
 
@@ -359,14 +359,14 @@ def test_async_step3_no_payload_returns_404(async_client):
 
 def test_async_full_session_flow(async_client):
     session_id = async_client.post(
-        "/mirage/admin/asyncpartner/job/payload/session",
+        "/imnot/admin/asyncpartner/job/payload/session",
         json={"result": "session-ok"},
     ).json()["session_id"]
 
-    r1 = async_client.post("/asyncpartner/jobs", headers={"X-Mirage-Session": session_id})
+    r1 = async_client.post("/asyncpartner/jobs", headers={"X-Imnot-Session": session_id})
     uuid = r1.headers["Location"].split("/")[-1]
 
-    r3 = async_client.get(f"/asyncpartner/jobs/{uuid}", headers={"X-Mirage-Session": session_id})
+    r3 = async_client.get(f"/asyncpartner/jobs/{uuid}", headers={"X-Imnot-Session": session_id})
     assert r3.status_code == 200
     assert r3.json() == {"result": "session-ok"}
 
@@ -377,7 +377,7 @@ def test_async_full_session_flow(async_client):
 
 
 def test_reload_returns_ok(client):
-    r = client.post("/mirage/admin/reload")
+    r = client.post("/imnot/admin/reload")
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "ok"
@@ -392,12 +392,12 @@ def test_reload_without_partners_dir_returns_400(store, tmp_path):
     # Omit partners_dir — app.state.partners_dir will be None
     register_routes(app, partners, store)
     c = TestClient(app, raise_server_exceptions=True)
-    r = c.post("/mirage/admin/reload")
+    r = c.post("/imnot/admin/reload")
     assert r.status_code == 400
 
 
 def test_reload_updates_static_config_in_place(store, tmp_path):
-    """Editing a static response body in YAML is picked up by POST /mirage/admin/reload."""
+    """Editing a static response body in YAML is picked up by POST /imnot/admin/reload."""
     partner_dir = tmp_path / "reloadpartner"
     partner_dir.mkdir()
     yaml_path = partner_dir / "partner.yaml"
@@ -442,7 +442,7 @@ def test_reload_updates_static_config_in_place(store, tmp_path):
         "            version: '2.0'\n"
     )
 
-    r = c.post("/mirage/admin/reload")
+    r = c.post("/imnot/admin/reload")
     assert r.status_code == 200
     updated = r.json()["updated"]
     assert any("reloadpartner/info" in u or "/reloadpartner/info" in u for u in updated)
@@ -497,7 +497,7 @@ def test_reload_registers_new_partner(store, tmp_path):
         "            hello: world\n"
     )
 
-    r = c.post("/mirage/admin/reload")
+    r = c.post("/imnot/admin/reload")
     assert r.status_code == 200
     assert any("/secondpartner/hello" in a for a in r.json()["added"])
 
@@ -505,7 +505,7 @@ def test_reload_registers_new_partner(store, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# mirage generate → reload integration
+# imnot generate → reload integration
 # ---------------------------------------------------------------------------
 
 
@@ -585,7 +585,7 @@ def test_generate_then_reload_activates_routes(runner, tmp_path):
     c = TestClient(app, raise_server_exceptions=True)
 
     # ratesync routes are now loaded at startup since generate ran first
-    r = c.get("/mirage/admin/partners")
+    r = c.get("/imnot/admin/partners")
     assert r.status_code == 200
     partner_names = [p["partner"] for p in r.json()]
     assert "ratesync" in partner_names
@@ -597,7 +597,7 @@ def test_generate_then_reload_activates_routes(runner, tmp_path):
 
     # Step 4: upload payload and run the async flow end-to-end
     payload = {"rates": [{"roomType": "DBL", "rate": 199.00, "date": "2026-05-01"}]}
-    r = c.post("/mirage/admin/ratesync/rate-push/payload", json=payload)
+    r = c.post("/imnot/admin/ratesync/rate-push/payload", json=payload)
     assert r.status_code == 200
 
     r = c.post("/ratesync/v1/rates", json={})
@@ -615,7 +615,7 @@ def test_generate_then_reload_activates_routes(runner, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# POST /mirage/admin/partners
+# POST /imnot/admin/partners
 # ---------------------------------------------------------------------------
 
 
@@ -664,7 +664,7 @@ def _make_client(tmp_path, store):
 def test_create_partner_returns_201_and_routes_live(tmp_path, store):
     c, _ = _make_client(tmp_path, store)
 
-    r = c.post("/mirage/admin/partners", content=_NEW_PARTNER_YAML)
+    r = c.post("/imnot/admin/partners", content=_NEW_PARTNER_YAML)
     assert r.status_code == 201
     body = r.json()
     assert body["status"] == "ok"
@@ -673,14 +673,14 @@ def test_create_partner_returns_201_and_routes_live(tmp_path, store):
     assert any(ep["path"] == "/bookingco/v1/reservations/{id}" for dp in body["datapoints"] for ep in dp["endpoints"])
 
     # Route is live immediately
-    r2 = c.get("/bookingco/v1/reservations/123", headers={"X-Mirage-Session": "s1"})
+    r2 = c.get("/bookingco/v1/reservations/123", headers={"X-Imnot-Session": "s1"})
     assert r2.status_code in (200, 404)  # 404 = no payload set yet, but route exists
 
 
 def test_create_partner_writes_file_to_disk(tmp_path, store):
     c, partners_dir = _make_client(tmp_path, store)
 
-    c.post("/mirage/admin/partners", content=_NEW_PARTNER_YAML)
+    c.post("/imnot/admin/partners", content=_NEW_PARTNER_YAML)
 
     dest = partners_dir / "bookingco" / "partner.yaml"
     assert dest.exists()
@@ -690,8 +690,8 @@ def test_create_partner_writes_file_to_disk(tmp_path, store):
 def test_create_partner_conflict_returns_409(tmp_path, store):
     c, _ = _make_client(tmp_path, store)
 
-    c.post("/mirage/admin/partners", content=_NEW_PARTNER_YAML)
-    r = c.post("/mirage/admin/partners", content=_NEW_PARTNER_YAML)
+    c.post("/imnot/admin/partners", content=_NEW_PARTNER_YAML)
+    r = c.post("/imnot/admin/partners", content=_NEW_PARTNER_YAML)
     assert r.status_code == 409
     assert "already exists" in r.json()["detail"]
 
@@ -699,8 +699,8 @@ def test_create_partner_conflict_returns_409(tmp_path, store):
 def test_create_partner_force_overwrites_returns_200(tmp_path, store):
     c, _ = _make_client(tmp_path, store)
 
-    c.post("/mirage/admin/partners", content=_NEW_PARTNER_YAML)
-    r = c.post("/mirage/admin/partners?force=true", content=_NEW_PARTNER_YAML)
+    c.post("/imnot/admin/partners", content=_NEW_PARTNER_YAML)
+    r = c.post("/imnot/admin/partners?force=true", content=_NEW_PARTNER_YAML)
     assert r.status_code == 200
     assert r.json()["created"] is False
 
@@ -708,7 +708,7 @@ def test_create_partner_force_overwrites_returns_200(tmp_path, store):
 def test_create_partner_invalid_yaml_returns_422(tmp_path, store):
     c, _ = _make_client(tmp_path, store)
 
-    r = c.post("/mirage/admin/partners", content="partner: broken\n  bad: [yaml")
+    r = c.post("/imnot/admin/partners", content="partner: broken\n  bad: [yaml")
     assert r.status_code == 422
     assert r.json()["status"] == "error"
 
@@ -728,7 +728,7 @@ def test_create_partner_missing_schema_field_returns_422(tmp_path, store):
         "        response:\n"
         "          status: 200\n"
     )
-    r = c.post("/mirage/admin/partners", content=bad_yaml)
+    r = c.post("/imnot/admin/partners", content=bad_yaml)
     assert r.status_code == 422
 
 
@@ -738,16 +738,16 @@ def test_create_partner_without_partners_dir_returns_400(store):
     register_routes(app, [], store)  # no partners_dir
     c = TestClient(app, raise_server_exceptions=True)
 
-    r = c.post("/mirage/admin/partners", content=_NEW_PARTNER_YAML)
+    r = c.post("/imnot/admin/partners", content=_NEW_PARTNER_YAML)
     assert r.status_code == 400
 
 
 def test_create_partner_appears_in_list_partners(tmp_path, store):
     c, _ = _make_client(tmp_path, store)
 
-    c.post("/mirage/admin/partners", content=_NEW_PARTNER_YAML)
+    c.post("/imnot/admin/partners", content=_NEW_PARTNER_YAML)
 
-    r = c.get("/mirage/admin/partners")
+    r = c.get("/imnot/admin/partners")
     partner_names = [p["partner"] for p in r.json()]
     assert "bookingco" in partner_names
 
@@ -755,7 +755,7 @@ def test_create_partner_appears_in_list_partners(tmp_path, store):
 def test_create_static_partner_routes_live(tmp_path, store):
     c, _ = _make_client(tmp_path, store)
 
-    r = c.post("/mirage/admin/partners", content=_STATIC_PARTNER_YAML)
+    r = c.post("/imnot/admin/partners", content=_STATIC_PARTNER_YAML)
     assert r.status_code == 201
 
     r2 = c.get("/staticco/status")
@@ -766,11 +766,11 @@ def test_create_static_partner_routes_live(tmp_path, store):
 def test_create_partner_admin_routes_registered_for_fetch(tmp_path, store):
     c, _ = _make_client(tmp_path, store)
 
-    r = c.post("/mirage/admin/partners", content=_NEW_PARTNER_YAML)
+    r = c.post("/imnot/admin/partners", content=_NEW_PARTNER_YAML)
     assert r.status_code == 201
     dp = r.json()["datapoints"][0]
     assert dp["admin_routes"] is True
 
     # Admin payload endpoint is live
-    r2 = c.post("/mirage/admin/bookingco/reservation/payload", json={"id": "123"})
+    r2 = c.post("/imnot/admin/bookingco/reservation/payload", json={"id": "123"})
     assert r2.status_code == 200

@@ -1,14 +1,14 @@
 # Mirage
 
 <p align="center">
-  <img src="assets/mirage-logo.png" alt="Mirage" width="600"/>
+  <img src="assets/imnot-logo.png" alt="imnot" width="600"/>
 </p>
 
-[![CI](https://github.com/edu2105/mirage/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/edu2105/mirage/actions/workflows/ci.yml)
+[![CI](https://github.com/edu2105/imnot/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/edu2105/imnot/actions/workflows/ci.yml)
 
 Mirage is a stateful API mock server for integration testing.
 
-Define a partner's API as a YAML file, run `mirage start`, and you get a fully functional
+Define a partner's API as a YAML file, run `imnot start`, and you get a fully functional
 mock server — no code changes required to add new partners or endpoints.
 
 ## Why Mirage?
@@ -33,8 +33,8 @@ happens when your code talks to a real partner API.
   - `push` — Mirage proactively delivers a payload to a callback URL after receiving a submit request.
 - **Payload storage** supports two modes:
   - *Global* — one payload per datapoint, last write wins.
-  - *Session* — isolated payload per test run, selected via `X-Mirage-Session` header.
-- **Admin API** is always available at `/mirage/admin/` for uploading payloads and
+  - *Session* — isolated payload per test run, selected via `X-Imnot-Session` header.
+- **Admin API** is always available at `/imnot/admin/` for uploading payloads and
   inspecting sessions.
 
 ### Interaction sequence (async pattern)
@@ -72,12 +72,12 @@ body-delivered IDs are all supported. See the `async` pattern documentation belo
 Requires Python 3.11 or later.
 
 ```bash
-git clone https://github.com/edu2105/mirage.git
-cd mirage
+git clone https://github.com/edu2105/imnot.git
+cd imnot
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e .
-mirage start
+imnot start
 ```
 
 Expected output:
@@ -91,7 +91,7 @@ INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
 
 See what endpoints are available (no server needed):
 ```bash
-mirage routes
+imnot routes
 ```
 
 ## Patterns
@@ -139,12 +139,12 @@ that don't match the standard `access_token / token_type / expires_in` shape:
 ```
 
 Static responses can be updated without restarting the server: edit the YAML, then call
-`POST /mirage/admin/reload`.
+`POST /imnot/admin/reload`.
 
 ### `fetch`
 
 Single GET endpoint that returns the stored payload for the datapoint. Supports
-`X-Mirage-Session` for test isolation. Use for synchronous read endpoints.
+`X-Imnot-Session` for test isolation. Use for synchronous read endpoints.
 
 ```yaml
 - name: charges
@@ -158,7 +158,7 @@ Single GET endpoint that returns the stored payload for the datapoint. Supports
 
 Upload a payload first, then GET returns it:
 ```bash
-curl -X POST http://localhost:8000/mirage/admin/bookingco/charges/payload \
+curl -X POST http://localhost:8000/imnot/admin/bookingco/charges/payload \
      -H "Content-Type: application/json" \
      -d '{"charges": [{"id": "C1", "amount": 150}]}'
 
@@ -288,7 +288,7 @@ Test Harness                    Mirage                    Test Harness Webhook
 
 To re-fire the callback without restarting the flow:
 ```bash
-curl -X POST http://localhost:8000/mirage/admin/{partner}/{datapoint}/push/{request_id}/retrigger
+curl -X POST http://localhost:8000/imnot/admin/{partner}/{datapoint}/push/{request_id}/retrigger
 ```
 
 The retrigger always uses the **current** stored payload, so you can update the payload
@@ -296,16 +296,16 @@ between attempts.
 
 ## Session-isolated testing
 
-Any `fetch` or `async` endpoint supports session isolation via `X-Mirage-Session`.
+Any `fetch` or `async` endpoint supports session isolation via `X-Imnot-Session`.
 
 ```bash
 # Upload a session-scoped payload — returns a session_id
-SESSION=$(curl -s -X POST http://localhost:8000/mirage/admin/bookingco/charges/payload/session \
+SESSION=$(curl -s -X POST http://localhost:8000/imnot/admin/bookingco/charges/payload/session \
                -H "Content-Type: application/json" \
                -d '{"charges": [{"id": "S1"}]}' | jq -r .session_id)
 
 # Use the session in your request
-curl http://localhost:8000/bookingco/v1/charges -H "X-Mirage-Session: $SESSION"
+curl http://localhost:8000/bookingco/v1/charges -H "X-Imnot-Session: $SESSION"
 ```
 
 Multiple test users can run in parallel with isolated payloads — each gets their own `session_id`.
@@ -316,11 +316,11 @@ For every `fetch`, `async`, or `push` datapoint, Mirage auto-generates payload e
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/mirage/admin/{partner}/{datapoint}/payload` | Upload global payload |
-| `GET`  | `/mirage/admin/{partner}/{datapoint}/payload` | Inspect current global payload |
-| `POST` | `/mirage/admin/{partner}/{datapoint}/payload/session` | Upload session payload → returns `session_id` |
-| `GET`  | `/mirage/admin/{partner}/{datapoint}/payload/session/{session_id}` | Inspect a session payload |
-| `POST` | `/mirage/admin/{partner}/{datapoint}/push/{request_id}/retrigger` | Re-fire callback for a prior push submit (`push` pattern only) |
+| `POST` | `/imnot/admin/{partner}/{datapoint}/payload` | Upload global payload |
+| `GET`  | `/imnot/admin/{partner}/{datapoint}/payload` | Inspect current global payload |
+| `POST` | `/imnot/admin/{partner}/{datapoint}/payload/session` | Upload session payload → returns `session_id` |
+| `GET`  | `/imnot/admin/{partner}/{datapoint}/payload/session/{session_id}` | Inspect a session payload |
+| `POST` | `/imnot/admin/{partner}/{datapoint}/push/{request_id}/retrigger` | Re-fire callback for a prior push submit (`push` pattern only) |
 
 `oauth` and `static` datapoints do **not** get payload endpoints — their responses are
 fully defined by the YAML and never use the payload store.
@@ -329,13 +329,13 @@ Fixed infra endpoints (always available regardless of which partners are loaded)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET`  | `/mirage/admin/partners` | List all loaded partners and their datapoints |
-| `POST` | `/mirage/admin/partners` | Validate and register a new partner from a raw YAML body — routes go live immediately |
-| `GET`  | `/mirage/admin/sessions` | List all active sessions |
-| `POST` | `/mirage/admin/reload`   | Hot-reload partner YAMLs without restarting the server |
-| `GET`  | `/mirage/admin/postman`  | Download a Postman collection v2.1 JSON for all loaded partners |
+| `GET`  | `/imnot/admin/partners` | List all loaded partners and their datapoints |
+| `POST` | `/imnot/admin/partners` | Validate and register a new partner from a raw YAML body — routes go live immediately |
+| `GET`  | `/imnot/admin/sessions` | List all active sessions |
+| `POST` | `/imnot/admin/reload`   | Hot-reload partner YAMLs without restarting the server |
+| `GET`  | `/imnot/admin/postman`  | Download a Postman collection v2.1 JSON for all loaded partners |
 
-`POST /mirage/admin/partners` accepts a raw YAML body (same format as `partner.yaml` files).
+`POST /imnot/admin/partners` accepts a raw YAML body (same format as `partner.yaml` files).
 Use `?force=true` to overwrite an existing partner. Returns `201` on create, `200` on overwrite,
 `409` if the partner already exists without `force`, and `422` for invalid YAML.
 
@@ -348,8 +348,8 @@ Docs endpoints (public, no auth required):
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET`  | `/mirage/docs` | Serve `README.md` as plain text |
-| `GET`  | `/mirage/docs/partners` | Serve `partners/README.md` as plain text |
+| `GET`  | `/imnot/docs` | Serve `README.md` as plain text |
+| `GET`  | `/imnot/docs/partners` | Serve `partners/README.md` as plain text |
 
 ### Securing admin endpoints
 
@@ -358,38 +358,38 @@ When deploying on a shared network, protect them with a Bearer token:
 
 ```bash
 # via environment variable (recommended)
-MIRAGE_ADMIN_KEY=your-secret-key mirage start
+IMNOT_ADMIN_KEY=your-secret-key imnot start
 
 # or as a CLI flag
-mirage start --admin-key your-secret-key
+imnot start --admin-key your-secret-key
 ```
 
-All `/mirage/admin/*` requests then require:
+All `/imnot/admin/*` requests then require:
 ```
 Authorization: Bearer your-secret-key
 ```
 
 Consumer endpoints (`/oauth/token`, partner routes, etc.) are never affected.
-Set `MIRAGE_ADMIN_KEY` in `docker-compose.yml` for Docker deployments.
+Set `IMNOT_ADMIN_KEY` in `docker-compose.yml` for Docker deployments.
 
 ## CLI
 
 | Command | Description |
 |---------|-------------|
-| `mirage start` | Load all partner YAMLs and start the server |
-| `mirage start --reload` | Start with auto-restart on any YAML change (recommended for development) |
-| `mirage generate --file <path>` | Validate and scaffold a partner YAML into `partners/` |
-| `mirage generate --file <path> --dry-run --json` | Validate only — print structured result, write nothing |
-| `mirage export postman` | Generate a Postman collection v2.1 JSON from all loaded partners |
-| `mirage export postman --out <file>` | Write the collection to a specific file (default: `mirage-collection.json`) |
-| `mirage export postman --partner <name>` | Include only the named partner (repeatable: `--partner a --partner b`) |
-| `mirage status` | Show active sessions in the store |
-| `mirage routes` | List all consumer and admin endpoints per partner (works from any subdirectory) |
-| `mirage payload get <partner> <datapoint>` | Print the current global payload |
-| `mirage payload set <partner> <datapoint> <file>` | Upload a global payload from a JSON file |
-| `mirage sessions clear` | Delete all sessions from the store |
+| `imnot start` | Load all partner YAMLs and start the server |
+| `imnot start --reload` | Start with auto-restart on any YAML change (recommended for development) |
+| `imnot generate --file <path>` | Validate and scaffold a partner YAML into `partners/` |
+| `imnot generate --file <path> --dry-run --json` | Validate only — print structured result, write nothing |
+| `imnot export postman` | Generate a Postman collection v2.1 JSON from all loaded partners |
+| `imnot export postman --out <file>` | Write the collection to a specific file (default: `imnot-collection.json`) |
+| `imnot export postman --partner <name>` | Include only the named partner (repeatable: `--partner a --partner b`) |
+| `imnot status` | Show active sessions in the store |
+| `imnot routes` | List all consumer and admin endpoints per partner (works from any subdirectory) |
+| `imnot payload get <partner> <datapoint>` | Print the current global payload |
+| `imnot payload set <partner> <datapoint> <file>` | Upload a global payload from a JSON file |
+| `imnot sessions clear` | Delete all sessions from the store |
 
-`mirage start` accepts `--admin-key` / `MIRAGE_ADMIN_KEY` to protect all `/mirage/admin/*` endpoints with a Bearer token.
+`imnot start` accepts `--admin-key` / `IMNOT_ADMIN_KEY` to protect all `/imnot/admin/*` endpoints with a Bearer token.
 
 ## Docker
 
@@ -397,11 +397,11 @@ Use Docker when you want to run Mirage as a persistent background service — fo
 on a shared dev server, in CI, or alongside other containers. For local development,
 the local install above is simpler.
 
-A pre-built image is published at `ghcr.io/edu2105/mirage:latest`. To use it without
+A pre-built image is published at `ghcr.io/edu2105/imnot:latest`. To use it without
 building locally, set the image in `docker-compose.yml`:
 
 ```yaml
-image: ghcr.io/edu2105/mirage:latest
+image: ghcr.io/edu2105/imnot:latest
 ```
 
 The `partners/` directory and `data/` (SQLite db) are volume-mounted — partners
@@ -421,19 +421,19 @@ update `docker-compose.yml` and set an admin key:
 ports:
   - "0.0.0.0:8000:8000"
 environment:
-  MIRAGE_ADMIN_KEY: "your-secret-key"
+  IMNOT_ADMIN_KEY: "your-secret-key"
 ```
 
 ## Deploy to the cloud
 
-The published Docker image (`ghcr.io/edu2105/mirage`) runs on any container platform.
+The published Docker image (`ghcr.io/edu2105/imnot`) runs on any container platform.
 How you get that container running in your cloud is your domain — the specifics depend
 on your provider, infrastructure, and team setup. What Mirage does require, regardless
 of where it runs:
 
 - **Persistent storage** — mount a volume at `/app/data` so the SQLite database
   survives container restarts. Without it, all session state is lost on redeploy.
-- **Admin key** — set `MIRAGE_ADMIN_KEY` via environment variable. Required for
+- **Admin key** — set `IMNOT_ADMIN_KEY` via environment variable. Required for
   any deployment reachable outside localhost.
 - **Host binding** — pass `--host 0.0.0.0` as the start command so the container
   port is reachable from outside. The default `127.0.0.1` binding blocks external traffic.
@@ -444,42 +444,42 @@ of where it runs:
 
 ### From the CLI (local / development)
 
-Use `mirage generate` to validate and scaffold a partner YAML in one step — no need to know
+Use `imnot generate` to validate and scaffold a partner YAML in one step — no need to know
 the directory layout or manually create files.
 
 ```bash
 # Write your partner.yaml (see partners/README.md for the schema), then:
-mirage generate --file /path/to/partner.yaml
+imnot generate --file /path/to/partner.yaml
 
 # Dry-run first to validate without writing anything:
-mirage generate --dry-run --file /path/to/partner.yaml --json
+imnot generate --dry-run --file /path/to/partner.yaml --json
 ```
 
-`mirage generate` validates the YAML, creates `partners/<name>/` if needed, writes the file,
+`imnot generate` validates the YAML, creates `partners/<name>/` if needed, writes the file,
 and prints a summary of all consumer and admin endpoints.
 
 **With `--reload` (recommended for development):** the server picks up the new file and restarts automatically.
 
-**Without `--reload`:** call `POST /mirage/admin/reload` or restart `mirage start`.
+**Without `--reload`:** call `POST /imnot/admin/reload` or restart `imnot start`.
 
 ### Over HTTP (containerised deployment)
 
-When Mirage runs as a pod or container, use `POST /mirage/admin/partners` to register a new
+When Mirage runs as a pod or container, use `POST /imnot/admin/partners` to register a new
 partner without exec-ing into the container. The endpoint validates the YAML, writes it to
 the partners directory, and registers its routes immediately — no restart required.
 
 ```bash
-curl -X POST http://localhost:8000/mirage/admin/partners \
-     -H "Authorization: Bearer $MIRAGE_ADMIN_KEY" \
+curl -X POST http://localhost:8000/imnot/admin/partners \
+     -H "Authorization: Bearer $IMNOT_ADMIN_KEY" \
      --data-binary @/path/to/partner.yaml
 
 # Overwrite an existing partner definition:
-curl -X POST "http://localhost:8000/mirage/admin/partners?force=true" \
-     -H "Authorization: Bearer $MIRAGE_ADMIN_KEY" \
+curl -X POST "http://localhost:8000/imnot/admin/partners?force=true" \
+     -H "Authorization: Bearer $IMNOT_ADMIN_KEY" \
      --data-binary @/path/to/partner.yaml
 ```
 
-`mirage generate` and `POST /mirage/admin/partners` use identical validation — both write the
+`imnot generate` and `POST /imnot/admin/partners` use identical validation — both write the
 same `partners/<name>/partner.yaml` file and produce the same JSON result shape.
 
 > **Persistence reminder:** partners written at runtime live on the container's local filesystem.
@@ -497,8 +497,8 @@ partners/
 ## Project structure
 
 ```
-mirage/
-├── mirage/
+imnot/
+├── imnot/
 │   ├── api/           # FastAPI app factory
 │   ├── engine/
 │   │   ├── patterns/  # oauth / static / fetch / async handlers
@@ -506,7 +506,7 @@ mirage/
 │   │   └── session_store.py  # SQLite persistence
 │   ├── loader/        # YAML partner definition parser
 │   ├── partners.py    # register_partner() — shared by CLI and HTTP admin endpoint
-│   └── cli.py         # mirage CLI
+│   └── cli.py         # imnot CLI
 ├── partners/
 │   ├── staylink/      # StayLink example (oauth + async)
 │   │   ├── partner.yaml
@@ -534,7 +534,7 @@ pytest
 ```
 
 **Add a new pattern:**
-Patterns live in `mirage/engine/patterns/`. Each pattern is a module that registers one or
+Patterns live in `imnot/engine/patterns/`. Each pattern is a module that registers one or
 more FastAPI route handlers given an `EndpointDef`. Look at `fetch.py` or `async_.py` for the
 interface — the router calls the pattern's handler factory for each datapoint whose pattern
 matches. Add your module there and wire it into `router.py`.
@@ -544,4 +544,4 @@ No code required — write a `partner.yaml` under `partners/<name>/`. The full s
 field reference is in `partners/README.md`.
 
 **Looking for where to start?**
-Open issues are tracked at [github.com/edu2105/mirage/issues](https://github.com/edu2105/mirage/issues).
+Open issues are tracked at [github.com/edu2105/imnot/issues](https://github.com/edu2105/imnot/issues).

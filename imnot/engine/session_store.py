@@ -23,7 +23,7 @@ from typing import Any, Generator
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DB_PATH = Path("mirage.db")
+DEFAULT_DB_PATH = Path("imnot.db")
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 services:
-  mirage:
+  imnot:
     build: .
     ports:
       - "127.0.0.1:8000:8000"
@@ -7,7 +7,7 @@ services:
       - ./partners:/app/partners   # partner YAMLs — edit without rebuilding
       - ./data:/app/data           # SQLite db — persists across restarts
     environment:
-      # Set MIRAGE_ADMIN_KEY to require Bearer token auth on all /mirage/admin/* endpoints.
+      # Set IMNOT_ADMIN_KEY to require Bearer token auth on all /imnot/admin/* endpoints.
       # Leave unset (or empty) for open access — suitable for local dev only.
-      MIRAGE_ADMIN_KEY: ""
+      IMNOT_ADMIN_KEY: ""
     restart: unless-stopped

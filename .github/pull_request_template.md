@@ -9,7 +9,7 @@
 ## Test plan
 
 - [ ] `pytest` passes locally
-- [ ] `bandit -r mirage/ -f screen` reports 0 issues
+- [ ] `bandit -r imnot/ -f screen` reports 0 issues
 - [ ] New behaviour is covered by tests
 - [ ] README / docs updated if the public surface changed
 

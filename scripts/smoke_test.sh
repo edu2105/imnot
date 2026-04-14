@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Smoke test — runs the full OHIP reservation flow against a live Mirage server.
+# Smoke test — runs the full OHIP reservation flow against a live imnot server.
 # Usage: ./scripts/smoke_test.sh [BASE_URL]
 # Default BASE_URL: http://127.0.0.1:8000
 #
 # Start the server first:
-#   mirage start
+#   imnot start
 #
 # Then in another terminal:
 #   ./scripts/smoke_test.sh
@@ -24,7 +24,7 @@ assert_status() {
 }
 
 echo ""
-echo "Mirage smoke test → $BASE"
+echo "imnot smoke test → $BASE"
 echo "=============================================="
 
 # ------------------------------------------------------------------------------
@@ -39,10 +39,10 @@ TOKEN=$(curl -s -X POST "$BASE/oauth/token" | grep -o '"access_token":"[^"]*"' |
 # ------------------------------------------------------------------------------
 echo ""
 echo "2. Admin — upload global payload"
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/mirage/admin/staylink/reservation/payload" \
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/imnot/admin/staylink/reservation/payload" \
   -H "Content-Type: application/json" \
   -d '{"reservationId":"SMOKE001","status":"CONFIRMED","guestName":"Alice"}')
-assert_status "POST /mirage/admin/staylink/reservation/payload" 200 "$STATUS"
+assert_status "POST /imnot/admin/staylink/reservation/payload" 200 "$STATUS"
 
 # ------------------------------------------------------------------------------
 echo ""
@@ -65,18 +65,18 @@ echo "$BODY" | grep -q "SMOKE001" && ok "GET /staylink/reservations/$UUID — pa
 # ------------------------------------------------------------------------------
 echo ""
 echo "4. Poll flow — session payload"
-SESSION_ID=$(curl -s -X POST "$BASE/mirage/admin/staylink/reservation/payload/session" \
+SESSION_ID=$(curl -s -X POST "$BASE/imnot/admin/staylink/reservation/payload/session" \
   -H "Content-Type: application/json" \
   -d '{"reservationId":"SMOKE002","guestName":"Bob"}' \
   | grep -o '"session_id":"[^"]*"' | cut -d'"' -f4)
 [ -n "$SESSION_ID" ] && ok "session_id returned: $SESSION_ID" || { fail "No session_id"; exit 1; }
 
 SESSION_LOCATION=$(curl -s -D - -o /dev/null -X POST "$BASE/staylink/reservations" \
-  -H "X-Mirage-Session: $SESSION_ID" \
+  -H "X-Imnot-Session: $SESSION_ID" \
   | grep -i "^location:" | tr -d '\r' | awk '{print $2}')
 SESSION_UUID="${SESSION_LOCATION##*/}"
 
-BODY=$(curl -s -H "X-Mirage-Session: $SESSION_ID" "$BASE/staylink/reservations/$SESSION_UUID")
+BODY=$(curl -s -H "X-Imnot-Session: $SESSION_ID" "$BASE/staylink/reservations/$SESSION_UUID")
 echo "$BODY" | grep -q "SMOKE002" && ok "GET with session header — payload matches" || fail "Session payload mismatch: $BODY"
 
 BODY_NO_SESSION=$(curl -s "$BASE/staylink/reservations/$SESSION_UUID")
@@ -86,11 +86,11 @@ echo "$BODY_NO_SESSION" | grep -q "SMOKE001" && ok "GET without session header �
 # ------------------------------------------------------------------------------
 echo ""
 echo "5. Admin endpoints"
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/mirage/admin/partners")
-assert_status "GET /mirage/admin/partners" 200 "$STATUS"
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/imnot/admin/partners")
+assert_status "GET /imnot/admin/partners" 200 "$STATUS"
 
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/mirage/admin/sessions")
-assert_status "GET /mirage/admin/sessions" 200 "$STATUS"
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/imnot/admin/sessions")
+assert_status "GET /imnot/admin/sessions" 200 "$STATUS"
 
 # ------------------------------------------------------------------------------
 echo ""

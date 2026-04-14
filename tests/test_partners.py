@@ -1,9 +1,9 @@
-"""Unit tests for mirage.partners.register_partner."""
+"""Unit tests for imnot.partners.register_partner."""
 
 import pytest
 import yaml
 
-from mirage.partners import RegisterResult, register_partner
+from imnot.partners import RegisterResult, register_partner
 
 VALID_YAML = """\
 partner: staylink

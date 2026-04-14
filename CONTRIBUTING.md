@@ -1,11 +1,11 @@
-# Contributing to Mirage
+# Contributing to imnot
 
 Thanks for your interest in contributing. This document covers everything you need
 to get started.
 
 ## How contributions work
 
-Mirage uses the standard GitHub fork model:
+imnot uses the standard GitHub fork model:
 
 1. Fork the repository to your own account
 2. Clone your fork and create a feature branch
@@ -22,8 +22,8 @@ one approving review and a passing CI run.
 Requires Python 3.11 or later.
 
 ```bash
-git clone https://github.com/<your-fork>/mirage.git
-cd mirage
+git clone https://github.com/<your-fork>/imnot.git
+cd imnot
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
@@ -42,7 +42,7 @@ test on both before opening a PR.
 
 ```bash
 pip install bandit
-bandit -r mirage/ -f screen
+bandit -r imnot/ -f screen
 ```
 
 Expected output: 0 issues. Any new `# nosec` annotations must include an inline

@@ -6,12 +6,12 @@ Responsibilities:
   a DatapointDef, a single EndpointDef, and a SessionStore instance, and returns
   a FastAPI route coroutine.
 - The handler resolves and returns the stored payload for the datapoint, respecting
-  the X-Mirage-Session header (same session logic as async step 3).
+  the X-Imnot-Session header (same session logic as async step 3).
 - Use this pattern for synchronous GET endpoints that return a stored payload
   with no async polling sequence (no UUID, no Location header).
 
 Session behaviour:
-  - X-Mirage-Session header present → resolve session payload → 404 if not found
+  - X-Imnot-Session header present → resolve session payload → 404 if not found
   - No header → resolve global payload → 404 if not found
 """
 
@@ -22,8 +22,8 @@ from typing import Any, Callable
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
-from mirage.engine.session_store import SessionStore
-from mirage.loader.yaml_loader import DatapointDef, EndpointDef
+from imnot.engine.session_store import SessionStore
+from imnot.loader.yaml_loader import DatapointDef, EndpointDef
 
 
 def make_fetch_handler(
@@ -38,7 +38,7 @@ def make_fetch_handler(
     status_code: int = endpoint.response.get("status", 200)
 
     async def handler(request: Request) -> Response:
-        session_id: str | None = request.headers.get("X-Mirage-Session")
+        session_id: str | None = request.headers.get("X-Imnot-Session")
         payload: dict[str, Any] | None = store.resolve_payload(
             partner=partner,
             datapoint=dp_name,

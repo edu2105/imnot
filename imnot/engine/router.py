@@ -6,12 +6,12 @@ Responsibilities:
 - For each datapoint in each partner, delegate to the matching pattern factory
   to obtain route handlers, then register them on the FastAPI app.
 - Register admin payload endpoints dynamically per datapoint (payload-patterns only):
-    POST /mirage/admin/{partner}/{datapoint}/payload         (global)
-    POST /mirage/admin/{partner}/{datapoint}/payload/session (session-scoped)
+    POST /imnot/admin/{partner}/{datapoint}/payload         (global)
+    POST /imnot/admin/{partner}/{datapoint}/payload/session (session-scoped)
 - Register fixed infra endpoints:
-    GET  /mirage/admin/sessions
-    GET  /mirage/admin/partners
-    POST /mirage/admin/reload
+    GET  /imnot/admin/sessions
+    GET  /imnot/admin/partners
+    POST /imnot/admin/reload
 """
 
 from __future__ import annotations
@@ -25,15 +25,15 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 
 import yaml
 
-from mirage.engine.patterns.async_ import make_async_handlers
-from mirage.engine.patterns.fetch import make_fetch_handler
-from mirage.engine.patterns.oauth import make_oauth_handler
-from mirage.engine.patterns.push import fire_callback, make_push_handler
-from mirage.engine.patterns.static import make_static_handler
-from mirage.engine.session_store import SessionStore
-from mirage.loader.yaml_loader import DatapointDef, EndpointDef, PartnerDef, load_partners
-from mirage.partners import register_partner
-from mirage.postman import build_postman_collection
+from imnot.engine.patterns.async_ import make_async_handlers
+from imnot.engine.patterns.fetch import make_fetch_handler
+from imnot.engine.patterns.oauth import make_oauth_handler
+from imnot.engine.patterns.push import fire_callback, make_push_handler
+from imnot.engine.patterns.static import make_static_handler
+from imnot.engine.session_store import SessionStore
+from imnot.loader.yaml_loader import DatapointDef, EndpointDef, PartnerDef, load_partners
+from imnot.partners import register_partner
+from imnot.postman import build_postman_collection
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ def register_routes(
 ) -> None:
     """Register all routes on *app* derived from *partners*, plus fixed infra routes.
 
-    If *admin_key* is provided, all ``/mirage/admin/*`` requests must include
+    If *admin_key* is provided, all ``/imnot/admin/*`` requests must include
     ``Authorization: Bearer <admin_key>`` or receive a 401 response.
 
     *partners_dir* is stored on ``app.state`` so the reload endpoint can re-read
@@ -98,14 +98,14 @@ def register_routes(
 
 
 def _register_admin_auth_middleware(app: FastAPI, admin_key: str) -> None:
-    """Add middleware that enforces Bearer token auth on all /mirage/admin/* paths."""
+    """Add middleware that enforces Bearer token auth on all /imnot/admin/* paths."""
 
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.responses import Response
 
     class AdminAuthMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request: Request, call_next):  # type: ignore[override]
-            if request.url.path.startswith("/mirage/admin/"):
+            if request.url.path.startswith("/imnot/admin/"):
                 auth = request.headers.get("Authorization", "")
                 if auth != f"Bearer {admin_key}":
                     return Response(
@@ -215,8 +215,8 @@ def _register_admin_routes(
     partner_name = partner.partner
     dp_name = datapoint.name
 
-    global_path = f"/mirage/admin/{partner_name}/{dp_name}/payload"
-    session_path = f"/mirage/admin/{partner_name}/{dp_name}/payload/session"
+    global_path = f"/imnot/admin/{partner_name}/{dp_name}/payload"
+    session_path = f"/imnot/admin/{partner_name}/{dp_name}/payload/session"
 
     async def upload_global(request: Request) -> JSONResponse:
         try:
@@ -260,10 +260,10 @@ def _register_admin_routes(
     app.add_api_route(global_path, upload_global, methods=["POST"])
     app.add_api_route(session_path, upload_session, methods=["POST"])
     app.add_api_route(global_path, get_global, methods=["GET"])
-    app.add_api_route(f"/mirage/admin/{partner_name}/{dp_name}/payload/session/{{session_id}}", get_session, methods=["GET"])
+    app.add_api_route(f"/imnot/admin/{partner_name}/{dp_name}/payload/session/{{session_id}}", get_session, methods=["GET"])
 
     if datapoint.pattern == "push":
-        retrigger_path = f"/mirage/admin/{partner_name}/{dp_name}/push/{{request_id}}/retrigger"
+        retrigger_path = f"/imnot/admin/{partner_name}/{dp_name}/push/{{request_id}}/retrigger"
 
         async def retrigger(request: Request, background_tasks: BackgroundTasks) -> JSONResponse:
             request_id: str = request.path_params["request_id"]
@@ -320,8 +320,8 @@ def _register_docs_routes(app: FastAPI, partners_dir: Path | None) -> None:
             return PlainTextResponse("partners/README.md not found.", status_code=404)
         return PlainTextResponse(partners_readme_path.read_text(encoding="utf-8"))
 
-    app.add_api_route("/mirage/docs", serve_readme, methods=["GET"])
-    app.add_api_route("/mirage/docs/partners", serve_partners_readme, methods=["GET"])
+    app.add_api_route("/imnot/docs", serve_readme, methods=["GET"])
+    app.add_api_route("/imnot/docs/partners", serve_partners_readme, methods=["GET"])
     logger.debug("Registered docs routes")
 
 
@@ -363,7 +363,7 @@ def _register_infra_routes(
         if partners_dir is None:
             return JSONResponse(
                 status_code=400,
-                content={"detail": "No partners_dir configured — server was not started via `mirage start`."},
+                content={"detail": "No partners_dir configured — server was not started via `imnot start`."},
             )
 
         try:
@@ -430,7 +430,7 @@ def _register_infra_routes(
         if partners_dir is None:
             return JSONResponse(
                 status_code=400,
-                content={"detail": "No partners_dir configured — server was not started via `mirage start`."},
+                content={"detail": "No partners_dir configured — server was not started via `imnot start`."},
             )
 
         force = request.query_params.get("force", "false").lower() == "true"
@@ -479,7 +479,7 @@ def _register_infra_routes(
                 registered_admin_.add((partner.partner, dp.name))
                 added.append(f"admin routes for {partner.partner}/{dp.name}")
 
-        # Keep app.state.partners in sync so GET /mirage/admin/partners reflects it
+        # Keep app.state.partners in sync so GET /imnot/admin/partners reflects it
         existing_names = {p.partner for p in request.app.state.partners}
         if partner.partner not in existing_names:
             request.app.state.partners.append(partner)
@@ -520,9 +520,9 @@ def _register_infra_routes(
     reload_partners.__name__ = "admin_reload_partners"
     create_partner_handler.__name__ = "admin_create_partner"
 
-    app.add_api_route("/mirage/admin/sessions", list_sessions, methods=["GET"])
-    app.add_api_route("/mirage/admin/partners", list_partners, methods=["GET"])
-    app.add_api_route("/mirage/admin/partners", create_partner_handler, methods=["POST"])
-    app.add_api_route("/mirage/admin/reload", reload_partners, methods=["POST"])
-    app.add_api_route("/mirage/admin/postman", postman_collection, methods=["GET"])
+    app.add_api_route("/imnot/admin/sessions", list_sessions, methods=["GET"])
+    app.add_api_route("/imnot/admin/partners", list_partners, methods=["GET"])
+    app.add_api_route("/imnot/admin/partners", create_partner_handler, methods=["POST"])
+    app.add_api_route("/imnot/admin/reload", reload_partners, methods=["POST"])
+    app.add_api_route("/imnot/admin/postman", postman_collection, methods=["GET"])
     logger.debug("Registered infra routes")

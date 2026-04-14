@@ -5,11 +5,11 @@ Covers:
 - Partner and datapoint folders
 - Consumer endpoint requests (method, URL, headers, body)
 - Admin sub-folder presence and contents
-- X-Mirage-Session header (disabled) on payload-pattern endpoints
+- X-Imnot-Session header (disabled) on payload-pattern endpoints
 - Push-specific body / header pre-filling
 - URL path variable conversion ({param} → :param)
-- CLI: `mirage export postman` writes file, respects --out, prints summary
-- Admin endpoint: GET /mirage/admin/postman returns collection JSON
+- CLI: `imnot export postman` writes file, respects --out, prints summary
+- Admin endpoint: GET /imnot/admin/postman returns collection JSON
 """
 
 from __future__ import annotations
@@ -22,11 +22,11 @@ from click.testing import CliRunner
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from mirage.cli import cli
-from mirage.engine.router import register_routes
-from mirage.engine.session_store import SessionStore
-from mirage.loader.yaml_loader import DatapointDef, EndpointDef, PartnerDef, load_partners
-from mirage.postman import build_postman_collection, collection_stats
+from imnot.cli import cli
+from imnot.engine.router import register_routes
+from imnot.engine.session_store import SessionStore
+from imnot.loader.yaml_loader import DatapointDef, EndpointDef, PartnerDef, load_partners
+from imnot.postman import build_postman_collection, collection_stats
 
 # ---------------------------------------------------------------------------
 # Helpers — minimal partner / datapoint / endpoint builders
@@ -105,7 +105,7 @@ def async_partner():
 
 def test_collection_has_correct_name_and_schema(fetch_partner):
     col = build_postman_collection([fetch_partner])
-    assert col["info"]["name"] == "Mirage"
+    assert col["info"]["name"] == "imnot"
     assert "v2.1.0" in col["info"]["schema"]
 
 
@@ -231,7 +231,7 @@ def test_admin_subfolder_request_names_and_methods(fetch_partner):
     dp_folder = col["item"][0]["item"][0]
     admin = next(i for i in dp_folder["item"] if i["name"] == "Admin")
     method_names = [(i["request"]["method"], i["name"]) for i in admin["item"]]
-    base = "/mirage/admin/staylink/charges/payload"
+    base = "/imnot/admin/staylink/charges/payload"
     assert ("POST", f"POST {base}") in method_names
     assert ("GET", f"GET {base}") in method_names
     assert ("POST", f"POST {base}/session") in method_names
@@ -282,14 +282,14 @@ def test_push_callback_url_header_has_no_body(push_header_partner):
 
 
 # ---------------------------------------------------------------------------
-# X-Mirage-Session header
+# X-Imnot-Session header
 # ---------------------------------------------------------------------------
 
 
 def test_session_header_present_and_disabled_on_fetch(fetch_partner):
     col = build_postman_collection([fetch_partner])
     consumer = col["item"][0]["item"][0]["item"][0]
-    session_headers = [h for h in consumer["request"]["header"] if h["key"] == "X-Mirage-Session"]
+    session_headers = [h for h in consumer["request"]["header"] if h["key"] == "X-Imnot-Session"]
     assert len(session_headers) == 1
     assert session_headers[0].get("disabled") is True
 
@@ -298,7 +298,7 @@ def test_session_header_present_on_async(async_partner):
     col = build_postman_collection([async_partner])
     # step 1 consumer endpoint
     consumer = col["item"][0]["item"][0]["item"][0]
-    session_headers = [h for h in consumer["request"]["header"] if h["key"] == "X-Mirage-Session"]
+    session_headers = [h for h in consumer["request"]["header"] if h["key"] == "X-Imnot-Session"]
     assert len(session_headers) == 1
     assert session_headers[0].get("disabled") is True
 
@@ -306,7 +306,7 @@ def test_session_header_present_on_async(async_partner):
 def test_session_header_present_on_push(push_field_partner):
     col = build_postman_collection([push_field_partner])
     consumer = col["item"][0]["item"][0]["item"][0]
-    session_headers = [h for h in consumer["request"]["header"] if h["key"] == "X-Mirage-Session"]
+    session_headers = [h for h in consumer["request"]["header"] if h["key"] == "X-Imnot-Session"]
     assert len(session_headers) == 1
     assert session_headers[0].get("disabled") is True
 
@@ -314,14 +314,14 @@ def test_session_header_present_on_push(push_field_partner):
 def test_session_header_absent_on_oauth(oauth_partner):
     col = build_postman_collection([oauth_partner])
     consumer = col["item"][0]["item"][0]["item"][0]
-    session_headers = [h for h in consumer["request"]["header"] if h["key"] == "X-Mirage-Session"]
+    session_headers = [h for h in consumer["request"]["header"] if h["key"] == "X-Imnot-Session"]
     assert len(session_headers) == 0
 
 
 def test_session_header_absent_on_static(static_partner):
     col = build_postman_collection([static_partner])
     consumer = col["item"][0]["item"][0]["item"][0]
-    session_headers = [h for h in consumer["request"]["header"] if h["key"] == "X-Mirage-Session"]
+    session_headers = [h for h in consumer["request"]["header"] if h["key"] == "X-Imnot-Session"]
     assert len(session_headers) == 0
 
 
@@ -377,7 +377,7 @@ def test_collection_stats_push_counts_5_admin(push_field_partner):
 
 
 # ---------------------------------------------------------------------------
-# CLI: mirage export postman
+# CLI: imnot export postman
 # ---------------------------------------------------------------------------
 
 
@@ -399,11 +399,11 @@ def test_export_postman_writes_file(runner, tmp_path):
     assert result.exit_code == 0, result.output
     assert out.exists()
     data = json.loads(out.read_text())
-    assert data["info"]["name"] == "Mirage"
+    assert data["info"]["name"] == "imnot"
 
 
 def test_export_postman_default_filename(runner, tmp_path):
-    """--out defaults to mirage-collection.json in CWD."""
+    """--out defaults to imnot-collection.json in CWD."""
     result = runner.invoke(cli, [
         "export", "postman",
         "--partners-dir", str(PARTNERS_DIR),
@@ -481,7 +481,7 @@ def test_export_postman_unknown_partner_exits_nonzero(runner, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Admin endpoint: GET /mirage/admin/postman
+# Admin endpoint: GET /imnot/admin/postman
 # ---------------------------------------------------------------------------
 
 
@@ -498,19 +498,19 @@ def http_client(tmp_path):
 
 
 def test_admin_postman_returns_200(http_client):
-    resp = http_client.get("/mirage/admin/postman")
+    resp = http_client.get("/imnot/admin/postman")
     assert resp.status_code == 200
 
 
 def test_admin_postman_returns_valid_collection(http_client):
-    resp = http_client.get("/mirage/admin/postman")
+    resp = http_client.get("/imnot/admin/postman")
     data = resp.json()
-    assert data["info"]["name"] == "Mirage"
+    assert data["info"]["name"] == "imnot"
     assert "v2.1.0" in data["info"]["schema"]
     assert isinstance(data["item"], list)
     assert len(data["item"]) > 0
 
 
 def test_admin_postman_content_type_is_json(http_client):
-    resp = http_client.get("/mirage/admin/postman")
+    resp = http_client.get("/imnot/admin/postman")
     assert "application/json" in resp.headers["content-type"]

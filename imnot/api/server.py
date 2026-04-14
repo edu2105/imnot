@@ -20,14 +20,14 @@ from typing import AsyncGenerator
 
 from fastapi import FastAPI
 
-from mirage.engine.router import register_routes
-from mirage.engine.session_store import SessionStore
-from mirage.loader.yaml_loader import load_partners
+from imnot.engine.router import register_routes
+from imnot.engine.session_store import SessionStore
+from imnot.loader.yaml_loader import load_partners
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_PARTNERS_DIR = Path("partners")
-DEFAULT_DB_PATH = Path("mirage.db")
+DEFAULT_DB_PATH = Path("imnot.db")
 
 
 def create_app(
@@ -40,7 +40,7 @@ def create_app(
     A fresh SessionStore and partner list are created on every call, so tests
     can call this multiple times without shared state.
 
-    If *admin_key* is provided, all ``/mirage/admin/*`` endpoints require
+    If *admin_key* is provided, all ``/imnot/admin/*`` endpoints require
     ``Authorization: Bearer <admin_key>``.
     """
     store = SessionStore(db_path=db_path)
@@ -49,15 +49,15 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         store.init()
-        logger.info("Mirage starting — %d partner(s) loaded", len(partners))
+        logger.info("imnot starting — %d partner(s) loaded", len(partners))
         if admin_key:
             logger.info("Admin endpoints protected by Bearer token auth")
         yield
         store.close()
-        logger.info("Mirage shut down")
+        logger.info("imnot shut down")
 
     app = FastAPI(
-        title="Mirage",
+        title="imnot",
         description="Stateful API mock server for integration testing",
         version="0.1.0",
         lifespan=lifespan,
@@ -68,16 +68,16 @@ def create_app(
 
 
 def create_app_from_env() -> FastAPI:
-    """Uvicorn factory used when ``mirage start --reload`` is active.
+    """Uvicorn factory used when ``imnot start --reload`` is active.
 
     Configuration is read from environment variables set by the CLI before
     handing control to uvicorn:
 
-    - ``MIRAGE_PARTNERS_DIR``  (default: ``partners``)
-    - ``MIRAGE_DB_PATH``       (default: ``mirage.db``)
-    - ``MIRAGE_ADMIN_KEY``     (default: none)
+    - ``IMNOT_PARTNERS_DIR``  (default: ``partners``)
+    - ``IMNOT_DB_PATH``       (default: ``imnot.db``)
+    - ``IMNOT_ADMIN_KEY``     (default: none)
     """
-    partners_dir = Path(os.environ.get("MIRAGE_PARTNERS_DIR", str(DEFAULT_PARTNERS_DIR)))
-    db_path = Path(os.environ.get("MIRAGE_DB_PATH", str(DEFAULT_DB_PATH)))
-    admin_key = os.environ.get("MIRAGE_ADMIN_KEY") or None
+    partners_dir = Path(os.environ.get("IMNOT_PARTNERS_DIR", str(DEFAULT_PARTNERS_DIR)))
+    db_path = Path(os.environ.get("IMNOT_DB_PATH", str(DEFAULT_DB_PATH)))
+    admin_key = os.environ.get("IMNOT_ADMIN_KEY") or None
     return create_app(partners_dir=partners_dir, db_path=db_path, admin_key=admin_key)

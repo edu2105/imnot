@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from mirage.engine.patterns.static import make_static_handler
-from mirage.loader.yaml_loader import EndpointDef
+from imnot.engine.patterns.static import make_static_handler
+from imnot.loader.yaml_loader import EndpointDef
 
 
 def _make_handler(method: str, path: str, response: dict):

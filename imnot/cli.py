@@ -1,14 +1,14 @@
 """
-CLI entry point for Mirage.
+CLI entry point for imnot.
 
 Responsibilities:
-- Provide the `mirage` command group via Click.
-- `mirage start`:         load partner YAMLs, build the FastAPI app, launch Uvicorn.
-- `mirage status`:        show active sessions in the store.
-- `mirage routes`:        list all consumer and admin endpoints for loaded partners.
-- `mirage payload get`:   print the current global payload for a datapoint.
-- `mirage payload set`:   upload a global payload for a datapoint from a JSON file.
-- `mirage sessions clear`: wipe all sessions from the store.
+- Provide the `imnot` command group via Click.
+- `imnot start`:         load partner YAMLs, build the FastAPI app, launch Uvicorn.
+- `imnot status`:        show active sessions in the store.
+- `imnot routes`:        list all consumer and admin endpoints for loaded partners.
+- `imnot payload get`:   print the current global payload for a datapoint.
+- `imnot payload set`:   upload a global payload for a datapoint from a JSON file.
+- `imnot sessions clear`: wipe all sessions from the store.
 """
 
 from __future__ import annotations
@@ -22,15 +22,15 @@ import click
 import uvicorn
 import yaml
 
-from mirage.api.server import create_app
-from mirage.engine.router import _PAYLOAD_PATTERNS
-from mirage.engine.session_store import SessionStore
-from mirage.loader.yaml_loader import load_partners
-from mirage.partners import register_partner
-from mirage.postman import build_postman_collection, collection_stats
+from imnot.api.server import create_app
+from imnot.engine.router import _PAYLOAD_PATTERNS
+from imnot.engine.session_store import SessionStore
+from imnot.loader.yaml_loader import load_partners
+from imnot.partners import register_partner
+from imnot.postman import build_postman_collection, collection_stats
 
 DEFAULT_PARTNERS_DIR = "partners"
-DEFAULT_DB = Path("mirage.db")
+DEFAULT_DB = Path("imnot.db")
 
 
 def _resolve_partners_dir(given: str) -> Path:
@@ -61,17 +61,17 @@ def _resolve_partners_dir(given: str) -> Path:
         current = parent
     raise FileNotFoundError(
         f"Partners directory '{given}' not found in {Path.cwd()} or any parent directory. "
-        f"Run from inside a Mirage project or pass --partners-dir explicitly."
+        f"Run from inside an imnot project or pass --partners-dir explicitly."
     )
 
 
 @click.group()
 def cli() -> None:
-    """Mirage — stateful API mock server for integration testing."""
+    """imnot — stateful API mock server for integration testing."""
 
 
 # ---------------------------------------------------------------------------
-# mirage start
+# imnot start
 # ---------------------------------------------------------------------------
 
 
@@ -94,9 +94,9 @@ def cli() -> None:
 @click.option(
     "--admin-key",
     default=None,
-    envvar="MIRAGE_ADMIN_KEY",
-    help="Bearer token required for all /mirage/admin/* endpoints. "
-         "Also readable from MIRAGE_ADMIN_KEY env var. Omit for open access (local dev only).",
+    envvar="IMNOT_ADMIN_KEY",
+    help="Bearer token required for all /imnot/admin/* endpoints. "
+         "Also readable from IMNOT_ADMIN_KEY env var. Omit for open access (local dev only).",
 )
 def start(partners_dir: str, db: str, host: str, port: int, reload: bool, admin_key: str | None) -> None:
     """Load partner definitions and start the mock server."""
@@ -109,17 +109,17 @@ def start(partners_dir: str, db: str, host: str, port: int, reload: bool, admin_
     db_path = Path(db)
     effective_admin_key = admin_key or None
 
-    click.echo(f"Starting Mirage on http://{host}:{port}")
+    click.echo(f"Starting imnot on http://{host}:{port}")
 
     if reload:
         # uvicorn reload mode requires a factory import string, not an app object.
         # Export configuration via env vars so create_app_from_env() can pick them up.
-        os.environ["MIRAGE_PARTNERS_DIR"] = str(resolved_partners_dir)
-        os.environ["MIRAGE_DB_PATH"] = str(db_path)
+        os.environ["IMNOT_PARTNERS_DIR"] = str(resolved_partners_dir)
+        os.environ["IMNOT_DB_PATH"] = str(db_path)
         if effective_admin_key:
-            os.environ["MIRAGE_ADMIN_KEY"] = effective_admin_key
+            os.environ["IMNOT_ADMIN_KEY"] = effective_admin_key
         uvicorn.run(
-            "mirage.api.server:create_app_from_env",
+            "imnot.api.server:create_app_from_env",
             host=host,
             port=port,
             reload=True,
@@ -136,7 +136,7 @@ def start(partners_dir: str, db: str, host: str, port: int, reload: bool, admin_
 
 
 # ---------------------------------------------------------------------------
-# mirage status
+# imnot \1
 # ---------------------------------------------------------------------------
 
 
@@ -161,7 +161,7 @@ def status(db: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# mirage routes
+# imnot \1
 # ---------------------------------------------------------------------------
 
 
@@ -198,25 +198,25 @@ def routes(partners_dir: str) -> None:
             click.echo()
             click.echo(f"  {'ADMIN ENDPOINTS':}")
             for dp in payload_dps:
-                base = f"/mirage/admin/{partner.partner}/{dp.name}/payload"
+                base = f"/imnot/admin/{partner.partner}/{dp.name}/payload"
                 click.echo(f"    {'POST':<7} {base}")
                 click.echo(f"    {'GET':<7} {base}")
                 click.echo(f"    {'POST':<7} {base}/session")
                 click.echo(f"    {'GET':<7} {base}/session/{{session_id}}")
                 if dp.pattern == "push":
-                    retrigger = f"/mirage/admin/{partner.partner}/{dp.name}/push/{{request_id}}/retrigger"
+                    retrigger = f"/imnot/admin/{partner.partner}/{dp.name}/push/{{request_id}}/retrigger"
                     click.echo(f"    {'POST':<7} {retrigger}")
 
     click.echo()
     click.echo("  INFRA ENDPOINTS")
-    click.echo(f"    {'GET':<7} /mirage/admin/partners")
-    click.echo(f"    {'POST':<7} /mirage/admin/partners")
-    click.echo(f"    {'GET':<7} /mirage/admin/sessions")
-    click.echo(f"    {'POST':<7} /mirage/admin/reload")
+    click.echo(f"    {'GET':<7} /imnot/admin/partners")
+    click.echo(f"    {'POST':<7} /imnot/admin/partners")
+    click.echo(f"    {'GET':<7} /imnot/admin/sessions")
+    click.echo(f"    {'POST':<7} /imnot/admin/reload")
 
 
 # ---------------------------------------------------------------------------
-# mirage generate
+# imnot \1
 # ---------------------------------------------------------------------------
 
 
@@ -302,36 +302,36 @@ def generate(file_path: str, partners_dir: str, dry_run: bool, json_output: bool
         click.echo()
         click.echo("Admin endpoints:")
         for dp in payload_dps:
-            base = f"/mirage/admin/{partner.partner}/{dp.name}/payload"
+            base = f"/imnot/admin/{partner.partner}/{dp.name}/payload"
             click.echo(f"  {'POST':<7} {base}")
             click.echo(f"  {'GET':<7} {base}")
             click.echo(f"  {'POST':<7} {base}/session")
             click.echo(f"  {'GET':<7} {base}/session/{{session_id}}")
             if dp.pattern == "push":
-                retrigger = f"/mirage/admin/{partner.partner}/{dp.name}/push/{{request_id}}/retrigger"
+                retrigger = f"/imnot/admin/{partner.partner}/{dp.name}/push/{{request_id}}/retrigger"
                 click.echo(f"  {'POST':<7} {retrigger}")
 
     click.echo()
     if dry_run:
         click.echo("Dry run — no files written.")
     else:
-        click.echo("Run `mirage start` or call POST /mirage/admin/reload to activate.")
+        click.echo("Run `imnot start` or call POST /imnot/admin/reload to activate.")
 
 
 # ---------------------------------------------------------------------------
-# mirage export
+# imnot \1
 # ---------------------------------------------------------------------------
 
 
 @cli.group()
 def export() -> None:
-    """Export Mirage configuration to external formats."""
+    """Export imnot configuration to external formats."""
 
 
 @export.command("postman")
 @click.option(
     "--out",
-    default="mirage-collection.json",
+    default="imnot-collection.json",
     show_default=True,
     help="Output file path.",
 )
@@ -387,7 +387,7 @@ def export_postman(out: str, partners_dir: str, selected_partners: tuple[str, ..
 
 
 # ---------------------------------------------------------------------------
-# mirage payload
+# imnot \1
 # ---------------------------------------------------------------------------
 
 
@@ -438,7 +438,7 @@ def payload_set(partner: str, datapoint: str, file: str, db: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# mirage sessions
+# imnot \1
 # ---------------------------------------------------------------------------
 
 

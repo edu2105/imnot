@@ -2,7 +2,7 @@
 
 import pytest
 
-from mirage.engine.session_store import SessionStore
+from imnot.engine.session_store import SessionStore
 
 
 @pytest.fixture

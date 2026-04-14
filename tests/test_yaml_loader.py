@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from mirage.loader.yaml_loader import (
+from imnot.loader.yaml_loader import (
     DatapointDef,
     EndpointDef,
     PartnerDef,

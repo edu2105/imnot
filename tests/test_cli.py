@@ -8,8 +8,8 @@ from unittest.mock import patch
 import pytest
 from click.testing import CliRunner
 
-from mirage.cli import cli, _resolve_partners_dir
-from mirage.engine.session_store import SessionStore
+from imnot.cli import cli, _resolve_partners_dir
+from imnot.engine.session_store import SessionStore
 
 PARTNERS_DIR = Path(__file__).parent.parent / "partners"
 
@@ -20,12 +20,12 @@ def runner():
 
 
 # ---------------------------------------------------------------------------
-# mirage start
+# imnot start
 # ---------------------------------------------------------------------------
 
 
 def test_start_invokes_uvicorn(runner, tmp_path):
-    with patch("mirage.cli.uvicorn.run") as mock_run:
+    with patch("imnot.cli.uvicorn.run") as mock_run:
         result = runner.invoke(cli, [
             "start",
             "--partners-dir", str(PARTNERS_DIR),
@@ -44,7 +44,7 @@ def test_start_invokes_uvicorn(runner, tmp_path):
 
 
 def test_start_reload_uses_factory_and_yaml_watching(runner, tmp_path):
-    with patch("mirage.cli.uvicorn.run") as mock_run:
+    with patch("imnot.cli.uvicorn.run") as mock_run:
         result = runner.invoke(cli, [
             "start",
             "--partners-dir", str(PARTNERS_DIR),
@@ -55,14 +55,14 @@ def test_start_reload_uses_factory_and_yaml_watching(runner, tmp_path):
     assert mock_run.called
     args, kwargs = mock_run.call_args
     # Factory string, not an app object
-    assert args[0] == "mirage.api.server:create_app_from_env"
+    assert args[0] == "imnot.api.server:create_app_from_env"
     assert kwargs.get("reload") is True
     assert kwargs.get("factory") is True
     assert "*.yaml" in kwargs.get("reload_includes", [])
 
 
 def test_start_prints_address(runner, tmp_path):
-    with patch("mirage.cli.uvicorn.run"):
+    with patch("imnot.cli.uvicorn.run"):
         result = runner.invoke(cli, [
             "start",
             "--partners-dir", str(PARTNERS_DIR),
@@ -81,7 +81,7 @@ def test_start_missing_partners_dir_exits(runner, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# mirage status
+# imnot status
 # ---------------------------------------------------------------------------
 
 
@@ -165,7 +165,7 @@ def test_resolve_partners_dir_raises_when_not_found(tmp_path):
 
 
 def test_routes_works_from_subdirectory(runner):
-    """mirage routes should succeed when run from a subdirectory of the project."""
+    """imnot routes should succeed when run from a subdirectory of the project."""
     project_root = Path(__file__).parent.parent
     subdir = project_root / "partners"  # run from inside partners/
 
@@ -181,7 +181,7 @@ def test_routes_works_from_subdirectory(runner):
 
 
 # ---------------------------------------------------------------------------
-# mirage generate
+# imnot generate
 # ---------------------------------------------------------------------------
 
 # Minimal valid YAML fixtures used across tests

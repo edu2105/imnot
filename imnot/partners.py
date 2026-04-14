@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from mirage.loader.yaml_loader import PartnerDef, parse_partner_yaml
+from imnot.loader.yaml_loader import PartnerDef, parse_partner_yaml
 
 
 @dataclass

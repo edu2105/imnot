@@ -2,8 +2,8 @@
 
 import pytest
 
-from mirage.engine.patterns.oauth import make_oauth_handler
-from mirage.loader.yaml_loader import EndpointDef
+from imnot.engine.patterns.oauth import make_oauth_handler
+from imnot.loader.yaml_loader import EndpointDef
 
 
 def _make_endpoint(response: dict) -> EndpointDef:

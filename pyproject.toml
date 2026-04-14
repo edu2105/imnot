@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "mirage"
+name = "imnot"
 version = "0.1.0"
 description = "A stateful API mock server for integration testing"
 readme = "README.md"
@@ -19,10 +19,10 @@ dependencies = [
 ]
 
 [project.scripts]
-mirage = "mirage.cli:cli"
+imnot = "imnot.cli:cli"
 
 [tool.hatch.build.targets.wheel]
-packages = ["mirage"]
+packages = ["imnot"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "strict"

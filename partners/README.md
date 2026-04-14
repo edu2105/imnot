@@ -1,14 +1,14 @@
 # Partner YAML Authoring Guide
 
-This guide is the single reference for creating a Mirage partner definition.
+This guide is the single reference for creating a imnot partner definition.
 Read it fully before writing or generating any `partner.yaml` file.
 
 ---
 
 ## What is a partner definition?
 
-A partner definition is a YAML file that tells Mirage how to mock an external API.
-Mirage reads it at startup and dynamically registers HTTP endpoints — no code changes required.
+A partner definition is a YAML file that tells imnot how to mock an external API.
+imnot reads it at startup and dynamically registers HTTP endpoints — no code changes required.
 
 Each partner lives in its own subdirectory:
 
@@ -33,8 +33,8 @@ datapoints:                 # list of one or more datapoints (see below)
 
 | Field | Required | Notes |
 |-------|----------|-------|
-| `partner` | Yes | Used in admin URLs: `/mirage/admin/{partner}/...` |
-| `description` | No | Shown in `GET /mirage/admin/partners` |
+| `partner` | Yes | Used in admin URLs: `/imnot/admin/{partner}/...` |
+| `description` | No | Shown in `GET /imnot/admin/partners` |
 | `datapoints` | Yes | At least one required |
 
 ---
@@ -55,7 +55,7 @@ datapoints:
 
 | Field | Required | Notes |
 |-------|----------|-------|
-| `name` | Yes | Used in admin URLs: `/mirage/admin/{partner}/{name}/...` |
+| `name` | Yes | Used in admin URLs: `/imnot/admin/{partner}/{name}/...` |
 | `description` | No | |
 | `pattern` | Yes | Must be one of: `oauth`, `async`, `static`, `fetch`, `push` |
 | `endpoints` | Yes | At least one required |
@@ -67,7 +67,7 @@ payloads, define them as separate datapoints.
 
 ## Endpoints
 
-Each endpoint maps to one HTTP route registered by Mirage.
+Each endpoint maps to one HTTP route registered by imnot.
 
 ```yaml
 endpoints:
@@ -100,7 +100,7 @@ Choose the pattern that matches how the real partner API behaves.
 **Use when:** the partner uses a standard OAuth 2.0 client-credentials token endpoint that
 returns a JWT-shaped response (`access_token`, `token_type`, `expires_in`).
 
-**How it works:** Mirage returns a static JWT-shaped response. No payload storage involved.
+**How it works:** imnot returns a static JWT-shaped response. No payload storage involved.
 The `access_token` value is always the same stable token — integration test systems only need
 a non-empty Bearer token to proceed.
 
@@ -148,9 +148,9 @@ fit the standard shape, use the `static` pattern with a `body:` block instead.
 **Use when:** the endpoint always returns a fixed JSON body regardless of input.
 Use for non-standard auth endpoints, health checks, or any endpoint with a fully known fixed response.
 
-**How it works:** Mirage returns exactly what is defined under `response.body`. No payload storage.
+**How it works:** imnot returns exactly what is defined under `response.body`. No payload storage.
 The response body can be updated without restarting the server: edit the YAML and call
-`POST /mirage/admin/reload`.
+`POST /imnot/admin/reload`.
 
 **Response config fields:**
 
@@ -197,7 +197,7 @@ The response body can be updated without restarting the server: edit the YAML an
 **Use when:** the endpoint is a synchronous GET that returns the stored payload for the datapoint.
 
 **How it works:** consumer uploads a payload via the admin API, then GET returns it.
-Supports session isolation via `X-Mirage-Session`.
+Supports session isolation via `X-Imnot-Session`.
 
 **Required endpoints:** exactly one `GET` endpoint.
 
@@ -221,7 +221,7 @@ Supports session isolation via `X-Mirage-Session`.
 fetches the result, with any number of steps in between.
 
 **How it works:** steps are defined as an ordered list in YAML. Behavior is opt-in via
-two response-level flags. Mirage never simulates a "not ready yet" state — every status
+two response-level flags. imnot never simulates a "not ready yet" state — every status
 step responds as completed immediately.
 
 **Required endpoints:** two or more, each with a `step` number.
@@ -353,7 +353,7 @@ The same `{id}` token appears in the submit step's `id_header_value` and in subs
 ```
 
 **Session behaviour on fetch step:**
-- If the request includes `X-Mirage-Session: {session_id}` → returns the session payload
+- If the request includes `X-Imnot-Session: {session_id}` → returns the session payload
 - If no header → returns the global payload
 - If the matching payload is not found → returns `404`
 - If the path `{id}` was not registered by a prior submit → returns `404`
@@ -366,7 +366,7 @@ The same `{id}` token appears in the submit step's `id_header_value` and in subs
 waiting for you to poll. You submit a request, the partner returns immediately, and later
 POSTs the result to a URL you provided.
 
-**How it works:** Mirage receives the submit request, extracts the callback URL (from a
+**How it works:** imnot receives the submit request, extracts the callback URL (from a
 body field or header), stores the request, returns the configured status code with a
 `request_id`, then fires an outbound HTTP call to the callback URL with the stored payload.
 
@@ -406,7 +406,7 @@ Submit request your consumer sends:
 { "callbackUrl": "http://your-service/webhook", "rates": [...] }
 ```
 
-Mirage returns:
+imnot returns:
 ```json
 { "request_id": "<uuid>" }
 ```
@@ -429,22 +429,22 @@ Then fires `POST http://your-service/webhook` with the stored payload.
 
 **Retrigger admin endpoint:**
 
-For every `push` datapoint, Mirage registers an additional admin route:
+For every `push` datapoint, imnot registers an additional admin route:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/mirage/admin/{partner}/{datapoint}/push/{request_id}/retrigger` | Re-fire the callback for a prior submit |
+| `POST` | `/imnot/admin/{partner}/{datapoint}/push/{request_id}/retrigger` | Re-fire the callback for a prior submit |
 
 Use this when the callback failed or you need to test how your service handles a repeated
 delivery, without restarting the whole flow. The retrigger always uses the **current**
 stored payload, so you can update the payload between attempts.
 
 ```bash
-curl -X POST http://localhost:8000/mirage/admin/partner/rate-push/push/<request_id>/retrigger
+curl -X POST http://localhost:8000/imnot/admin/partner/rate-push/push/<request_id>/retrigger
 ```
 
 **Session behaviour:**
-- `X-Mirage-Session` on the submit request → session payload used for the callback
+- `X-Imnot-Session` on the submit request → session payload used for the callback
 - No session header → global payload used
 - No payload found → callback is skipped (warning logged); submit still returns the configured status
 - The retrigger uses the `session_id` from the original submit — no need to re-specify it
@@ -453,15 +453,15 @@ curl -X POST http://localhost:8000/mirage/admin/partner/rate-push/push/<request_
 
 ## Auto-generated admin endpoints
 
-For every `fetch`, `async`, or `push` datapoint, Mirage automatically registers these
+For every `fetch`, `async`, or `push` datapoint, imnot automatically registers these
 admin endpoints — no extra YAML required:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/mirage/admin/{partner}/{datapoint}/payload` | Upload global payload (last write wins) |
-| `GET`  | `/mirage/admin/{partner}/{datapoint}/payload` | Inspect current global payload |
-| `POST` | `/mirage/admin/{partner}/{datapoint}/payload/session` | Upload session payload → returns `session_id` |
-| `GET`  | `/mirage/admin/{partner}/{datapoint}/payload/session/{session_id}` | Inspect a session payload |
+| `POST` | `/imnot/admin/{partner}/{datapoint}/payload` | Upload global payload (last write wins) |
+| `GET`  | `/imnot/admin/{partner}/{datapoint}/payload` | Inspect current global payload |
+| `POST` | `/imnot/admin/{partner}/{datapoint}/payload/session` | Upload session payload → returns `session_id` |
+| `GET`  | `/imnot/admin/{partner}/{datapoint}/payload/session/{session_id}` | Inspect a session payload |
 
 `oauth` and `static` datapoints do **not** get these endpoints. Their responses are fully
 defined by the YAML and never use the payload store.
@@ -470,12 +470,12 @@ Fixed infra endpoints (always available regardless of partners loaded):
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET`  | `/mirage/admin/partners` | List all loaded partners and their datapoints |
-| `POST` | `/mirage/admin/partners` | Register a new partner from a raw YAML body — routes go live immediately |
-| `GET`  | `/mirage/admin/sessions` | List all active sessions |
-| `POST` | `/mirage/admin/reload`   | Hot-reload partner YAMLs — updates static response bodies in place, registers new partners/datapoints |
+| `GET`  | `/imnot/admin/partners` | List all loaded partners and their datapoints |
+| `POST` | `/imnot/admin/partners` | Register a new partner from a raw YAML body — routes go live immediately |
+| `GET`  | `/imnot/admin/sessions` | List all active sessions |
+| `POST` | `/imnot/admin/reload`   | Hot-reload partner YAMLs — updates static response bodies in place, registers new partners/datapoints |
 
-`POST /mirage/admin/partners` is the HTTP equivalent of `mirage generate` — use it when Mirage
+`POST /imnot/admin/partners` is the HTTP equivalent of `imnot generate` — use it when imnot
 runs in a container and you cannot exec in to run the CLI. See the main README for usage examples.
 
 ---
@@ -495,8 +495,8 @@ runs in a container and you cannot exec in to run the CLI. See the main README f
 - [ ] Every `push` datapoint has exactly one endpoint with exactly one of `callback_url_field` or `callback_url_header` set (not both, not neither)
 - [ ] All `response` blocks are nested inside their endpoint, not at the datapoint level
 - [ ] No two endpoints across the whole file share the same `method` + `path` combination
-- [ ] No endpoint in this file shares `method` + `path` with an endpoint in any other partner file — Mirage enforces this at startup and will refuse to start if a conflict is detected
-- [ ] After saving, call `POST /mirage/admin/reload` or restart the server to pick up changes
+- [ ] No endpoint in this file shares `method` + `path` with an endpoint in any other partner file — imnot enforces this at startup and will refuse to start if a conflict is detected
+- [ ] After saving, call `POST /imnot/admin/reload` or restart the server to pick up changes
 
 ---
 

@@ -22,7 +22,7 @@ from typing import Any, Callable
 from fastapi import Response
 from fastapi.responses import JSONResponse
 
-from mirage.loader.yaml_loader import EndpointDef
+from imnot.loader.yaml_loader import EndpointDef
 
 
 def make_static_handler(
@@ -35,7 +35,7 @@ def make_static_handler(
 
     *configs* is a mutable dict shared with the router's reload machinery.
     The handler reads its response config from *configs* on every request so
-    that a YAML edit followed by ``POST /mirage/admin/reload`` takes effect
+    that a YAML edit followed by ``POST /imnot/admin/reload`` takes effect
     immediately without restarting the server.
     """
     key = (partner_name, dp_name, endpoint.method.upper(), endpoint.path)

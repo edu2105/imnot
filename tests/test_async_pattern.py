@@ -6,9 +6,9 @@ from pathlib import Path
 import pytest
 from fastapi import Request
 
-from mirage.engine.patterns.async_ import make_async_handlers
-from mirage.engine.session_store import SessionStore
-from mirage.loader.yaml_loader import DatapointDef, EndpointDef
+from imnot.engine.patterns.async_ import make_async_handlers
+from imnot.engine.session_store import SessionStore
+from imnot.loader.yaml_loader import DatapointDef, EndpointDef
 
 
 # ---------------------------------------------------------------------------
@@ -116,7 +116,7 @@ async def test_submit_header_persists_uuid(header_submit_handler, store):
 
 @pytest.mark.asyncio
 async def test_submit_header_persists_session_id(header_submit_handler, store):
-    headers = [(b"x-mirage-session", b"test-session-abc")]
+    headers = [(b"x-imnot-session", b"test-session-abc")]
     response = await header_submit_handler(_request(headers))
     uuid = response.headers["Location"].split("/")[-1]
     row = store.get_async_request(uuid)
@@ -249,7 +249,7 @@ def fetch_handler(store):
 def _request_with_id(async_uuid: str, session_id: str | None = None) -> Request:
     headers = []
     if session_id:
-        headers.append((b"x-mirage-session", session_id.encode()))
+        headers.append((b"x-imnot-session", session_id.encode()))
     scope = {
         "type": "http",
         "headers": headers,

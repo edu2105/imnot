@@ -8,10 +8,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from mirage.engine.patterns.push import make_push_handler
-from mirage.engine.router import register_routes
-from mirage.engine.session_store import SessionStore
-from mirage.loader.yaml_loader import DatapointDef, EndpointDef, load_partners
+from imnot.engine.patterns.push import make_push_handler
+from imnot.engine.router import register_routes
+from imnot.engine.session_store import SessionStore
+from imnot.loader.yaml_loader import DatapointDef, EndpointDef, load_partners
 
 CALLBACK_URL = "http://consumer/webhook"
 
@@ -96,7 +96,7 @@ def _mock_httpx(success: bool = True):
     mock_client.__aexit__ = AsyncMock(return_value=False)
     mock_client.request = AsyncMock(return_value=mock_response)
 
-    return patch("mirage.engine.patterns.push.httpx.AsyncClient", return_value=mock_client), mock_client
+    return patch("imnot.engine.patterns.push.httpx.AsyncClient", return_value=mock_client), mock_client
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +266,7 @@ def test_submit_uses_session_payload_when_header_present(store, tmp_path):
         client.post(
             "/pushpartner/notify",
             json={"callbackUrl": CALLBACK_URL},
-            headers={"X-Mirage-Session": session_id},
+            headers={"X-Imnot-Session": session_id},
         )
     delivered = mock_client.request.call_args.kwargs["json"]
     assert delivered == {"user": "alice"}
@@ -290,7 +290,7 @@ def test_submit_session_id_stored_in_push_request(store, tmp_path):
         r = client.post(
             "/pushpartner/notify",
             json={"callbackUrl": CALLBACK_URL},
-            headers={"X-Mirage-Session": session_id},
+            headers={"X-Imnot-Session": session_id},
         )
     row = store.get_push_request(r.json()["request_id"])
     assert row["session_id"] == session_id
@@ -318,7 +318,7 @@ def test_submit_with_delay_still_fires_callback(store, tmp_path):
 
 def test_retrigger_unknown_request_id_returns_404(store, tmp_path):
     client = _build_client(_BODY_FIELD_YAML, store, tmp_path)
-    r = client.post("/mirage/admin/pushpartner/notification/push/nonexistent-id/retrigger")
+    r = client.post("/imnot/admin/pushpartner/notification/push/nonexistent-id/retrigger")
     assert r.status_code == 404
     assert "nonexistent-id" in r.json()["detail"]
 
@@ -337,7 +337,7 @@ def test_retrigger_fires_callback_again(store, tmp_path):
 
         # Retrigger
         r2 = client.post(
-            f"/mirage/admin/pushpartner/notification/push/{request_id}/retrigger"
+            f"/imnot/admin/pushpartner/notification/push/{request_id}/retrigger"
         )
         assert r2.status_code == 200
         assert r2.json()["status"] == "dispatched"
@@ -360,7 +360,7 @@ def test_retrigger_uses_updated_payload(store, tmp_path):
 
         # Retrigger — should deliver version 2
         client.post(
-            f"/mirage/admin/pushpartner/notification/push/{request_id}/retrigger"
+            f"/imnot/admin/pushpartner/notification/push/{request_id}/retrigger"
         )
 
     deliveries = mock_client.request.call_args_list
@@ -379,13 +379,13 @@ def test_retrigger_uses_original_session(store, tmp_path):
         r = client.post(
             "/pushpartner/notify",
             json={"callbackUrl": CALLBACK_URL},
-            headers={"X-Mirage-Session": session_id},
+            headers={"X-Imnot-Session": session_id},
         )
         request_id = r.json()["request_id"]
 
         # Retrigger — no session header needed, it's stored
         client.post(
-            f"/mirage/admin/pushpartner/notification/push/{request_id}/retrigger"
+            f"/imnot/admin/pushpartner/notification/push/{request_id}/retrigger"
         )
 
     delivered = mock_client.request.call_args_list[-1].kwargs["json"]
@@ -401,7 +401,7 @@ def test_push_has_admin_payload_routes(store, tmp_path):
     """push pattern gets the standard payload upload/inspect admin routes."""
     client = _build_client(_BODY_FIELD_YAML, store, tmp_path)
     r = client.post(
-        "/mirage/admin/pushpartner/notification/payload",
+        "/imnot/admin/pushpartner/notification/payload",
         json={"event": "test"},
     )
     assert r.status_code == 200
@@ -411,7 +411,7 @@ def test_push_has_admin_payload_routes(store, tmp_path):
 def test_push_has_admin_session_payload_route(store, tmp_path):
     client = _build_client(_BODY_FIELD_YAML, store, tmp_path)
     r = client.post(
-        "/mirage/admin/pushpartner/notification/payload/session",
+        "/imnot/admin/pushpartner/notification/payload/session",
         json={"event": "test"},
     )
     assert r.status_code == 200
@@ -422,6 +422,6 @@ def test_push_retrigger_route_exists(store, tmp_path):
     """The retrigger route returns 404 (unknown ID) not 405 (route missing)."""
     client = _build_client(_BODY_FIELD_YAML, store, tmp_path)
     r = client.post(
-        "/mirage/admin/pushpartner/notification/push/some-id/retrigger"
+        "/imnot/admin/pushpartner/notification/push/some-id/retrigger"
     )
     assert r.status_code == 404  # route exists, ID just unknown

@@ -23,8 +23,8 @@ from typing import Any, Callable
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
-from mirage.engine.session_store import SessionStore
-from mirage.loader.yaml_loader import DatapointDef, EndpointDef
+from imnot.engine.session_store import SessionStore
+from imnot.loader.yaml_loader import DatapointDef, EndpointDef
 
 
 def make_async_handlers(
@@ -70,7 +70,7 @@ def _make_submit_handler(
         )
 
     async def handler(request: Request) -> Response:
-        session_id: str | None = request.headers.get("X-Mirage-Session")
+        session_id: str | None = request.headers.get("X-Imnot-Session")
         async_uuid = store.register_async_request(
             partner=partner,
             datapoint=dp_name,
@@ -142,7 +142,7 @@ def _make_fetch_handler(
                 content={"detail": f"Unknown request ID: {async_uuid}"},
             )
 
-        session_id: str | None = request.headers.get("X-Mirage-Session")
+        session_id: str | None = request.headers.get("X-Imnot-Session")
         payload: dict[str, Any] | None = store.resolve_payload(
             partner=partner,
             datapoint=dp_name,

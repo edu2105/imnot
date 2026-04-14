@@ -2,7 +2,7 @@
 Push pattern handler.
 
 Responsibilities:
-- Handle the `push` pattern where Mirage receives a submit request from a consumer,
+- Handle the `push` pattern where imnot receives a submit request from a consumer,
   stores the callback URL, returns the configured status immediately, then fires an
   outbound HTTP call to the callback URL with the stored payload.
 - Expose `make_push_handler` (called by the router at startup) and `fire_callback`
@@ -25,8 +25,8 @@ import httpx
 from fastapi import BackgroundTasks, Request
 from fastapi.responses import JSONResponse, Response
 
-from mirage.engine.session_store import SessionStore
-from mirage.loader.yaml_loader import DatapointDef, EndpointDef
+from imnot.engine.session_store import SessionStore
+from imnot.loader.yaml_loader import DatapointDef, EndpointDef
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ def make_push_handler(
                     content={"detail": f"Missing required header '{callback_url_header}'"},
                 )
 
-        session_id: str | None = request.headers.get("X-Mirage-Session")
+        session_id: str | None = request.headers.get("X-Imnot-Session")
         push_uuid = store.store_push_request(
             partner=partner,
             datapoint=dp_name,

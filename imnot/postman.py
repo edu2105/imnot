@@ -4,10 +4,10 @@ Postman collection generator.
 Responsibilities:
 - Build a Postman collection v2.1 dict from a list of PartnerDef objects.
 - Exported as `build_postman_collection(partners)` — called by both the CLI
-  (`mirage export postman`) and the admin endpoint (`GET /mirage/admin/postman`).
+  (`imnot export postman`) and the admin endpoint (`GET /imnot/admin/postman`).
 
 Collection structure:
-    Mirage                          ← top-level collection
+    imnot                           ← top-level collection
     └── {partner}                   ← one folder per partner
         └── {datapoint}             ← one sub-folder per datapoint
             ├── consumer requests   ← one per EndpointDef
@@ -25,7 +25,7 @@ import json
 import uuid
 from typing import Any
 
-from mirage.loader.yaml_loader import DatapointDef, EndpointDef, PartnerDef
+from imnot.loader.yaml_loader import DatapointDef, EndpointDef, PartnerDef
 
 _PAYLOAD_PATTERNS = {"fetch", "async", "push"}
 _BODY_METHODS = {"POST", "PUT", "PATCH"}
@@ -41,8 +41,8 @@ def build_postman_collection(partners: list[PartnerDef]) -> dict[str, Any]:
     return {
         "info": {
             "_postman_id": str(uuid.uuid4()),
-            "name": "Mirage",
-            "description": "Auto-generated collection for Mirage mock server endpoints.",
+            "name": "imnot",
+            "description": "Auto-generated collection for imnot mock server endpoints.",
             "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
         },
         "variable": [
@@ -50,7 +50,7 @@ def build_postman_collection(partners: list[PartnerDef]) -> dict[str, Any]:
                 "key": "baseUrl",
                 "value": "http://localhost:8000",
                 "type": "string",
-                "description": "Base URL of the Mirage server",
+                "description": "Base URL of the imnot server",
             }
         ],
         "item": [_partner_folder(p) for p in partners],
@@ -124,10 +124,10 @@ def _consumer_request(dp: DatapointDef, ep: EndpointDef) -> dict[str, Any]:
                 "description": "Callback URL — Mirage will POST the stored payload here",
             })
 
-    # X-Mirage-Session — present but disabled for payload-pattern endpoints
+    # X-Imnot-Session — present but disabled for payload-pattern endpoints
     if dp.pattern in _PAYLOAD_PATTERNS:
         headers.append({
-            "key": "X-Mirage-Session",
+            "key": "X-Imnot-Session",
             "value": "",
             "description": "Optional: set to isolate payloads per test session",
             "disabled": True,
@@ -159,7 +159,7 @@ def _consumer_body(dp: DatapointDef, ep: EndpointDef) -> dict[str, Any] | None:
 
 
 def _admin_folder(partner_name: str, dp: DatapointDef) -> dict[str, Any]:
-    base = f"/mirage/admin/{partner_name}/{dp.name}/payload"
+    base = f"/imnot/admin/{partner_name}/{dp.name}/payload"
     placeholder = _raw_body({"example": "replace with your payload"})
     ct = _header("Content-Type", "application/json")
 
@@ -197,7 +197,7 @@ def _admin_folder(partner_name: str, dp: DatapointDef) -> dict[str, Any]:
     ]
 
     if dp.pattern == "push":
-        retrigger = f"/mirage/admin/{partner_name}/{dp.name}/push/:request_id/retrigger"
+        retrigger = f"/imnot/admin/{partner_name}/{dp.name}/push/:request_id/retrigger"
         items.append({
             "name": f"POST {retrigger}",
             "request": {"method": "POST", "header": [], "url": _build_url(retrigger)},

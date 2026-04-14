@@ -4,9 +4,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from mirage.engine.patterns.fetch import make_fetch_handler
-from mirage.engine.session_store import SessionStore
-from mirage.loader.yaml_loader import DatapointDef, EndpointDef
+from imnot.engine.patterns.fetch import make_fetch_handler
+from imnot.engine.session_store import SessionStore
+from imnot.loader.yaml_loader import DatapointDef, EndpointDef
 
 
 def _make_datapoint(name: str = "charges") -> DatapointDef:
@@ -70,7 +70,7 @@ def test_returns_404_when_no_global_payload(client):
 
 def test_returns_404_when_session_payload_missing(client):
     c, _ = client
-    r = c.get("/api/v2/charges", headers={"X-Mirage-Session": "nonexistent"})
+    r = c.get("/api/v2/charges", headers={"X-Imnot-Session": "nonexistent"})
     assert r.status_code == 404
     assert "nonexistent" in r.json()["detail"]
 
@@ -107,7 +107,7 @@ def test_respects_custom_status_code(store):
 def test_returns_session_payload_when_header_present(client):
     c, store = client
     session_id = store.store_session_payload("leanpms", "charges", {"charges": [{"id": "S1"}]})
-    r = c.get("/api/v2/charges", headers={"X-Mirage-Session": session_id})
+    r = c.get("/api/v2/charges", headers={"X-Imnot-Session": session_id})
     assert r.status_code == 200
     assert r.json() == {"charges": [{"id": "S1"}]}
 
@@ -124,5 +124,5 @@ def test_two_sessions_are_isolated(client):
     c, store = client
     s1 = store.store_session_payload("leanpms", "charges", {"user": "alice"})
     s2 = store.store_session_payload("leanpms", "charges", {"user": "bob"})
-    assert c.get("/api/v2/charges", headers={"X-Mirage-Session": s1}).json() == {"user": "alice"}
-    assert c.get("/api/v2/charges", headers={"X-Mirage-Session": s2}).json() == {"user": "bob"}
+    assert c.get("/api/v2/charges", headers={"X-Imnot-Session": s1}).json() == {"user": "alice"}
+    assert c.get("/api/v2/charges", headers={"X-Imnot-Session": s2}).json() == {"user": "bob"}

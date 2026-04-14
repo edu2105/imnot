@@ -33,4 +33,4 @@ jobs:
       - name: Run security scan
         run: |
           pip install bandit -q
-          bandit -r mirage/ -f screen
+          bandit -r imnot/ -f screen

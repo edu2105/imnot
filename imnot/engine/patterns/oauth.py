@@ -17,13 +17,13 @@ from typing import Any, Callable
 from fastapi import Response
 from fastapi.responses import JSONResponse
 
-from mirage.loader.yaml_loader import EndpointDef
+from imnot.loader.yaml_loader import EndpointDef
 
 # A static JWT-shaped token returned for every token request.
 # Integration test systems only care that a non-empty Bearer token is present.
 _STATIC_ACCESS_TOKEN = (  # nosec B105 — intentional placeholder token for mock use
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
-    ".eyJzdWIiOiJtaXJhZ2UiLCJpYXQiOjB9"
+    ".eyJzdWIiOiJpbW5vdCIsImlhdCI6MH0"
     ".SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
 )
 
