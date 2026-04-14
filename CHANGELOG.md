@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `GET /healthz` — lightweight health check endpoint; always returns `200 {"status":"ok","version":"…"}`, exempt from `IMNOT_ADMIN_KEY` auth, no file I/O or DB queries. Intended for Kubernetes/ECS liveness and readiness probes.
+
 ## [0.3.0] - 2026-04-14
 
 ### Changed

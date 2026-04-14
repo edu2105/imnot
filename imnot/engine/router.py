@@ -17,6 +17,7 @@ Responsibilities:
 from __future__ import annotations
 
 import logging
+from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,8 @@ from imnot.partners import register_partner
 from imnot.postman import build_postman_collection
 
 logger = logging.getLogger(__name__)
+
+_IMNOT_VERSION = _pkg_version("imnot")
 
 # Patterns that store payload in the session store and therefore need admin
 # payload endpoints (GET/POST global + session).  oauth and static are fully
@@ -335,6 +338,9 @@ def _register_infra_routes(
     partners: list[PartnerDef],
     store: SessionStore,
 ) -> None:
+    async def healthz() -> JSONResponse:
+        return JSONResponse({"status": "ok", "version": _IMNOT_VERSION})
+
     async def list_sessions() -> JSONResponse:
         return JSONResponse(store.list_sessions())
 
@@ -520,6 +526,7 @@ def _register_infra_routes(
     reload_partners.__name__ = "admin_reload_partners"
     create_partner_handler.__name__ = "admin_create_partner"
 
+    app.add_api_route("/healthz", healthz, methods=["GET"])
     app.add_api_route("/imnot/admin/sessions", list_sessions, methods=["GET"])
     app.add_api_route("/imnot/admin/partners", list_partners, methods=["GET"])
     app.add_api_route("/imnot/admin/partners", create_partner_handler, methods=["POST"])

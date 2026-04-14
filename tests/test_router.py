@@ -86,6 +86,27 @@ def async_client(tmp_path, store):
 # ---------------------------------------------------------------------------
 
 
+def test_healthz_returns_200(client):
+    r = client.get("/healthz")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "ok"
+    assert "version" in body
+
+
+def test_healthz_exempt_from_admin_auth(tmp_path):
+    """GET /healthz must return 200 even when IMNOT_ADMIN_KEY is set."""
+    s = SessionStore(db_path=tmp_path / "test.db")
+    s.init()
+    app = FastAPI()
+    register_routes(app, [], s, admin_key="secret")
+    c = TestClient(app, raise_server_exceptions=True)
+    r = c.get("/healthz")
+    assert r.status_code == 200
+    assert r.json()["status"] == "ok"
+    s.close()
+
+
 def test_list_partners(client):
     r = client.get("/imnot/admin/partners")
     assert r.status_code == 200

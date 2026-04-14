@@ -329,6 +329,7 @@ Fixed infra endpoints (always available regardless of which partners are loaded)
 
 | Method | Path | Description |
 |--------|------|-------------|
+| `GET`  | `/healthz` | Health check — always returns `{"status":"ok","version":"…"}`, no auth required |
 | `GET`  | `/imnot/admin/partners` | List all loaded partners and their datapoints |
 | `POST` | `/imnot/admin/partners` | Validate and register a new partner from a raw YAML body — routes go live immediately |
 | `GET`  | `/imnot/admin/sessions` | List all active sessions |
@@ -439,6 +440,8 @@ of where it runs:
   port is reachable from outside. The default `127.0.0.1` binding blocks external traffic.
 - **Partner YAMLs** — either commit them to the repo (included in the image build)
   or mount a volume at `/app/partners` to manage them independently.
+- **Health checks** — use `GET /healthz` for liveness and readiness probes. It always
+  returns `200 {"status":"ok","version":"…"}` with no auth and no I/O.
 
 ## Adding a new partner
 
