@@ -35,7 +35,7 @@ pip install -e ".[dev]"
 .venv/bin/pytest
 ```
 
-All 196 tests should pass. The CI matrix runs on Python 3.11 and 3.12 — if you can,
+All 228 tests should pass. The CI matrix runs on Python 3.11 and 3.12 — if you can,
 test on both before opening a PR.
 
 ## Running the security scan
