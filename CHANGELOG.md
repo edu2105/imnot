@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-04-15
+
+### Added
+
+- PyPI publish workflow via OIDC trusted publishing — triggers automatically on `v*` tags alongside the existing Docker image publish.
+- `authors` and `[project.urls]` fields in `pyproject.toml` — required for PyPI metadata.
+- Nametag SVG logo (`assets/imnot-logo.svg`) — pure SVG, system fonts, renders on both light and dark GitHub themes.
+
+### Changed
+
+- README restructured: *Why imnot?* condensed to three bullets, *AI-ready* section added with copy-paste prompts, *Quick Start* moved above *How it works*.
+- Replaced "partner's API" prose with "external API" throughout README — more universally understood outside the integrations world.
+
 ## [0.4.0] - 2026-04-14
 
 ### Added
