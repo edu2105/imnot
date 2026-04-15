@@ -13,12 +13,26 @@ mock server — no code changes required to add new partners or endpoints.
 
 ## Why imnot?
 
-Tools like WireMock, Postman, and Mockoon mock individual HTTP responses. Real partner APIs
-don't work that way: they require a specific call sequence, return `202 Accepted` before data
-is available, and expect you to poll or wait before fetching a result. Testing against a
-stateless stub hides these interaction bugs until you hit production. imnot models the full
-interaction sequence — submit, poll, fetch — so your integration tests reflect what actually
-happens when your code talks to a real partner API.
+Real APIs aren't a single endpoint. They have an OAuth token flow, an async submit that returns
+`202 Accepted`, a status check, a fetch step, and sometimes a webhook callback. Most mock servers
+handle the simple case well and leave you scripting everything else.
+
+imnot models the full interaction from a single YAML file. Define your partner's endpoints and
+their pattern — `oauth`, `static`, `fetch`, `async`, or `push` — run `imnot start`, and you have
+a running mock with no code written. Upload a payload via the admin API and the next request
+returns it. Use session headers to isolate payloads per test run, safe for parallel CI execution.
+
+The mock definition lives in your repo alongside the code that uses it, runs anywhere Docker runs,
+and reflects how the real API actually behaves — not just what it returns.
+
+**imnot is a good fit when:**
+- Your integration tests hit OAuth-secured or async third-party APIs
+- You want deterministic, stateful mocks in CI without external dependencies
+- You want the mock definition version-controlled alongside your code
+
+**Reach for other tools when:**
+- You need responses that vary based on request body content (JSONPath/XPath matching)
+- You prefer a GUI-first workflow
 
 ## How it works
 
