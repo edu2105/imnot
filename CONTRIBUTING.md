@@ -64,6 +64,15 @@ direction.
 - No changes to `partners/README.md` or `CLAUDE.md` unless you are the maintainer
 - Commit messages in the imperative: `fix: ...`, `feat: ...`, `chore: ...`
 
+## AI-assisted contributions
+
+We welcome contributions where AI tools help you write, review, or refactor code.
+What we require is a human behind the wheel: someone who has read the codebase,
+understands the change, and takes responsibility for what's submitted.
+
+Fully autonomous submissions — PRs opened by an agent without a human reviewing
+the change — will be closed without merge.
+
 ## Code style
 
 - Python 3.11+ type annotations on all public functions
