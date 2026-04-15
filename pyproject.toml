@@ -9,6 +9,9 @@ description = "A stateful API mock server for integration testing"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
+authors = [
+    { name = "Eduardo Sanhueso", email = "edu2105@users.noreply.github.com" }
+]
 dependencies = [
     "fastapi>=0.111.0",
     "uvicorn[standard]>=0.29.0",
@@ -18,14 +21,14 @@ dependencies = [
     "httpx>=0.27.0",      # outbound callbacks (push pattern) + TestClient in tests
 ]
 
+[project.urls]
+Homepage = "https://github.com/edu2105/imnot"
+Repository = "https://github.com/edu2105/imnot"
+Issues = "https://github.com/edu2105/imnot/issues"
+Changelog = "https://github.com/edu2105/imnot/blob/main/CHANGELOG.md"
+
 [project.scripts]
 imnot = "imnot.cli:cli"
-
-[tool.hatch.build.targets.wheel]
-packages = ["imnot"]
-
-[tool.pytest.ini_options]
-asyncio_mode = "strict"
 
 [project.optional-dependencies]
 dev = [
@@ -33,3 +36,9 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "httpx>=0.27.0",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["imnot"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
