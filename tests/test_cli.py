@@ -489,3 +489,88 @@ def test_generate_oauth_no_admin_routes(runner, tmp_path):
     async_dp = next(dp for dp in data["datapoints"] if dp["name"] == "rate-push")
     assert token_dp["admin_routes"] is False
     assert async_dp["admin_routes"] is True
+
+
+# ---------------------------------------------------------------------------
+# imnot init
+# ---------------------------------------------------------------------------
+
+
+def test_init_creates_example_partners(runner, tmp_path):
+    """init writes staylink and bookingco partner YAMLs and exits 0."""
+    result = runner.invoke(cli, ["init", "--dir", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "partners" / "staylink" / "partner.yaml").exists()
+    assert (tmp_path / "partners" / "bookingco" / "partner.yaml").exists()
+
+
+def test_init_yaml_content_is_valid(runner, tmp_path):
+    """YAMLs written by init parse without error."""
+    from imnot.loader.yaml_loader import parse_partner_yaml
+
+    runner.invoke(cli, ["init", "--dir", str(tmp_path)])
+
+    for partner in ("staylink", "bookingco"):
+        text = (tmp_path / "partners" / partner / "partner.yaml").read_text()
+        parsed = parse_partner_yaml(text)
+        assert parsed.partner == partner
+
+
+def test_init_output_mentions_both_partners(runner, tmp_path):
+    """Success output names both scaffold partners."""
+    result = runner.invoke(cli, ["init", "--dir", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "staylink" in result.output
+    assert "bookingco" in result.output
+    assert "imnot start" in result.output
+
+
+def test_init_fails_if_partners_dir_exists(runner, tmp_path):
+    """init exits 1 when partners/ already exists."""
+    (tmp_path / "partners").mkdir()
+
+    result = runner.invoke(cli, ["init", "--dir", str(tmp_path)])
+
+    assert result.exit_code == 1
+    assert "already exists" in result.output
+
+
+def test_init_creates_target_dir_if_missing(runner, tmp_path):
+    """init creates --dir if it does not exist yet."""
+    new_dir = tmp_path / "brand" / "new" / "project"
+
+    result = runner.invoke(cli, ["init", "--dir", str(new_dir)])
+
+    assert result.exit_code == 0, result.output
+    assert (new_dir / "partners" / "staylink" / "partner.yaml").exists()
+
+
+def test_init_default_dir_is_cwd(runner, tmp_path):
+    """init without --dir scaffolds into CWD."""
+    original = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        result = runner.invoke(cli, ["init"])
+    finally:
+        os.chdir(original)
+
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "partners" / "staylink" / "partner.yaml").exists()
+
+
+def test_start_missing_partners_dir_suggests_init(runner, tmp_path):
+    """Default-path failure message should mention `imnot init`."""
+    original = os.getcwd()
+    try:
+        os.chdir(tmp_path)  # no partners/ here or in any ancestor up to tmp_path
+        result = runner.invoke(cli, [
+            "start",
+            "--db", str(tmp_path / "test.db"),
+        ])
+    finally:
+        os.chdir(original)
+
+    assert result.exit_code != 0
+    assert "imnot init" in result.output

@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from importlib.resources import files
 from pathlib import Path
 
 import click
@@ -61,7 +62,7 @@ def _resolve_partners_dir(given: str) -> Path:
         current = parent
     raise FileNotFoundError(
         f"Partners directory '{given}' not found in {Path.cwd()} or any parent directory. "
-        f"Run from inside an imnot project or pass --partners-dir explicitly."
+        f"Run `imnot init` to create a new project, or pass --partners-dir explicitly."
     )
 
 
@@ -133,6 +134,60 @@ def start(partners_dir: str, db: str, host: str, port: int, reload: bool, admin_
             admin_key=effective_admin_key,
         )
         uvicorn.run(app, host=host, port=port)
+
+
+# ---------------------------------------------------------------------------
+# imnot init
+# ---------------------------------------------------------------------------
+
+_EXAMPLES = [
+    ("staylink", "oauth + async"),
+    ("bookingco", "static + fetch"),
+]
+
+
+@cli.command()
+@click.option(
+    "--dir",
+    "target_dir",
+    default=".",
+    show_default=True,
+    help="Directory to initialise. Created if it does not exist.",
+)
+def init(target_dir: str) -> None:
+    """Scaffold a new imnot project with example partner definitions."""
+    target = Path(target_dir).resolve()
+    partners_dir = target / "partners"
+
+    if partners_dir.exists():
+        click.echo(
+            f"partners/ already exists in {target} — nothing written.\n"
+            f"To add a partner, use `imnot generate --file <yaml>`.",
+            err=True,
+        )
+        raise SystemExit(1)
+
+    target.mkdir(parents=True, exist_ok=True)
+
+    written: list[tuple[Path, str]] = []
+    for partner_name, patterns in _EXAMPLES:
+        dest_dir = partners_dir / partner_name
+        dest_dir.mkdir(parents=True)
+        yaml_text = (
+            files("imnot.examples")
+            .joinpath(partner_name)
+            .joinpath("partner.yaml")
+            .read_text(encoding="utf-8")
+        )
+        dest = dest_dir / "partner.yaml"
+        dest.write_text(yaml_text, encoding="utf-8")
+        written.append((dest.relative_to(target), patterns))
+
+    click.echo(f"Initialized imnot project in {target}\n")
+    for path, patterns in written:
+        click.echo(f"  {path}   ({patterns})")
+    click.echo()
+    click.echo("Run `imnot start` to launch the mock server.")
 
 
 # ---------------------------------------------------------------------------
