@@ -46,11 +46,7 @@ Output only the YAML — no code, no explanation.
 Requires Python 3.11 or later.
 
 ```bash
-git clone https://github.com/edu2105/imnot.git
-cd imnot
-python3 -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e .
+pip install imnot
 imnot start
 ```
 
@@ -553,6 +549,8 @@ imnot/
 
 **Run the test suite:**
 ```bash
+git clone https://github.com/edu2105/imnot.git
+cd imnot
 pip install -e ".[dev]"
 pytest
 ```
