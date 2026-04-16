@@ -44,6 +44,7 @@ jobs:
     name: Publish to PyPI
     needs: verify
     runs-on: ubuntu-latest
+    environment: production
     permissions:
       id-token: write   # OIDC trusted publishing — no long-lived token
     steps:
