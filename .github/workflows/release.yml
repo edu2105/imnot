@@ -1,0 +1,123 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  # ── Gate ─────────────────────────────────────────────────────────────────
+  # Runs in the "production" environment — triggers the required-reviewer
+  # approval gate. Also verifies the tag matches pyproject.toml so we fail
+  # fast before publishing anything.
+  verify:
+    name: Verify & approve
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from pyproject.toml
+        id: version
+        run: |
+          VERSION=$(python -c "
+          import tomllib
+          with open('pyproject.toml', 'rb') as f:
+              print(tomllib.load(f)['project']['version'])
+          ")
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Verify tag matches pyproject.toml
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="v${{ steps.version.outputs.value }}"
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "::error::Tag $TAG does not match pyproject.toml version $VERSION"
+            exit 1
+          fi
+          echo "Tag $TAG matches pyproject.toml — proceeding."
+
+  # ── PyPI ─────────────────────────────────────────────────────────────────
+  publish-pypi:
+    name: Publish to PyPI
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # OIDC trusted publishing — no long-lived token
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build package
+        run: |
+          pip install build
+          python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  # ── Docker ───────────────────────────────────────────────────────────────
+  publish-docker:
+    name: Publish Docker image
+    needs: publish-pypi
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/edu2105/imnot
+          tags: |
+            type=semver,pattern={{version}}
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  # ── GitHub Release ────────────────────────────────────────────────────────
+  github-release:
+    name: Create GitHub Release
+    needs: publish-docker
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history required for git-cliff
+
+      - name: Generate release notes
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --current --strip header
+        env:
+          OUTPUT: RELEASE_NOTES.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: RELEASE_NOTES.md
+          make_latest: true
