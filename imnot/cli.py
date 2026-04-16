@@ -99,7 +99,7 @@ def cli() -> None:
          "Also readable from IMNOT_ADMIN_KEY env var. Omit for open access (local dev only).",
 )
 def start(partners_dir: str, db: str, host: str, port: int, reload: bool, admin_key: str | None) -> None:
-    """Load partner definitions and start the mock server."""
+    """Start the mock server and load partner definitions."""
     try:
         resolved_partners_dir = _resolve_partners_dir(partners_dir)
     except FileNotFoundError as exc:
