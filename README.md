@@ -7,6 +7,7 @@
 [![CI](https://github.com/edu2105/imnot/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/edu2105/imnot/actions/workflows/ci.yml)
 
 imnot is a stateful API mock server for integration testing.
+A **partner** is any external API your service depends on — a booking platform, a payment gateway, a data feed. You describe it in YAML, and imnot turns it into a local mock server your tests can hit.
 
 Define an external API as a YAML file, run `imnot start`, and you get a fully functional
 mock server — no code changes required to add new APIs or endpoints.
@@ -46,13 +47,12 @@ Output only the YAML — no code, no explanation.
 Requires Python 3.11 or later.
 
 ```bash
-git clone https://github.com/edu2105/imnot.git
-cd imnot
-python3 -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e .
+pipx install imnot
 imnot start
 ```
+
+> `pipx` installs CLI tools into isolated environments — no venv setup needed.
+> Alternatively: `pip install imnot` inside an existing virtual environment.
 
 Expected output:
 ```
@@ -553,6 +553,8 @@ imnot/
 
 **Run the test suite:**
 ```bash
+git clone https://github.com/edu2105/imnot.git
+cd imnot
 pip install -e ".[dev]"
 pytest
 ```
