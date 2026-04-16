@@ -1,0 +1,44 @@
+partner: staylink
+description: StayLink fictional partner — demonstrates oauth and async patterns
+
+datapoints:
+
+  - name: token
+    description: OAuth 2.0 client credentials token endpoint
+    pattern: oauth
+    endpoints:
+      - method: POST
+        path: /oauth/token
+        response:
+          status: 200
+          token_type: Bearer
+          expires_in: 3600
+
+  - name: reservation
+    description: Async reservation creation and retrieval
+    pattern: async
+    endpoints:
+      # Step 1 — submit reservation request
+      - step: 1
+        method: POST
+        path: /staylink/reservations
+        response:
+          status: 202
+          generates_id: true
+          id_header: Location
+          id_header_value: /staylink/reservations/{id}
+      # Step 2 — check completion status
+      - step: 2
+        method: HEAD
+        path: /staylink/reservations/{id}
+        response:
+          status: 201
+          headers:
+            Status: COMPLETED
+      # Step 3 — retrieve stored payload
+      - step: 3
+        method: GET
+        path: /staylink/reservations/{id}
+        response:
+          status: 200
+          returns_payload: true

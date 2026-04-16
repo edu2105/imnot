@@ -48,13 +48,18 @@ Requires Python 3.11 or later.
 
 ```bash
 pipx install imnot
+imnot init
 imnot start
 ```
 
 > `pipx` installs CLI tools into isolated environments — no venv setup needed.
 > Alternatively: `pip install imnot` inside an existing virtual environment.
 
-Expected output:
+`imnot init` creates a `partners/` directory in the current folder with two working
+example partners (`staylink` and `bookingco`) that cover all the main patterns. Edit
+or replace them with your own YAML definitions whenever you're ready.
+
+Expected output from `imnot start`:
 ```
 Starting imnot on http://127.0.0.1:8000
 INFO:     Started server process [12345]
@@ -398,6 +403,8 @@ Set `IMNOT_ADMIN_KEY` in `docker-compose.yml` for Docker deployments.
 
 | Command | Description |
 |---------|-------------|
+| `imnot init` | Scaffold a new project with example partner definitions (run once, in a new directory) |
+| `imnot init --dir <path>` | Scaffold into a specific directory (created if it does not exist) |
 | `imnot start` | Load all partner YAMLs and start the server |
 | `imnot start --reload` | Start with auto-restart on any YAML change (recommended for development) |
 | `imnot generate --file <path>` | Validate and scaffold a partner YAML into `partners/` |
