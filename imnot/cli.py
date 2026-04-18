@@ -67,6 +67,7 @@ def _resolve_partners_dir(given: str) -> Path:
 
 
 @click.group()
+@click.version_option(package_name="imnot")
 def cli() -> None:
     """imnot — stateful API mock server for integration testing."""
 
