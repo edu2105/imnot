@@ -88,7 +88,7 @@ def test_start_missing_partners_dir_exits(runner, tmp_path):
 def test_status_no_db(runner, tmp_path):
     result = runner.invoke(cli, ["status", "--db", str(tmp_path / "missing.db")])
     assert result.exit_code == 1
-    assert "No database found" in result.output
+    assert "not found" in result.output
 
 
 def test_status_empty(runner, tmp_path):
