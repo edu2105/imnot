@@ -519,10 +519,44 @@ def sessions_clear(db: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _resolve_db(given: str) -> Path:
+    """Resolve the database file path.
+
+    If *given* exists (absolute or relative to CWD), return it.
+    Otherwise walk up the directory tree looking for the filename.
+    Raises ``FileNotFoundError`` if nothing is found.
+    """
+    given_path = Path(given)
+    if given_path.is_absolute():
+        if given_path.exists():
+            return given_path
+        raise FileNotFoundError(
+            f"Database '{given}' not found. Has the server been started yet?"
+        )
+    if given_path.exists():
+        return given_path.resolve()
+    # Walk up from CWD looking for the filename
+    name = given_path.name
+    current = Path.cwd()
+    while True:
+        candidate = current / name
+        if candidate.exists():
+            return candidate
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    raise FileNotFoundError(
+        f"Database '{given}' not found in {Path.cwd()} or any parent directory. "
+        f"Has the server been started yet?"
+    )
+
+
 def _open_store(db: str) -> SessionStore:
-    db_path = Path(db)
-    if not db_path.exists():
-        click.echo(f"No database found at {db_path}. Has the server been started yet?", err=True)
+    try:
+        db_path = _resolve_db(db)
+    except FileNotFoundError as exc:
+        click.echo(str(exc), err=True)
         raise SystemExit(1)
     store = SessionStore(db_path=db_path)
     store.init()
