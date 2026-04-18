@@ -8,6 +8,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Feat: auto-discover imnot.db by walking up from CWD
+
+All --db commands (status, payload, sessions) now work from any
+subdirectory of the project, mirroring --partners-dir behaviour.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com> ([e2467e6](https://github.com/edu2105/imnot/commit/e2467e6b1ef5dc53ee3f9173fe7350e1e46764c3))
+- Feat: add imnot --version flag
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com> ([22e656a](https://github.com/edu2105/imnot/commit/22e656a160bcba3f3b058cba9bb0609a1f5ac2bd))
+
+### Changes
+
+- Merge pull request #21 from edu2105/feat/db-auto-discovery
+
+feat: auto-discover imnot.db by walking up from CWD ([ea1a1ef](https://github.com/edu2105/imnot/commit/ea1a1ef347ab1b0784674e90fbb736ed52c233d8))
+- Merge pull request #20 from edu2105/feat/version-option
+
+feat: add imnot --version flag ([7c11a59](https://github.com/edu2105/imnot/commit/7c11a593824bb3a3e3a84f385ba20e9775ee8bfb))
+
+## [0.4.3] - 2026-04-16
+
+### Added
+
 - Feat: add imnot init command for project scaffolding
 
 `imnot init [--dir DIR]` creates a partners/ directory with working
@@ -43,12 +66,22 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com> ([6eec9d1](https://git
 
 ### Changes
 
+- Merge pull request #19 from edu2105/fix/pypi-trusted-publisher-env
+
+fix: add environment: production to publish-pypi job for OIDC trusted publishing ([c667522](https://github.com/edu2105/imnot/commit/c6675226e86028f5a16c6036b1c3eda3a4bb8a64))
+- Merge pull request #18 from edu2105/release/v0.4.3
+
+chore(release): v0.4.3 ([932f5d3](https://github.com/edu2105/imnot/commit/932f5d3eaec260202ec7f7af26f5b5d61e1dcc25))
 - Merge pull request #17 from edu2105/feat/imnot-init
 
 feat: add imnot init command for project scaffolding ([7af774e](https://github.com/edu2105/imnot/commit/7af774e2ac2b3621fb7d866415ce8a442e48bbbf))
 - Merge pull request #16 from edu2105/ci/secure-release-workflow
 
 ci: secure release workflow with admin-only gate and auto changelog ([fd96f2f](https://github.com/edu2105/imnot/commit/fd96f2f4469e3bb3caf82fb56539f86696523bba))
+
+### Fixed
+
+- Fix: add environment: production to publish-pypi job for OIDC trusted publishing ([550ec86](https://github.com/edu2105/imnot/commit/550ec86e279bf8d9292b911197c4799e648ab235))
 
 ## [0.4.2] - 2026-04-16
 
