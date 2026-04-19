@@ -16,8 +16,9 @@
 set -euo pipefail
 
 QA_DIR="$(cd "$(dirname "$0")" && pwd)"
-BASE="http://127.0.0.1:8000"
-CALLBACK_PORT=9998
+SERVER_PORT="${IMNOT_QA_PORT:-8000}"
+CALLBACK_PORT="${IMNOT_QA_CALLBACK_PORT:-9998}"
+BASE="http://127.0.0.1:${SERVER_PORT}"
 CALLBACK_BASE="http://127.0.0.1:${CALLBACK_PORT}"
 CALLBACK_FILE="/tmp/imnot-qa-callback-$$.json"
 
@@ -183,7 +184,7 @@ phase_result 1
 
 phase 2 "Default partner endpoint flows (staylink + bookingco)"
 
-imnot start --db "$TEST_DIR/imnot.db" > /tmp/imnot-qa-server-$$.log 2>&1 &
+imnot start --db "$TEST_DIR/imnot.db" --port "$SERVER_PORT" > /tmp/imnot-qa-server-$$.log 2>&1 &
 wait_for_server && ok "Server started and /healthz ready" || { fail "Server failed to start"; exit 1; }
 
 echo ""
@@ -418,19 +419,18 @@ assert_status "POST /testingpartner/notifications" 202 "$PUSH_STATUS"
 REQUEST_ID=$(echo "$PUSH_BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('request_id',''))" 2>/dev/null)
 [ -n "$REQUEST_ID" ] && ok "POST /testingpartner/notifications — request_id returned" || fail "POST /testingpartner/notifications — request_id missing"
 
-# Wait briefly for async callback delivery
-sleep 1.5
-CALLBACK_FILE_ENV="$CALLBACK_FILE" CALLBACK_PORT="$CALLBACK_PORT" python3 -c "
-import os, json
-f = os.environ.get('CALLBACK_FILE_ENV', '/tmp/imnot-qa-callback.json')
-try:
-    d = json.load(open(f))
-    print('ok')
-except Exception as e:
-    print('fail: ' + str(e))
-" | grep -q "ok" \
+# Wait for async callback delivery (poll up to 5 s)
+CALLBACK_RECEIVED=0
+for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25; do
+  sleep 0.2
+  if [ -s "$CALLBACK_FILE" ] && python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$CALLBACK_FILE" 2>/dev/null; then
+    CALLBACK_RECEIVED=1
+    break
+  fi
+done
+[ "$CALLBACK_RECEIVED" -eq 1 ] \
   && ok "Push callback — payload delivered to callback URL" \
-  || fail "Push callback — callback not received within 1.5 s"
+  || fail "Push callback — callback not received within 5 s"
 
 CALLBACK_BODY=$(cat "$CALLBACK_FILE" 2>/dev/null || echo "{}")
 assert_contains "Push callback — payload contains event field" "qa.triggered" "$CALLBACK_BODY"
@@ -466,7 +466,7 @@ fi
 
 echo ""
 echo "  ── restart ──"
-imnot start --db "$TEST_DIR/imnot.db" > /tmp/imnot-qa-server2-$$.log 2>&1 &
+imnot start --db "$TEST_DIR/imnot.db" --port "$SERVER_PORT" > /tmp/imnot-qa-server2-$$.log 2>&1 &
 wait_for_server && ok "imnot start (restart) — server ready" || { fail "Server failed to restart"; exit 1; }
 
 echo ""

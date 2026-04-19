@@ -34,3 +34,25 @@ jobs:
         run: |
           pip install bandit -q
           bandit -r imnot/ -f screen
+
+  qa:
+    name: E2E QA suite
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install imnot
+        run: pip install -e ".[dev]"
+
+      - name: Run QA suite
+        env:
+          IMNOT_QA_PORT: 18000
+          IMNOT_QA_CALLBACK_PORT: 18998
+        run: bash scripts/qa/run.sh
