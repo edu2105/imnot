@@ -2,13 +2,14 @@
 
 import json
 import os
+import signal
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
 
-from imnot.cli import cli, _resolve_partners_dir
+from imnot.cli import cli, _resolve_partners_dir, _resolve_pid
 from imnot.engine.session_store import SessionStore
 
 PARTNERS_DIR = Path(__file__).parent.parent / "partners"
@@ -558,6 +559,215 @@ def test_init_default_dir_is_cwd(runner, tmp_path):
 
     assert result.exit_code == 0, result.output
     assert (tmp_path / "partners" / "staylink" / "partner.yaml").exists()
+
+
+# ---------------------------------------------------------------------------
+# imnot start — PID file lifecycle
+# ---------------------------------------------------------------------------
+
+
+def test_start_writes_pid_file_during_run(runner, tmp_path):
+    """imnot start writes imnot.pid before uvicorn runs."""
+    db_path = tmp_path / "test.db"
+    pid_path = tmp_path / "test.pid"
+    written_pids = []
+
+    def capture_pid(*_args, **_kwargs):
+        if pid_path.exists():
+            written_pids.append(pid_path.read_text().strip())
+
+    with patch("imnot.cli.uvicorn.run", side_effect=capture_pid):
+        result = runner.invoke(cli, [
+            "start",
+            "--partners-dir", str(PARTNERS_DIR),
+            "--db", str(db_path),
+        ])
+
+    assert result.exit_code == 0, result.output
+    assert len(written_pids) == 1
+    assert written_pids[0].isdigit()
+
+
+def test_start_removes_pid_file_on_clean_exit(runner, tmp_path):
+    """imnot start removes imnot.pid after uvicorn exits normally."""
+    db_path = tmp_path / "test.db"
+    pid_path = tmp_path / "test.pid"
+
+    with patch("imnot.cli.uvicorn.run"):
+        runner.invoke(cli, [
+            "start",
+            "--partners-dir", str(PARTNERS_DIR),
+            "--db", str(db_path),
+        ])
+
+    assert not pid_path.exists()
+
+
+def test_start_removes_pid_file_on_exception(runner, tmp_path):
+    """imnot start removes imnot.pid even when uvicorn raises."""
+    db_path = tmp_path / "test.db"
+    pid_path = tmp_path / "test.pid"
+
+    with patch("imnot.cli.uvicorn.run", side_effect=RuntimeError("boom")):
+        runner.invoke(cli, [
+            "start",
+            "--partners-dir", str(PARTNERS_DIR),
+            "--db", str(db_path),
+        ])
+
+    assert not pid_path.exists()
+
+
+# ---------------------------------------------------------------------------
+# _resolve_pid
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_pid_finds_in_cwd(tmp_path):
+    pid_file = tmp_path / "imnot.pid"
+    pid_file.write_text("1234")
+    original = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        assert _resolve_pid("imnot.pid") == pid_file
+    finally:
+        os.chdir(original)
+
+
+def test_resolve_pid_finds_in_parent(tmp_path):
+    pid_file = tmp_path / "imnot.pid"
+    pid_file.write_text("1234")
+    subdir = tmp_path / "a" / "b"
+    subdir.mkdir(parents=True)
+    original = os.getcwd()
+    try:
+        os.chdir(subdir)
+        assert _resolve_pid("imnot.pid") == pid_file
+    finally:
+        os.chdir(original)
+
+
+def test_resolve_pid_raises_when_not_found(tmp_path):
+    original = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with pytest.raises(FileNotFoundError):
+            _resolve_pid("imnot.pid")
+    finally:
+        os.chdir(original)
+
+
+def test_resolve_pid_absolute_path_found(tmp_path):
+    pid_file = tmp_path / "imnot.pid"
+    pid_file.write_text("1234")
+    assert _resolve_pid(str(pid_file)) == pid_file
+
+
+def test_resolve_pid_absolute_path_missing_raises(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        _resolve_pid(str(tmp_path / "missing.pid"))
+
+
+# ---------------------------------------------------------------------------
+# imnot stop
+# ---------------------------------------------------------------------------
+
+
+def test_stop_no_pid_file_exits_1(runner, tmp_path):
+    """No PID file → exit 1 with error message."""
+    original = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        result = runner.invoke(cli, ["stop"])
+    finally:
+        os.chdir(original)
+
+    assert result.exit_code == 1
+    assert "not found" in result.output
+
+
+def test_stop_invalid_pid_content_exits_1(runner, tmp_path):
+    """PID file contains non-integer → exit 1."""
+    pid_file = tmp_path / "imnot.pid"
+    pid_file.write_text("not-a-number")
+
+    result = runner.invoke(cli, ["stop", "--pid-file", str(pid_file)])
+
+    assert result.exit_code == 1
+
+
+def test_stop_stale_pid_cleans_up(runner, tmp_path):
+    """Process already gone → warn, remove file, exit 0."""
+    pid_file = tmp_path / "imnot.pid"
+    pid_file.write_text("99999")
+
+    with patch("imnot.cli.os.kill", side_effect=ProcessLookupError):
+        result = runner.invoke(cli, ["stop", "--pid-file", str(pid_file)])
+
+    assert result.exit_code == 0
+    assert not pid_file.exists()
+    assert "stale" in result.output.lower() or "not running" in result.output.lower()
+
+
+def test_stop_sends_sigterm_and_exits_0(runner, tmp_path):
+    """Process alive → SIGTERM sent, process exits, file removed, exit 0."""
+    pid_file = tmp_path / "imnot.pid"
+    pid_file.write_text("12345")
+
+    kill_calls = []
+
+    def fake_kill(pid, sig):
+        kill_calls.append((pid, sig))
+        # Process dies after SIGTERM is sent (signal 0 on second call raises)
+        if sig == 0 and len(kill_calls) > 1:
+            raise ProcessLookupError
+
+    with patch("imnot.cli.os.kill", side_effect=fake_kill):
+        with patch("imnot.cli.time.sleep"):
+            result = runner.invoke(cli, ["stop", "--pid-file", str(pid_file)])
+
+    assert result.exit_code == 0
+    assert not pid_file.exists()
+    assert "stopped" in result.output
+    assert (12345, signal.SIGTERM) in kill_calls
+
+
+def test_stop_timeout_exits_1(runner, tmp_path):
+    """Process never exits → exit 1 with kill -9 hint."""
+    pid_file = tmp_path / "imnot.pid"
+    pid_file.write_text("12345")
+
+    with patch("imnot.cli.os.kill"):  # never raises — process stays alive
+        with patch("imnot.cli.time.sleep"):
+            with patch("imnot.cli.time.monotonic", side_effect=[0.0, 0.0, 6.0]):
+                result = runner.invoke(cli, ["stop", "--pid-file", str(pid_file)])
+
+    assert result.exit_code == 1
+    assert "kill -9" in result.output
+
+
+def test_stop_permission_error_exits_1(runner, tmp_path):
+    """No permission to signal process → exit 1."""
+    pid_file = tmp_path / "imnot.pid"
+    pid_file.write_text("1")
+
+    with patch("imnot.cli.os.kill", side_effect=PermissionError):
+        result = runner.invoke(cli, ["stop", "--pid-file", str(pid_file)])
+
+    assert result.exit_code == 1
+    assert "permission" in result.output.lower()
+
+
+def test_stop_explicit_pid_file_path(runner, tmp_path):
+    """--pid-file with explicit path is honoured."""
+    pid_file = tmp_path / "custom.pid"
+    pid_file.write_text("99999")
+
+    with patch("imnot.cli.os.kill", side_effect=ProcessLookupError):
+        result = runner.invoke(cli, ["stop", "--pid-file", str(pid_file)])
+
+    assert result.exit_code == 0
+    assert not pid_file.exists()
 
 
 def test_start_missing_partners_dir_suggests_init(runner, tmp_path):

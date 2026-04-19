@@ -405,8 +405,10 @@ Set `IMNOT_ADMIN_KEY` in `docker-compose.yml` for Docker deployments.
 |---------|-------------|
 | `imnot init` | Scaffold a new project with example partner definitions (run once, in a new directory) |
 | `imnot init --dir <path>` | Scaffold into a specific directory (created if it does not exist) |
-| `imnot start` | Load all partner YAMLs and start the server |
+| `imnot start` | Load all partner YAMLs and start the server (writes `imnot.pid` alongside `imnot.db`) |
 | `imnot start --reload` | Start with auto-restart on any YAML change (recommended for development) |
+| `imnot stop` | Stop the running server by sending SIGTERM to the PID in `imnot.pid` |
+| `imnot stop --pid-file <path>` | Stop using an explicit PID file path |
 | `imnot generate --file <path>` | Validate and scaffold a partner YAML into `partners/` |
 | `imnot generate --file <path> --dry-run --json` | Validate only — print structured result, write nothing |
 | `imnot export postman` | Generate a Postman collection v2.1 JSON from all loaded partners |

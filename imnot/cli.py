@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import sys
+import time
 from importlib.resources import files
 from pathlib import Path
 
@@ -110,31 +112,98 @@ def start(partners_dir: str, db: str, host: str, port: int, reload: bool, admin_
 
     db_path = Path(db)
     effective_admin_key = admin_key or None
+    pid_path = db_path.with_suffix(".pid")
 
     click.echo(f"Starting imnot on http://{host}:{port}")
 
-    if reload:
-        # uvicorn reload mode requires a factory import string, not an app object.
-        # Export configuration via env vars so create_app_from_env() can pick them up.
-        os.environ["IMNOT_PARTNERS_DIR"] = str(resolved_partners_dir)
-        os.environ["IMNOT_DB_PATH"] = str(db_path)
-        if effective_admin_key:
-            os.environ["IMNOT_ADMIN_KEY"] = effective_admin_key
-        uvicorn.run(
-            "imnot.api.server:create_app_from_env",
-            host=host,
-            port=port,
-            reload=True,
-            reload_includes=["*.yaml"],
-            factory=True,
-        )
-    else:
-        app = create_app(
-            partners_dir=resolved_partners_dir,
-            db_path=db_path,
-            admin_key=effective_admin_key,
-        )
-        uvicorn.run(app, host=host, port=port)
+    pid_path.write_text(str(os.getpid()))
+    try:
+        if reload:
+            # uvicorn reload mode requires a factory import string, not an app object.
+            # Export configuration via env vars so create_app_from_env() can pick them up.
+            os.environ["IMNOT_PARTNERS_DIR"] = str(resolved_partners_dir)
+            os.environ["IMNOT_DB_PATH"] = str(db_path)
+            if effective_admin_key:
+                os.environ["IMNOT_ADMIN_KEY"] = effective_admin_key
+            uvicorn.run(
+                "imnot.api.server:create_app_from_env",
+                host=host,
+                port=port,
+                reload=True,
+                reload_includes=["*.yaml"],
+                factory=True,
+            )
+        else:
+            app = create_app(
+                partners_dir=resolved_partners_dir,
+                db_path=db_path,
+                admin_key=effective_admin_key,
+            )
+            uvicorn.run(app, host=host, port=port)
+    finally:
+        if pid_path.exists():
+            pid_path.unlink()
+
+
+# ---------------------------------------------------------------------------
+# imnot stop
+# ---------------------------------------------------------------------------
+
+_DEFAULT_PID = "imnot.pid"
+_STOP_TIMEOUT = 5.0
+_STOP_POLL_INTERVAL = 0.1
+
+
+@cli.command()
+@click.option(
+    "--pid-file",
+    default=_DEFAULT_PID,
+    show_default=True,
+    help="Path to the PID file written by `imnot start`.",
+)
+def stop(pid_file: str) -> None:
+    """Stop a running imnot server."""
+    try:
+        pid_path = _resolve_pid(pid_file)
+    except FileNotFoundError as exc:
+        click.echo(str(exc), err=True)
+        raise SystemExit(1)
+
+    try:
+        pid = int(pid_path.read_text().strip())
+    except (ValueError, OSError) as exc:
+        click.echo(f"Could not read PID file '{pid_path}': {exc}", err=True)
+        raise SystemExit(1)
+
+    # Check whether the process is still alive (signal 0 probes without killing).
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        click.echo(f"Process {pid} is not running (stale PID file). Cleaning up.")
+        pid_path.unlink(missing_ok=True)
+        return
+    except PermissionError:
+        click.echo(f"No permission to signal process {pid}.", err=True)
+        raise SystemExit(1)
+
+    os.kill(pid, signal.SIGTERM)
+
+    deadline = time.monotonic() + _STOP_TIMEOUT
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            pid_path.unlink(missing_ok=True)
+            click.echo(f"imnot stopped (pid {pid}).")
+            return
+        time.sleep(_STOP_POLL_INTERVAL)
+
+    click.echo(
+        f"Process {pid} did not exit within {_STOP_TIMEOUT:.0f}s. "
+        f"Run `kill -9 {pid}` to force-stop it.",
+        err=True,
+    )
+    raise SystemExit(1)
 
 
 # ---------------------------------------------------------------------------
@@ -549,6 +618,33 @@ def _resolve_db(given: str) -> Path:
     raise FileNotFoundError(
         f"Database '{given}' not found in {Path.cwd()} or any parent directory. "
         f"Has the server been started yet?"
+    )
+
+
+def _resolve_pid(given: str) -> Path:
+    """Resolve the PID file path, walking up from CWD if needed."""
+    given_path = Path(given)
+    if given_path.is_absolute():
+        if given_path.exists():
+            return given_path
+        raise FileNotFoundError(
+            f"PID file '{given}' not found. Is the server running?"
+        )
+    if given_path.exists():
+        return given_path.resolve()
+    name = given_path.name
+    current = Path.cwd()
+    while True:
+        candidate = current / name
+        if candidate.exists():
+            return candidate
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    raise FileNotFoundError(
+        f"PID file '{given}' not found in {Path.cwd()} or any parent directory. "
+        f"Is the server running?"
     )
 
 
