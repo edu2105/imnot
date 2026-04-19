@@ -16,6 +16,7 @@ Responsibilities:
 
 from __future__ import annotations
 
+import hmac
 import logging
 from importlib.metadata import version as _pkg_version
 from pathlib import Path
@@ -110,7 +111,13 @@ def _register_admin_auth_middleware(app: FastAPI, admin_key: str) -> None:
         async def dispatch(self, request: Request, call_next):  # type: ignore[override]
             if request.url.path.startswith("/imnot/admin/"):
                 auth = request.headers.get("Authorization", "")
-                if auth != f"Bearer {admin_key}":
+                if not hmac.compare_digest(auth, f"Bearer {admin_key}"):
+                    logger.warning(
+                        "Admin auth failure: %s %s from %s",
+                        request.method,
+                        request.url.path,
+                        request.client.host if request.client else "unknown",
+                    )
                     return Response(
                         content='{"detail":"Unauthorized"}',
                         status_code=401,
@@ -375,7 +382,8 @@ def _register_infra_routes(
         try:
             new_partners = load_partners(partners_dir)
         except Exception as exc:
-            return JSONResponse(status_code=500, content={"detail": str(exc)})
+            logger.exception("Reload failed: %s", exc)
+            return JSONResponse(status_code=500, content={"detail": "Reload failed. Check server logs for details."})
 
         configs: dict = request.app.state.configs
         store_: SessionStore = request.app.state.store

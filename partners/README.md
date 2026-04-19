@@ -24,7 +24,7 @@ partners/
 ## Top-level structure
 
 ```yaml
-partner: <string>           # unique identifier, lowercase, no spaces (e.g. "ohip", "stripe")
+partner: <string>           # unique identifier — letters, digits, hyphens, underscores only; max 64 chars (e.g. "ohip", "stripe")
 description: <string>       # human-readable description of the partner
 
 datapoints:                 # list of one or more datapoints (see below)
@@ -33,7 +33,7 @@ datapoints:                 # list of one or more datapoints (see below)
 
 | Field | Required | Notes |
 |-------|----------|-------|
-| `partner` | Yes | Used in admin URLs: `/imnot/admin/{partner}/...` |
+| `partner` | Yes | Used in admin URLs: `/imnot/admin/{partner}/...`; must match `^[a-zA-Z0-9_-]{1,64}$` |
 | `description` | No | Shown in `GET /imnot/admin/partners` |
 | `datapoints` | Yes | At least one required |
 

@@ -4,10 +4,13 @@ Core partner registration logic, shared by the CLI and the HTTP admin endpoint.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from imnot.loader.yaml_loader import PartnerDef, parse_partner_yaml
+
+_SAFE_NAME = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
 
 @dataclass
@@ -31,7 +34,20 @@ def register_partner(
     """
     partner = parse_partner_yaml(yaml_text)
 
+    if not _SAFE_NAME.match(partner.partner):
+        raise ValueError(
+            f"Partner name '{partner.partner}' is invalid. "
+            "Use only letters, digits, hyphens, and underscores (max 64 chars)."
+        )
+
     dest_dir = partners_dir / partner.partner
+    # Guard against path traversal — pathlib does not resolve '..' in '/' joins.
+    try:
+        dest_dir.resolve().relative_to(partners_dir.resolve())
+    except ValueError:
+        raise ValueError(
+            f"Partner name '{partner.partner}' would escape the partners directory."
+        )
     dest_file = dest_dir / "partner.yaml"
     file_exists = dest_file.exists()
 
