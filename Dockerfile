@@ -9,7 +9,12 @@ RUN pip install --no-cache-dir .
 
 # Partners and data directories are expected to be volume-mounted at runtime.
 # Create them so the container starts cleanly even without mounts.
-RUN mkdir -p /app/partners /app/data
+RUN mkdir -p /app/partners /app/data && \
+    addgroup --system imnot && \
+    adduser --system --ingroup imnot imnot && \
+    chown -R imnot:imnot /app/partners /app/data
+
+USER imnot
 
 EXPOSE 8000
 

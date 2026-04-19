@@ -159,7 +159,7 @@ def load_partners(partners_dir: Path) -> list[PartnerDef]:
                 len(partner.datapoints),
                 yaml_path,
             )
-        except Exception as exc:
+        except (yaml.YAMLError, ValueError) as exc:
             logger.error("Failed to load partner from %s: %s", yaml_path, exc)
 
     return partners

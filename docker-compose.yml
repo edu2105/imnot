@@ -7,7 +7,9 @@ services:
       - ./partners:/app/partners   # partner YAMLs — edit without rebuilding
       - ./data:/app/data           # SQLite db — persists across restarts
     environment:
-      # Set IMNOT_ADMIN_KEY to require Bearer token auth on all /imnot/admin/* endpoints.
-      # Leave unset (or empty) for open access — suitable for local dev only.
-      IMNOT_ADMIN_KEY: ""
+      # Required for non-local deployments. Generate with:
+      #   python -c "import secrets; print(secrets.token_hex(32))"
+      # Then set it in a .env file or pass -e IMNOT_ADMIN_KEY=<secret> at runtime.
+      # Leave empty only for local-only dev (binds to 127.0.0.1 by default).
+      IMNOT_ADMIN_KEY: "${IMNOT_ADMIN_KEY:-}"
     restart: unless-stopped
