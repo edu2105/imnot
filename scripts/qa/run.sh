@@ -130,7 +130,8 @@ phase 1 "CLI commands (no server)"
 
 # --version
 VERSION_OUT=$(imnot --version 2>&1)
-assert_contains "imnot --version prints version string" "." "$VERSION_OUT"
+EXPECTED_VERSION=$(grep '^version = ' "$QA_DIR/../../pyproject.toml" | sed 's/version = "\(.*\)"/\1/')
+assert_contains "imnot --version matches pyproject.toml ($EXPECTED_VERSION)" "$EXPECTED_VERSION" "$VERSION_OUT"
 
 # init
 imnot init > /dev/null 2>&1
