@@ -8,6 +8,104 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Feat: add E2E QA suite and fix reload partners list bug
+
+scripts/qa/run.sh — 5-phase end-to-end suite against a real server:
+  Phase 1: CLI commands (init, routes, export postman, generate)
+  Phase 2: Full pattern flows for staylink and bookingco
+  Phase 3: imnot generate testingpartner + hot reload
+  Phase 4: All five patterns exercised on the generated partner
+  Phase 5: imnot stop / restart / DB persistence verification
+80 checks, all green.
+
+scripts/qa/testingpartner.yaml — QA test partner covering oauth, async,
+static, fetch, and push in a single file.
+
+Fix: GET /imnot/admin/partners not updating after POST /imnot/admin/reload.
+reload_partners and create_partner_handler were reassigning
+app.state.partners to a new list object, severing the closure captured
+by list_partners. Both handlers now mutate the original list in-place.
+New regression test: test_reload_updates_partners_list.
+
+251 unit/integration tests passing.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com> ([1e7be33](https://github.com/edu2105/imnot/commit/1e7be33b488b2c8ee1e3a70ff888671a520e8e8e))
+- Feat: add imnot stop command
+
+imnot start now writes imnot.pid (co-located with imnot.db) before
+launching uvicorn and removes it in a try/finally on exit. imnot stop
+reads the PID file via the same walk-up discovery as imnot.db, sends
+SIGTERM, and waits up to 5 s for the process to exit. Stale PIDs are
+cleaned up silently; processes that outlive the timeout prompt the user
+to kill -9 manually.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com> ([fbcf0eb](https://github.com/edu2105/imnot/commit/fbcf0eb182e798c4c1d063c995c5de68b9f7e152))
+
+### CI
+
+- Ci: add non-gated E2E QA job and harden QA script for CI
+
+- Ports are now overridable via IMNOT_QA_PORT / IMNOT_QA_CALLBACK_PORT
+  (CI uses 18000/18998) to avoid collisions on shared runners
+- Replace fixed sleep 1.5 with a 5s polling loop for push callback check
+- New qa job in ci.yml runs on every PR push with continue-on-error: true
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com> ([4c083a3](https://github.com/edu2105/imnot/commit/4c083a30f3047316c80c1af6551a80ceb9e89d81))
+
+### Changes
+
+- Merge pull request #26 from edu2105/feat/qa-suite
+
+security: harden imnot against 8 OWASP findings (path traversal, auth, supply chain, Docker) ([f148fb6](https://github.com/edu2105/imnot/commit/f148fb6f38b5a747a65fc0927ac4f35b2d9d36d7))
+- Security: harden partner name validation, admin auth, CI supply chain, and Docker
+
+OWASP audit findings addressed (2026-04-19):
+
+- H-2: Validate partner name against ^[a-zA-Z0-9_-]{1,64}$ and resolve().relative_to()
+  in register_partner() to block path traversal via crafted YAML partner names
+- H-3: docker-compose IMNOT_ADMIN_KEY now reads from env var with operator guidance
+  instead of a hardcoded empty string
+- M-1: reload_partners 500 response no longer leaks internal exception strings;
+  logs via logger.exception and returns a generic message
+- M-3: Pin all GitHub Actions to full commit SHAs in ci.yml and release.yml
+- L-1: Dockerfile adds non-root 'imnot' user and sets USER before EXPOSE
+- L-2: yaml_loader broad except Exception narrowed to (yaml.YAMLError, ValueError)
+- L-3: Admin auth comparison swapped to hmac.compare_digest to remove timing oracle
+- I-2: AdminAuthMiddleware logs a warning with method/path/client on every 401
+
+docs: partners/README.md updated to reflect partner name character constraints
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com> ([66d721b](https://github.com/edu2105/imnot/commit/66d721b2da165ac526738e67a168c04e6776f521))
+- Merge pull request #25 from edu2105/feat/qa-suite
+
+feat: E2E QA suite with CI integration ([f100c22](https://github.com/edu2105/imnot/commit/f100c22e081b9cbe41492e696e6b67365c4d3681))
+- Merge pull request #24 from edu2105/feat/qa-suite
+
+feat: add E2E QA suite and fix reload partners list bug ([d5bcba1](https://github.com/edu2105/imnot/commit/d5bcba186f9e2b67ea7093f1a652a1816311d46d))
+- Merge pull request #23 from edu2105/feat/imnot-stop
+
+feat: add imnot stop command ([d3cc707](https://github.com/edu2105/imnot/commit/d3cc7071281ba4c97f3ab8a97bc84b918f77cbce))
+
+### Fixed
+
+- Fix(qa): export CALLBACK_PORT and CALLBACK_FILE to callback server subprocess
+
+Shell variables are not inherited by child processes unless exported.
+In CI the ports are overridden via env vars, so the curl hit port 18998
+but the Python server was still binding to the default 9998.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com> ([331a5b5](https://github.com/edu2105/imnot/commit/331a5b5a88b7e366f8b59ec61f687a316b815b8b))
+
+### Testing
+
+- Test(qa): verify imnot --version matches pyproject.toml
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com> ([89f1eae](https://github.com/edu2105/imnot/commit/89f1eae754032401f7b3d12ed29e6fe25410b0f5))
+
+## [0.4.4] - 2026-04-18
+
+### Added
+
 - Feat: auto-discover imnot.db by walking up from CWD
 
 All --db commands (status, payload, sessions) now work from any
@@ -20,6 +118,9 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com> ([22e656a](https://git
 
 ### Changes
 
+- Merge pull request #22 from edu2105/release/v0.4.4
+
+chore(release): v0.4.4 ([f697877](https://github.com/edu2105/imnot/commit/f697877fd7d645b59c956ba4ef31e979a385507f))
 - Merge pull request #21 from edu2105/feat/db-auto-discovery
 
 feat: auto-discover imnot.db by walking up from CWD ([ea1a1ef](https://github.com/edu2105/imnot/commit/ea1a1ef347ab1b0784674e90fbb736ed52c233d8))
