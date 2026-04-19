@@ -525,6 +525,45 @@ def test_reload_registers_new_partner(store, tmp_path):
     assert c.get("/secondpartner/hello").json() == {"hello": "world"}
 
 
+def test_reload_updates_partners_list(store, tmp_path):
+    """POST /imnot/admin/reload must update app.state.partners so that
+    GET /imnot/admin/partners reflects newly added partners."""
+    partner_dir = tmp_path / "alpha"
+    partner_dir.mkdir()
+    (partner_dir / "partner.yaml").write_text(
+        "partner: alpha\ndescription: Alpha\ndatapoints:\n"
+        "  - name: ping\n    description: Ping\n    pattern: static\n"
+        "    endpoints:\n      - method: GET\n        path: /alpha/ping\n"
+        "        response:\n          status: 200\n          body:\n            ok: true\n"
+    )
+
+    app = FastAPI()
+    partners = load_partners(tmp_path)
+    register_routes(app, partners, store, partners_dir=tmp_path)
+    c = TestClient(app, raise_server_exceptions=True)
+
+    # Sanity: alpha is listed before reload
+    body = c.get("/imnot/admin/partners").json()
+    assert any(p["partner"] == "alpha" for p in body)
+
+    # Add beta partner
+    beta_dir = tmp_path / "beta"
+    beta_dir.mkdir()
+    (beta_dir / "partner.yaml").write_text(
+        "partner: beta\ndescription: Beta\ndatapoints:\n"
+        "  - name: greet\n    description: Greet\n    pattern: static\n"
+        "    endpoints:\n      - method: GET\n        path: /beta/greet\n"
+        "        response:\n          status: 200\n          body:\n            hello: beta\n"
+    )
+
+    c.post("/imnot/admin/reload")
+
+    body = c.get("/imnot/admin/partners").json()
+    partner_names = [p["partner"] for p in body]
+    assert "alpha" in partner_names
+    assert "beta" in partner_names
+
+
 # ---------------------------------------------------------------------------
 # imnot generate → reload integration
 # ---------------------------------------------------------------------------
