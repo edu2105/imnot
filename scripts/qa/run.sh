@@ -381,7 +381,7 @@ assert_contains "GET /testingpartner/records/{id} — payload matches" "QA Recor
 echo ""
 echo "  ── push ──"
 # Start a minimal callback capture server
-python3 - <<'PYEOF' &
+CALLBACK_FILE="$CALLBACK_FILE" CALLBACK_PORT="$CALLBACK_PORT" python3 - <<'PYEOF' &
 import http.server, os
 
 class Handler(http.server.BaseHTTPRequestHandler):
