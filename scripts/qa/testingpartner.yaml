@@ -1,0 +1,72 @@
+partner: testingpartner
+description: QA test partner — covers all five patterns (oauth, async, static, fetch, push)
+
+datapoints:
+
+  - name: token
+    description: OAuth 2.0 token endpoint
+    pattern: oauth
+    endpoints:
+      - method: POST
+        path: /testingpartner/oauth/token
+        response:
+          status: 200
+          token_type: Bearer
+          expires_in: 3600
+
+  - name: job
+    description: Async job submission and retrieval
+    pattern: async
+    endpoints:
+      - step: 1
+        method: POST
+        path: /testingpartner/jobs
+        response:
+          status: 202
+          generates_id: true
+          id_body_field: jobId
+      - step: 2
+        method: GET
+        path: /testingpartner/jobs/{id}/status
+        response:
+          status: 200
+      - step: 3
+        method: GET
+        path: /testingpartner/jobs/{id}/result
+        response:
+          status: 200
+          returns_payload: true
+
+  - name: config
+    description: Static configuration — fixed response, no payload upload needed
+    pattern: static
+    endpoints:
+      - method: GET
+        path: /testingpartner/config
+        response:
+          status: 200
+          body:
+            version: "1.0"
+            env: qa
+            features:
+              - feature-a
+              - feature-b
+
+  - name: record
+    description: Fetch a record by ID — payload driven
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /testingpartner/records/{id}
+        response:
+          status: 200
+
+  - name: notification
+    description: Push notification with outbound callback
+    pattern: push
+    endpoints:
+      - method: POST
+        path: /testingpartner/notifications
+        response:
+          status: 202
+          callback_url_header: X-Callback-Url

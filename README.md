@@ -560,13 +560,27 @@ imnot/
 
 ## Contributing
 
-**Run the test suite:**
+**Run the unit + integration test suite:**
 ```bash
 git clone https://github.com/edu2105/imnot.git
 cd imnot
 pip install -e ".[dev]"
 pytest
 ```
+
+**Run the end-to-end QA suite** (requires a local `imnot` install):
+```bash
+./scripts/qa/run.sh
+```
+
+The QA suite spins up a real server in a fresh temp directory and runs five phases:
+1. CLI commands (`imnot init`, `routes`, `export postman`, `generate`)
+2. Full pattern flows for the default partners (staylink + bookingco)
+3. `imnot generate testingpartner` covering all five patterns + hot reload
+4. Endpoint flows for the generated partner (oauth, async, static, fetch, push)
+5. Stop / restart / DB persistence check
+
+Run this after any change that could affect the public contract: YAML schema, CLI interface, pattern behaviour, or the session store.
 
 **Add a new pattern:**
 Patterns live in `imnot/engine/patterns/`. Each pattern is a module that registers one or

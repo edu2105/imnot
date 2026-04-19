@@ -420,6 +420,17 @@ def _register_infra_routes(
                     registered_admin.add((partner.partner, dp.name))
                     added.append(f"admin routes for {partner.partner}/{dp.name}")
 
+        # Sync partners list in-place so list_partners() closure sees the change.
+        existing_names = {p.partner for p in partners}
+        for new_partner in new_partners:
+            if new_partner.partner not in existing_names:
+                partners.append(new_partner)
+            else:
+                for i, p in enumerate(partners):
+                    if p.partner == new_partner.partner:
+                        partners[i] = new_partner
+                        break
+
         logger.info("Reload: updated=%s added=%s conflicts=%s", updated, added, conflicts)
         status = "ok" if not conflicts else "partial"
         return JSONResponse({"status": status, "updated": updated, "added": added, "conflicts": conflicts})
@@ -485,15 +496,15 @@ def _register_infra_routes(
                 registered_admin_.add((partner.partner, dp.name))
                 added.append(f"admin routes for {partner.partner}/{dp.name}")
 
-        # Keep app.state.partners in sync so GET /imnot/admin/partners reflects it
-        existing_names = {p.partner for p in request.app.state.partners}
+        # Keep partners list in-place so list_partners() closure sees the change.
+        existing_names = {p.partner for p in partners}
         if partner.partner not in existing_names:
-            request.app.state.partners.append(partner)
+            partners.append(partner)
         else:
-            request.app.state.partners = [
-                partner if p.partner == partner.partner else p
-                for p in request.app.state.partners
-            ]
+            for i, p in enumerate(partners):
+                if p.partner == partner.partner:
+                    partners[i] = partner
+                    break
 
         payload_dp_names = {dp.name for dp in partner.datapoints if dp.pattern in _PAYLOAD_PATTERNS}
         status_code = 201 if result.created else 200
