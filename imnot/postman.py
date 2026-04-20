@@ -36,7 +36,10 @@ _BODY_METHODS = {"POST", "PUT", "PATCH"}
 # ---------------------------------------------------------------------------
 
 
-def build_postman_collection(partners: list[PartnerDef]) -> dict[str, Any]:
+def build_postman_collection(
+    partners: list[PartnerDef],
+    base_url: str = "http://localhost:8000",
+) -> dict[str, Any]:
     """Return a Postman collection v2.1 dict for *partners*."""
     return {
         "info": {
@@ -48,7 +51,7 @@ def build_postman_collection(partners: list[PartnerDef]) -> dict[str, Any]:
         "variable": [
             {
                 "key": "baseUrl",
-                "value": "http://localhost:8000",
+                "value": base_url,
                 "type": "string",
                 "description": "Base URL of the imnot server",
             }

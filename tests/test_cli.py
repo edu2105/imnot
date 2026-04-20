@@ -89,18 +89,20 @@ def test_start_prints_address(runner, tmp_path):
     assert "127.0.0.1:8000" in result.output
 
 
-def test_start_missing_partners_dir_exits(runner, tmp_path):
-    result = runner.invoke(
-        cli,
-        [
-            "start",
-            "--partners-dir",
-            str(tmp_path / "nonexistent"),
-            "--db",
-            str(tmp_path / "test.db"),
-        ],
-    )
-    assert result.exit_code != 0
+def test_start_missing_partners_dir_warns_and_continues(runner, tmp_path):
+    with patch("imnot.cli.uvicorn.run"):
+        result = runner.invoke(
+            cli,
+            [
+                "start",
+                "--partners-dir",
+                str(tmp_path / "nonexistent"),
+                "--db",
+                str(tmp_path / "test.db"),
+            ],
+        )
+    assert result.exit_code == 0
+    assert "zero partners" in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -869,21 +871,22 @@ def test_stop_explicit_pid_file_path(runner, tmp_path):
     assert not pid_file.exists()
 
 
-def test_start_missing_partners_dir_suggests_init(runner, tmp_path):
-    """Default-path failure message should mention `imnot init`."""
+def test_start_missing_partners_dir_warns_no_partners(runner, tmp_path):
+    """Missing default partners dir: warn and start with zero partners."""
     original = os.getcwd()
     try:
         os.chdir(tmp_path)  # no partners/ here or in any ancestor up to tmp_path
-        result = runner.invoke(
-            cli,
-            [
-                "start",
-                "--db",
-                str(tmp_path / "test.db"),
-            ],
-        )
+        with patch("imnot.cli.uvicorn.run"):
+            result = runner.invoke(
+                cli,
+                [
+                    "start",
+                    "--db",
+                    str(tmp_path / "test.db"),
+                ],
+            )
     finally:
         os.chdir(original)
 
-    assert result.exit_code != 0
-    assert "imnot init" in result.output
+    assert result.exit_code == 0
+    assert "zero partners" in result.output

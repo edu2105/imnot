@@ -149,3 +149,60 @@ def test_consumer_endpoints_not_affected_by_admin_key(authed_client):
     """Consumer routes (non-admin) must remain accessible without auth."""
     r = authed_client.post("/oauth/token")
     assert r.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Zero-partners support
+# ---------------------------------------------------------------------------
+
+
+def test_create_app_with_no_partners_dir(tmp_path):
+    app = create_app(partners_dir=None, db_path=tmp_path / "test.db")
+    with TestClient(app) as c:
+        r = c.get("/imnot/admin/partners")
+        assert r.status_code == 200
+        assert r.json() == []
+
+
+def test_create_app_with_no_partners_healthz_still_works(tmp_path):
+    app = create_app(partners_dir=None, db_path=tmp_path / "test.db")
+    with TestClient(app) as c:
+        r = c.get("/healthz")
+        assert r.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# LoggingMiddleware
+# ---------------------------------------------------------------------------
+
+
+def test_logging_middleware_emits_http_log(tmp_path, caplog):
+    import logging
+    app = create_app(partners_dir=PARTNERS_DIR, db_path=tmp_path / "test.db")
+    with TestClient(app) as c:
+        with caplog.at_level(logging.INFO, logger="imnot.http"):
+            c.get("/imnot/admin/partners")
+    assert any("GET" in r.message and "/imnot/admin/partners" in r.message for r in caplog.records)
+
+
+def test_logging_middleware_excludes_healthz(tmp_path, caplog):
+    import logging
+    app = create_app(partners_dir=PARTNERS_DIR, db_path=tmp_path / "test.db")
+    with TestClient(app) as c:
+        with caplog.at_level(logging.INFO, logger="imnot.http"):
+            c.get("/healthz")
+    assert not any("/healthz" in r.message for r in caplog.records)
+
+
+def test_logging_middleware_adds_request_id_header(tmp_path):
+    app = create_app(partners_dir=PARTNERS_DIR, db_path=tmp_path / "test.db")
+    with TestClient(app) as c:
+        r = c.get("/imnot/admin/partners")
+    assert "x-request-id" in r.headers
+
+
+def test_logging_middleware_echoes_provided_request_id(tmp_path):
+    app = create_app(partners_dir=PARTNERS_DIR, db_path=tmp_path / "test.db")
+    with TestClient(app) as c:
+        r = c.get("/imnot/admin/partners", headers={"X-Request-ID": "my-trace-id"})
+    assert r.headers["x-request-id"] == "my-trace-id"

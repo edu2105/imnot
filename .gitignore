@@ -15,7 +15,13 @@ htmlcov/
 
 # Runtime
 *.db
+*.pid
+*.log
 data/
+archived-logs/
+
+# Local configuration (auto-generated on first start)
+imnot.toml
 
 # Local session files
 PLAN.md
