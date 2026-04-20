@@ -22,10 +22,9 @@ from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from typing import Any
 
+import yaml
 from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
-
-import yaml
 
 from imnot.engine.patterns.async_ import make_async_handlers
 from imnot.engine.patterns.fetch import make_fetch_handler
@@ -199,7 +198,9 @@ def _register_consumer_routes(
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug(
                 "Registered async step %d route %s %s",
-                step_num, endpoint.method, endpoint.path,
+                step_num,
+                endpoint.method,
+                endpoint.path,
             )
 
     elif datapoint.pattern == "push":
@@ -270,7 +271,8 @@ def _register_admin_routes(
     app.add_api_route(global_path, upload_global, methods=["POST"])
     app.add_api_route(session_path, upload_session, methods=["POST"])
     app.add_api_route(global_path, get_global, methods=["GET"])
-    app.add_api_route(f"/imnot/admin/{partner_name}/{dp_name}/payload/session/{{session_id}}", get_session, methods=["GET"])
+    session_get_path = f"/imnot/admin/{partner_name}/{dp_name}/payload/session/{{session_id}}"
+    app.add_api_route(session_get_path, get_session, methods=["GET"])
 
     if datapoint.pattern == "push":
         retrigger_path = f"/imnot/admin/{partner_name}/{dp_name}/push/{{request_id}}/retrigger"
@@ -352,14 +354,16 @@ def _register_infra_routes(
         return JSONResponse(store.list_sessions())
 
     async def list_partners() -> JSONResponse:
-        return JSONResponse([
-            {
-                "partner": p.partner,
-                "description": p.description,
-                "datapoints": [dp.name for dp in p.datapoints],
-            }
-            for p in partners
-        ])
+        return JSONResponse(
+            [
+                {
+                    "partner": p.partner,
+                    "description": p.description,
+                    "datapoints": [dp.name for dp in p.datapoints],
+                }
+                for p in partners
+            ]
+        )
 
     async def reload_partners(request: Request) -> JSONResponse:
         """Re-read all partner YAML files and hot-swap config for existing routes.
@@ -405,25 +409,17 @@ def _register_infra_routes(
                             updated.append(f"{ep.method.upper()} {ep.path}")
 
                 # Register brand-new consumer routes (new partners or new datapoints)
-                new_eps = [
-                    ep for ep in dp.endpoints
-                    if (ep.method.upper(), ep.path) not in registered
-                ]
+                new_eps = [ep for ep in dp.endpoints if (ep.method.upper(), ep.path) not in registered]
                 if new_eps:
                     try:
-                        _register_consumer_routes(
-                            request.app, partner, dp, store_, configs, registered
-                        )
+                        _register_consumer_routes(request.app, partner, dp, store_, configs, registered)
                         for ep in new_eps:
                             added.append(f"{ep.method.upper()} {ep.path}")
                     except ValueError as exc:
                         conflicts.append(str(exc))
 
                 # Register admin routes for new payload-pattern datapoints
-                if (
-                    dp.pattern in _PAYLOAD_PATTERNS
-                    and (partner.partner, dp.name) not in registered_admin
-                ):
+                if dp.pattern in _PAYLOAD_PATTERNS and (partner.partner, dp.name) not in registered_admin:
                     _register_admin_routes(request.app, partner, dp, store_)
                     registered_admin.add((partner.partner, dp.name))
                     added.append(f"admin routes for {partner.partner}/{dp.name}")
@@ -496,10 +492,7 @@ def _register_infra_routes(
                     conflicts.append(str(exc))
 
             # Register admin routes for new payload-pattern datapoints
-            if (
-                dp.pattern in _PAYLOAD_PATTERNS
-                and (partner.partner, dp.name) not in registered_admin_
-            ):
+            if dp.pattern in _PAYLOAD_PATTERNS and (partner.partner, dp.name) not in registered_admin_:
                 _register_admin_routes(request.app, partner, dp, store_)
                 registered_admin_.add((partner.partner, dp.name))
                 added.append(f"admin routes for {partner.partner}/{dp.name}")

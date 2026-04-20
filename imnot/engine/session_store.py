@@ -148,9 +148,7 @@ class SessionStore:
     # Session payloads
     # ------------------------------------------------------------------
 
-    def store_session_payload(
-        self, partner: str, datapoint: str, payload: dict[str, Any]
-    ) -> str:
+    def store_session_payload(self, partner: str, datapoint: str, payload: dict[str, Any]) -> str:
         """Create a new session with an isolated payload. Returns the session_id."""
         session_id = _new_id()
         now = _now()
@@ -169,9 +167,7 @@ class SessionStore:
     # Async request tracking
     # ------------------------------------------------------------------
 
-    def register_async_request(
-        self, partner: str, datapoint: str, session_id: str | None
-    ) -> str:
+    def register_async_request(self, partner: str, datapoint: str, session_id: str | None) -> str:
         """Record a new async request (submit step). Returns the generated UUID."""
         async_uuid = _new_id()
         now = _now()
@@ -218,7 +214,10 @@ class SessionStore:
             )
         logger.debug(
             "Stored push request %s for %s/%s → %s",
-            push_uuid, partner, datapoint, callback_url,
+            push_uuid,
+            partner,
+            datapoint,
+            callback_url,
         )
         return push_uuid
 
@@ -232,9 +231,7 @@ class SessionStore:
     # Payload resolution
     # ------------------------------------------------------------------
 
-    def resolve_payload(
-        self, partner: str, datapoint: str, session_id: str | None
-    ) -> dict[str, Any] | None:
+    def resolve_payload(self, partner: str, datapoint: str, session_id: str | None) -> dict[str, Any] | None:
         """Return the payload for the given (partner, datapoint), respecting session priority.
 
         Resolution order:
@@ -295,9 +292,7 @@ class SessionStore:
     def list_sessions(self) -> list[dict[str, Any]]:
         """Return all sessions ordered by creation time descending."""
         with self._cursor() as cur:
-            cur.execute(
-                "SELECT session_id, partner, datapoint, created_at FROM sessions ORDER BY created_at DESC"
-            )
+            cur.execute("SELECT session_id, partner, datapoint, created_at FROM sessions ORDER BY created_at DESC")
             return [dict(row) for row in cur.fetchall()]
 
     def clear_sessions(self) -> int:

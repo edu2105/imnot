@@ -105,6 +105,7 @@ def _make_static_handler(
     static_body: dict[str, Any] | None = endpoint.response.get("body")
 
     if static_body is not None:
+
         async def handler(request: Request) -> Response:
             return JSONResponse(
                 status_code=status_code,
@@ -112,6 +113,7 @@ def _make_static_handler(
                 headers=extra_headers,
             )
     else:
+
         async def handler(request: Request) -> Response:
             return Response(status_code=status_code, headers=extra_headers)
 

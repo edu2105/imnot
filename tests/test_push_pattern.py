@@ -1,6 +1,5 @@
 """Tests for the push pattern handler."""
 
-import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -107,7 +106,9 @@ def _mock_httpx(success: bool = True):
 def test_both_callback_sources_raises_at_startup(store):
     """Specifying both callback_url_field and callback_url_header is a config error."""
     ep = EndpointDef(
-        method="POST", path="/partner/notify", step=None,
+        method="POST",
+        path="/partner/notify",
+        step=None,
         response={
             "status": 202,
             "callback_url_field": "callbackUrl",
@@ -122,7 +123,9 @@ def test_both_callback_sources_raises_at_startup(store):
 def test_no_callback_source_raises_at_startup(store):
     """Omitting both callback_url_field and callback_url_header is a config error."""
     ep = EndpointDef(
-        method="POST", path="/partner/notify", step=None,
+        method="POST",
+        path="/partner/notify",
+        step=None,
         response={"status": 202},
     )
     dp = DatapointDef(name="notification", description="", pattern="push", endpoints=[ep])
@@ -336,9 +339,7 @@ def test_retrigger_fires_callback_again(store, tmp_path):
         assert mock_client.request.call_count == 1
 
         # Retrigger
-        r2 = client.post(
-            f"/imnot/admin/pushpartner/notification/push/{request_id}/retrigger"
-        )
+        r2 = client.post(f"/imnot/admin/pushpartner/notification/push/{request_id}/retrigger")
         assert r2.status_code == 200
         assert r2.json()["status"] == "dispatched"
         assert r2.json()["request_id"] == request_id
@@ -359,9 +360,7 @@ def test_retrigger_uses_updated_payload(store, tmp_path):
         store.store_global_payload("pushpartner", "notification", {"version": 2})
 
         # Retrigger — should deliver version 2
-        client.post(
-            f"/imnot/admin/pushpartner/notification/push/{request_id}/retrigger"
-        )
+        client.post(f"/imnot/admin/pushpartner/notification/push/{request_id}/retrigger")
 
     deliveries = mock_client.request.call_args_list
     assert len(deliveries) == 2
@@ -384,9 +383,7 @@ def test_retrigger_uses_original_session(store, tmp_path):
         request_id = r.json()["request_id"]
 
         # Retrigger — no session header needed, it's stored
-        client.post(
-            f"/imnot/admin/pushpartner/notification/push/{request_id}/retrigger"
-        )
+        client.post(f"/imnot/admin/pushpartner/notification/push/{request_id}/retrigger")
 
     delivered = mock_client.request.call_args_list[-1].kwargs["json"]
     assert delivered == {"user": "alice"}
@@ -421,7 +418,5 @@ def test_push_has_admin_session_payload_route(store, tmp_path):
 def test_push_retrigger_route_exists(store, tmp_path):
     """The retrigger route returns 404 (unknown ID) not 405 (route missing)."""
     client = _build_client(_BODY_FIELD_YAML, store, tmp_path)
-    r = client.post(
-        "/imnot/admin/pushpartner/notification/push/some-id/retrigger"
-    )
+    r = client.post("/imnot/admin/pushpartner/notification/push/some-id/retrigger")
     assert r.status_code == 404  # route exists, ID just unknown

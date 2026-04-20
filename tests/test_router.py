@@ -17,6 +17,7 @@ from imnot.loader.yaml_loader import load_partners
 def runner():
     return CliRunner()
 
+
 PARTNERS_DIR = Path(__file__).parent.parent / "partners"
 
 
@@ -307,12 +308,10 @@ def test_staylink_full_session_flow(client):
 
 
 def test_staylink_session_does_not_leak_to_global(client):
-    r = client.post(
+    client.post(
         "/imnot/admin/staylink/reservation/payload/session",
         json={"reservationId": "SES001"},
     )
-    session_id = r.json()["session_id"]
-
     r1 = client.post("/staylink/reservations")
     uuid = r1.headers["Location"].split("/")[-1]
 
@@ -321,12 +320,8 @@ def test_staylink_session_does_not_leak_to_global(client):
 
 
 def test_staylink_two_sessions_are_isolated(client):
-    s1 = client.post(
-        "/imnot/admin/staylink/reservation/payload/session", json={"user": "alice"}
-    ).json()["session_id"]
-    s2 = client.post(
-        "/imnot/admin/staylink/reservation/payload/session", json={"user": "bob"}
-    ).json()["session_id"]
+    s1 = client.post("/imnot/admin/staylink/reservation/payload/session", json={"user": "alice"}).json()["session_id"]
+    s2 = client.post("/imnot/admin/staylink/reservation/payload/session", json={"user": "bob"}).json()["session_id"]
 
     uuid1 = client.post("/staylink/reservations", headers={"X-Imnot-Session": s1}).headers["Location"].split("/")[-1]
     uuid2 = client.post("/staylink/reservations", headers={"X-Imnot-Session": s2}).headers["Location"].split("/")[-1]
@@ -627,11 +622,16 @@ def test_generate_then_reload_activates_routes(runner, tmp_path):
     yaml_file.write_text(RATESYNC_YAML)
 
     # Step 1: generate scaffolds the partner directory
-    result = runner.invoke(cli, [
-        "generate",
-        "--file", str(yaml_file),
-        "--partners-dir", str(partners_dir),
-    ])
+    result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "--file",
+            str(yaml_file),
+            "--partners-dir",
+            str(partners_dir),
+        ],
+    )
     assert result.exit_code == 0, result.output
     assert (partners_dir / "ratesync" / "partner.yaml").exists()
 
