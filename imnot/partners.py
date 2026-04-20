@@ -16,7 +16,7 @@ _SAFE_NAME = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 @dataclass
 class RegisterResult:
     partner: PartnerDef
-    created: bool   # True = new file written, False = overwritten
+    created: bool  # True = new file written, False = overwritten
     dest_file: Path
 
 
@@ -45,16 +45,12 @@ def register_partner(
     try:
         dest_dir.resolve().relative_to(partners_dir.resolve())
     except ValueError:
-        raise ValueError(
-            f"Partner name '{partner.partner}' would escape the partners directory."
-        )
+        raise ValueError(f"Partner name '{partner.partner}' would escape the partners directory.")
     dest_file = dest_dir / "partner.yaml"
     file_exists = dest_file.exists()
 
     if file_exists and not force:
-        raise FileExistsError(
-            f"partners/{partner.partner}/partner.yaml already exists. Use --force to overwrite."
-        )
+        raise FileExistsError(f"partners/{partner.partner}/partner.yaml already exists. Use --force to overwrite.")
 
     if not dry_run:
         dest_dir.mkdir(parents=True, exist_ok=True)

@@ -46,9 +46,7 @@ def _resolve_partners_dir(given: str) -> Path:
     given_path = Path(given)
     if given_path.is_absolute():
         if not given_path.is_dir():
-            raise FileNotFoundError(
-                f"Partners directory '{given}' not found."
-            )
+            raise FileNotFoundError(f"Partners directory '{given}' not found.")
         return given_path
     if given_path.is_dir():
         return given_path.resolve()
@@ -100,7 +98,7 @@ def cli() -> None:
     default=None,
     envvar="IMNOT_ADMIN_KEY",
     help="Bearer token required for all /imnot/admin/* endpoints. "
-         "Also readable from IMNOT_ADMIN_KEY env var. Omit for open access (local dev only).",
+    "Also readable from IMNOT_ADMIN_KEY env var. Omit for open access (local dev only).",
 )
 def start(partners_dir: str, db: str, host: str, port: int, reload: bool, admin_key: str | None) -> None:
     """Start the mock server and load partner definitions."""
@@ -199,8 +197,7 @@ def stop(pid_file: str) -> None:
         time.sleep(_STOP_POLL_INTERVAL)
 
     click.echo(
-        f"Process {pid} did not exit within {_STOP_TIMEOUT:.0f}s. "
-        f"Run `kill -9 {pid}` to force-stop it.",
+        f"Process {pid} did not exit within {_STOP_TIMEOUT:.0f}s. Run `kill -9 {pid}` to force-stop it.",
         err=True,
     )
     raise SystemExit(1)
@@ -243,12 +240,7 @@ def init(target_dir: str) -> None:
     for partner_name, patterns in _EXAMPLES:
         dest_dir = partners_dir / partner_name
         dest_dir.mkdir(parents=True)
-        yaml_text = (
-            files("imnot.examples")
-            .joinpath(partner_name)
-            .joinpath("partner.yaml")
-            .read_text(encoding="utf-8")
-        )
+        yaml_text = files("imnot.examples").joinpath(partner_name).joinpath("partner.yaml").read_text(encoding="utf-8")
         dest = dest_dir / "partner.yaml"
         dest.write_text(yaml_text, encoding="utf-8")
         written.append((dest.relative_to(target), patterns))
@@ -280,9 +272,7 @@ def status(db: str) -> None:
     click.echo(f"{'SESSION ID':<38} {'PARTNER':<12} {'DATAPOINT':<16} {'CREATED AT'}")
     click.echo("-" * 90)
     for s in sessions:
-        click.echo(
-            f"{s['session_id']:<38} {s['partner']:<12} {s['datapoint']:<16} {s['created_at']}"
-        )
+        click.echo(f"{s['session_id']:<38} {s['partner']:<12} {s['datapoint']:<16} {s['created_at']}")
 
 
 # ---------------------------------------------------------------------------
@@ -354,8 +344,18 @@ def _fail(msg: str, json_output: bool, code: int) -> None:
 
 
 @cli.command()
-@click.option("--file", "file_path", required=True, help="Path to partner.yaml to validate and register. Use '-' to read from stdin.")
-@click.option("--partners-dir", default=str(DEFAULT_PARTNERS_DIR), show_default=True, help="Directory containing partner YAML definitions.")
+@click.option(
+    "--file",
+    "file_path",
+    required=True,
+    help="Path to partner.yaml to validate and register. Use '-' to read from stdin.",
+)
+@click.option(
+    "--partners-dir",
+    default=str(DEFAULT_PARTNERS_DIR),
+    show_default=True,
+    help="Directory containing partner YAML definitions.",
+)
 @click.option("--dry-run", is_flag=True, default=False, help="Validate only — print what would happen, write nothing.")
 @click.option("--json", "json_output", is_flag=True, default=False, help="Output result as JSON.")
 @click.option("--force", is_flag=True, default=False, help="Overwrite existing partner.yaml if it already exists.")
@@ -386,23 +386,28 @@ def generate(file_path: str, partners_dir: str, dry_run: bool, json_output: bool
     payload_dp_names = {dp.name for dp in payload_dps}
 
     if json_output:
-        click.echo(json.dumps({
-            "status": "ok",
-            "partner": partner.partner,
-            "description": partner.description,
-            "directory": f"partners/{partner.partner}",
-            "file": f"partners/{partner.partner}/partner.yaml",
-            "created": result.created,
-            "datapoints": [
+        click.echo(
+            json.dumps(
                 {
-                    "name": dp.name,
-                    "pattern": dp.pattern,
-                    "endpoints": [{"method": ep.method, "path": ep.path} for ep in dp.endpoints],
-                    "admin_routes": dp.name in payload_dp_names,
-                }
-                for dp in partner.datapoints
-            ],
-        }, indent=2))
+                    "status": "ok",
+                    "partner": partner.partner,
+                    "description": partner.description,
+                    "directory": f"partners/{partner.partner}",
+                    "file": f"partners/{partner.partner}/partner.yaml",
+                    "created": result.created,
+                    "datapoints": [
+                        {
+                            "name": dp.name,
+                            "pattern": dp.pattern,
+                            "endpoints": [{"method": ep.method, "path": ep.path} for ep in dp.endpoints],
+                            "admin_routes": dp.name in payload_dp_names,
+                        }
+                        for dp in partner.datapoints
+                    ],
+                },
+                indent=2,
+            )
+        )
         return
 
     if dry_run:
@@ -491,8 +496,7 @@ def export_postman(out: str, partners_dir: str, selected_partners: tuple[str, ..
         unknown = [name for name in selected_partners if name not in available]
         if unknown:
             click.echo(
-                f"Unknown partner(s): {', '.join(unknown)}. "
-                f"Available: {', '.join(sorted(available))}",
+                f"Unknown partner(s): {', '.join(unknown)}. Available: {', '.join(sorted(available))}",
                 err=True,
             )
             raise SystemExit(1)
@@ -599,9 +603,7 @@ def _resolve_db(given: str) -> Path:
     if given_path.is_absolute():
         if given_path.exists():
             return given_path
-        raise FileNotFoundError(
-            f"Database '{given}' not found. Has the server been started yet?"
-        )
+        raise FileNotFoundError(f"Database '{given}' not found. Has the server been started yet?")
     if given_path.exists():
         return given_path.resolve()
     # Walk up from CWD looking for the filename
@@ -616,8 +618,7 @@ def _resolve_db(given: str) -> Path:
             break
         current = parent
     raise FileNotFoundError(
-        f"Database '{given}' not found in {Path.cwd()} or any parent directory. "
-        f"Has the server been started yet?"
+        f"Database '{given}' not found in {Path.cwd()} or any parent directory. Has the server been started yet?"
     )
 
 
@@ -627,9 +628,7 @@ def _resolve_pid(given: str) -> Path:
     if given_path.is_absolute():
         if given_path.exists():
             return given_path
-        raise FileNotFoundError(
-            f"PID file '{given}' not found. Is the server running?"
-        )
+        raise FileNotFoundError(f"PID file '{given}' not found. Is the server running?")
     if given_path.exists():
         return given_path.resolve()
     name = given_path.name
@@ -643,8 +642,7 @@ def _resolve_pid(given: str) -> Path:
             break
         current = parent
     raise FileNotFoundError(
-        f"PID file '{given}' not found in {Path.cwd()} or any parent directory. "
-        f"Is the server running?"
+        f"PID file '{given}' not found in {Path.cwd()} or any parent directory. Is the server running?"
     )
 
 

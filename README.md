@@ -5,6 +5,7 @@
 </p>
 
 [![CI](https://github.com/edu2105/imnot/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/edu2105/imnot/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/edu2105/imnot/branch/main/graph/badge.svg)](https://codecov.io/gh/edu2105/imnot)
 
 imnot is a stateful API mock server for integration testing.
 A **partner** is any external API your service depends on — a booking platform, a payment gateway, a data feed. You describe it in YAML, and imnot turns it into a local mock server your tests can hit.

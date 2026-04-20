@@ -1,7 +1,6 @@
 """Tests for the async pattern handler."""
 
 import json
-from pathlib import Path
 
 import pytest
 from fastapi import Request
@@ -9,7 +8,6 @@ from fastapi import Request
 from imnot.engine.patterns.async_ import make_async_handlers
 from imnot.engine.session_store import SessionStore
 from imnot.loader.yaml_loader import DatapointDef, EndpointDef
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -44,11 +42,13 @@ def _request(headers: list[tuple[bytes, bytes]] | None = None) -> Request:
 
 def test_factory_returns_one_handler_per_step(store):
     endpoints = [
-        EndpointDef(method="POST", path="/jobs", step=1,
-                    response={"status": 202, "generates_id": True,
-                              "id_header": "Location", "id_header_value": "/jobs/{id}"}),
-        EndpointDef(method="GET", path="/jobs/{id}", step=2,
-                    response={"status": 200, "returns_payload": True}),
+        EndpointDef(
+            method="POST",
+            path="/jobs",
+            step=1,
+            response={"status": 202, "generates_id": True, "id_header": "Location", "id_header_value": "/jobs/{id}"},
+        ),
+        EndpointDef(method="GET", path="/jobs/{id}", step=2, response={"status": 200, "returns_payload": True}),
     ]
     handlers = make_async_handlers("partner", _make_datapoint(endpoints), store)
     assert set(handlers.keys()) == {1, 2}
@@ -57,11 +57,13 @@ def test_factory_returns_one_handler_per_step(store):
 
 def test_handler_names_are_unique(store):
     endpoints = [
-        EndpointDef(method="POST", path="/jobs", step=1,
-                    response={"status": 202, "generates_id": True,
-                              "id_header": "Location", "id_header_value": "/jobs/{id}"}),
-        EndpointDef(method="GET", path="/jobs/{id}", step=2,
-                    response={"status": 200, "returns_payload": True}),
+        EndpointDef(
+            method="POST",
+            path="/jobs",
+            step=1,
+            response={"status": 202, "generates_id": True, "id_header": "Location", "id_header_value": "/jobs/{id}"},
+        ),
+        EndpointDef(method="GET", path="/jobs/{id}", step=2, response={"status": 200, "returns_payload": True}),
     ]
     handlers = make_async_handlers("partner", _make_datapoint(endpoints), store)
     names = [h.__name__ for h in handlers.values()]
@@ -76,7 +78,9 @@ def test_handler_names_are_unique(store):
 @pytest.fixture
 def header_submit_handler(store):
     ep = EndpointDef(
-        method="POST", path="/jobs", step=1,
+        method="POST",
+        path="/jobs",
+        step=1,
         response={
             "status": 202,
             "generates_id": True,
@@ -131,7 +135,9 @@ async def test_submit_header_persists_session_id(header_submit_handler, store):
 @pytest.fixture
 def body_submit_handler(store):
     ep = EndpointDef(
-        method="POST", path="/jobs", step=1,
+        method="POST",
+        path="/jobs",
+        step=1,
         response={
             "status": 200,
             "generates_id": True,
@@ -168,7 +174,9 @@ async def test_submit_body_persists_uuid(body_submit_handler, store):
 @pytest.mark.asyncio
 async def test_submit_body_merges_static_body_fields(store):
     ep = EndpointDef(
-        method="POST", path="/jobs", step=1,
+        method="POST",
+        path="/jobs",
+        step=1,
         response={
             "status": 200,
             "generates_id": True,
@@ -191,7 +199,9 @@ async def test_submit_body_merges_static_body_fields(store):
 @pytest.fixture
 def static_handler_headers_only(store):
     ep = EndpointDef(
-        method="HEAD", path="/jobs/{id}", step=2,
+        method="HEAD",
+        path="/jobs/{id}",
+        step=2,
         response={
             "status": 201,
             "headers": {"Status": "COMPLETED"},
@@ -203,7 +213,9 @@ def static_handler_headers_only(store):
 @pytest.fixture
 def static_handler_with_body(store):
     ep = EndpointDef(
-        method="GET", path="/jobs/{id}/status", step=2,
+        method="GET",
+        path="/jobs/{id}/status",
+        step=2,
         response={
             "status": 200,
             "body": {"status": "COMPLETED"},
@@ -240,7 +252,9 @@ async def test_static_with_body_returns_body(static_handler_with_body):
 @pytest.fixture
 def fetch_handler(store):
     ep = EndpointDef(
-        method="GET", path="/jobs/{id}", step=3,
+        method="GET",
+        path="/jobs/{id}",
+        step=3,
         response={"status": 200, "returns_payload": True},
     )
     return make_async_handlers("partner", _make_datapoint([ep]), store)[3]

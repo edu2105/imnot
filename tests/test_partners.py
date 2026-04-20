@@ -3,7 +3,7 @@
 import pytest
 import yaml
 
-from imnot.partners import RegisterResult, register_partner
+from imnot.partners import register_partner
 
 VALID_YAML = """\
 partner: staylink

@@ -39,6 +39,7 @@ async def test_oauth_response_shape():
     response = await handler()
 
     import json
+
     body = json.loads(response.body)
 
     assert response.status_code == 200
@@ -55,6 +56,7 @@ async def test_oauth_respects_yaml_config():
     response = await handler()
 
     import json
+
     body = json.loads(response.body)
 
     assert body["token_type"] == "MAC"
@@ -69,6 +71,7 @@ async def test_oauth_defaults_when_fields_missing():
     response = await handler()
 
     import json
+
     body = json.loads(response.body)
 
     assert body["token_type"] == "Bearer"

@@ -37,7 +37,8 @@ def test_handler_has_unique_name():
 @pytest.mark.asyncio
 async def test_returns_body_from_yaml():
     handler = _make_handler(
-        "POST", "/leanpms/token",
+        "POST",
+        "/leanpms/token",
         {"status": 200, "body": {"token": "2893e0a65fcfffcbb86e16fb1bc1c612fcd3eb78"}},
     )
     response = await handler()
@@ -72,7 +73,8 @@ async def test_empty_body_when_body_absent():
 @pytest.mark.asyncio
 async def test_arbitrary_body_shape():
     handler = _make_handler(
-        "POST", "/auth/session",
+        "POST",
+        "/auth/session",
         {"status": 201, "body": {"sessionId": "xyz", "expiresIn": 86400, "roles": ["admin"]}},
     )
     response = await handler()

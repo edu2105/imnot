@@ -61,10 +61,7 @@ def collection_stats(partners: list[PartnerDef]) -> dict[str, Any]:
     """Return summary counts for CLI output."""
     consumer = sum(len(dp.endpoints) for p in partners for dp in p.datapoints)
     admin = sum(
-        (5 if dp.pattern == "push" else 4)
-        for p in partners
-        for dp in p.datapoints
-        if dp.pattern in _PAYLOAD_PATTERNS
+        (5 if dp.pattern == "push" else 4) for p in partners for dp in p.datapoints if dp.pattern in _PAYLOAD_PATTERNS
     )
     return {
         "partners": len(partners),
@@ -118,20 +115,24 @@ def _consumer_request(dp: DatapointDef, ep: EndpointDef) -> dict[str, Any]:
     if dp.pattern == "push":
         header_name: str | None = ep.response.get("callback_url_header")
         if header_name:
-            headers.append({
-                "key": header_name,
-                "value": "http://your-service/webhook",
-                "description": "Callback URL — imnot will POST the stored payload here",
-            })
+            headers.append(
+                {
+                    "key": header_name,
+                    "value": "http://your-service/webhook",
+                    "description": "Callback URL — imnot will POST the stored payload here",
+                }
+            )
 
     # X-Imnot-Session — present but disabled for payload-pattern endpoints
     if dp.pattern in _PAYLOAD_PATTERNS:
-        headers.append({
-            "key": "X-Imnot-Session",
-            "value": "",
-            "description": "Optional: set to isolate payloads per test session",
-            "disabled": True,
-        })
+        headers.append(
+            {
+                "key": "X-Imnot-Session",
+                "value": "",
+                "description": "Optional: set to isolate payloads per test session",
+                "disabled": True,
+            }
+        )
 
     request: dict[str, Any] = {
         "method": ep.method,
@@ -198,10 +199,12 @@ def _admin_folder(partner_name: str, dp: DatapointDef) -> dict[str, Any]:
 
     if dp.pattern == "push":
         retrigger = f"/imnot/admin/{partner_name}/{dp.name}/push/:request_id/retrigger"
-        items.append({
-            "name": f"POST {retrigger}",
-            "request": {"method": "POST", "header": [], "url": _build_url(retrigger)},
-        })
+        items.append(
+            {
+                "name": f"POST {retrigger}",
+                "request": {"method": "POST", "header": [], "url": _build_url(retrigger)},
+            }
+        )
 
     return {
         "name": "Admin",
@@ -224,11 +227,7 @@ def _build_url(path: str) -> dict[str, Any]:
     postman_path = path.replace("{", ":").replace("}", "")
     raw = f"{{{{baseUrl}}}}{postman_path}"
     segments = [s for s in postman_path.split("/") if s]
-    variables = [
-        {"key": seg[1:], "value": "", "description": ""}
-        for seg in segments
-        if seg.startswith(":")
-    ]
+    variables = [{"key": seg[1:], "value": "", "description": ""} for seg in segments if seg.startswith(":")]
     url: dict[str, Any] = {"raw": raw, "host": ["{{baseUrl}}"], "path": segments}
     if variables:
         url["variable"] = variables

@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pytest
 from click.testing import CliRunner
 
-from imnot.cli import cli, _resolve_partners_dir, _resolve_pid
+from imnot.cli import _resolve_partners_dir, _resolve_pid, cli
 from imnot.engine.session_store import SessionStore
 
 PARTNERS_DIR = Path(__file__).parent.parent / "partners"
@@ -27,13 +27,20 @@ def runner():
 
 def test_start_invokes_uvicorn(runner, tmp_path):
     with patch("imnot.cli.uvicorn.run") as mock_run:
-        result = runner.invoke(cli, [
-            "start",
-            "--partners-dir", str(PARTNERS_DIR),
-            "--db", str(tmp_path / "test.db"),
-            "--host", "127.0.0.1",
-            "--port", "8000",
-        ])
+        result = runner.invoke(
+            cli,
+            [
+                "start",
+                "--partners-dir",
+                str(PARTNERS_DIR),
+                "--db",
+                str(tmp_path / "test.db"),
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8000",
+            ],
+        )
     assert result.exit_code == 0, result.output
     assert mock_run.called
     _, kwargs = mock_run.call_args
@@ -46,12 +53,17 @@ def test_start_invokes_uvicorn(runner, tmp_path):
 
 def test_start_reload_uses_factory_and_yaml_watching(runner, tmp_path):
     with patch("imnot.cli.uvicorn.run") as mock_run:
-        result = runner.invoke(cli, [
-            "start",
-            "--partners-dir", str(PARTNERS_DIR),
-            "--db", str(tmp_path / "test.db"),
-            "--reload",
-        ])
+        result = runner.invoke(
+            cli,
+            [
+                "start",
+                "--partners-dir",
+                str(PARTNERS_DIR),
+                "--db",
+                str(tmp_path / "test.db"),
+                "--reload",
+            ],
+        )
     assert result.exit_code == 0, result.output
     assert mock_run.called
     args, kwargs = mock_run.call_args
@@ -64,20 +76,30 @@ def test_start_reload_uses_factory_and_yaml_watching(runner, tmp_path):
 
 def test_start_prints_address(runner, tmp_path):
     with patch("imnot.cli.uvicorn.run"):
-        result = runner.invoke(cli, [
-            "start",
-            "--partners-dir", str(PARTNERS_DIR),
-            "--db", str(tmp_path / "test.db"),
-        ])
+        result = runner.invoke(
+            cli,
+            [
+                "start",
+                "--partners-dir",
+                str(PARTNERS_DIR),
+                "--db",
+                str(tmp_path / "test.db"),
+            ],
+        )
     assert "127.0.0.1:8000" in result.output
 
 
 def test_start_missing_partners_dir_exits(runner, tmp_path):
-    result = runner.invoke(cli, [
-        "start",
-        "--partners-dir", str(tmp_path / "nonexistent"),
-        "--db", str(tmp_path / "test.db"),
-    ])
+    result = runner.invoke(
+        cli,
+        [
+            "start",
+            "--partners-dir",
+            str(tmp_path / "nonexistent"),
+            "--db",
+            str(tmp_path / "test.db"),
+        ],
+    )
     assert result.exit_code != 0
 
 
@@ -269,11 +291,16 @@ def test_generate_valid_file_writes_and_exits_0(runner, tmp_path):
     yaml_file = tmp_path / "acme.yaml"
     yaml_file.write_text(VALID_YAML_FETCH)
 
-    result = runner.invoke(cli, [
-        "generate",
-        "--file", str(yaml_file),
-        "--partners-dir", str(partners_dir),
-    ])
+    result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "--file",
+            str(yaml_file),
+            "--partners-dir",
+            str(partners_dir),
+        ],
+    )
 
     assert result.exit_code == 0, result.output
     assert (partners_dir / "acme" / "partner.yaml").exists()
@@ -291,12 +318,17 @@ def test_generate_dry_run_writes_nothing(runner, tmp_path):
     yaml_file = tmp_path / "acme.yaml"
     yaml_file.write_text(VALID_YAML_FETCH)
 
-    result = runner.invoke(cli, [
-        "generate",
-        "--file", str(yaml_file),
-        "--partners-dir", str(partners_dir),
-        "--dry-run",
-    ])
+    result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "--file",
+            str(yaml_file),
+            "--partners-dir",
+            str(partners_dir),
+            "--dry-run",
+        ],
+    )
 
     assert result.exit_code == 0, result.output
     assert not (partners_dir / "acme" / "partner.yaml").exists()
@@ -310,12 +342,17 @@ def test_generate_json_output_shape(runner, tmp_path):
     yaml_file = tmp_path / "acme.yaml"
     yaml_file.write_text(VALID_YAML_FETCH)
 
-    result = runner.invoke(cli, [
-        "generate",
-        "--file", str(yaml_file),
-        "--partners-dir", str(partners_dir),
-        "--json",
-    ])
+    result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "--file",
+            str(yaml_file),
+            "--partners-dir",
+            str(partners_dir),
+            "--json",
+        ],
+    )
 
     assert result.exit_code == 0, result.output
     data = json.loads(result.output)
@@ -334,12 +371,18 @@ def test_generate_dry_run_json_created_is_false(runner, tmp_path):
     yaml_file = tmp_path / "acme.yaml"
     yaml_file.write_text(VALID_YAML_FETCH)
 
-    result = runner.invoke(cli, [
-        "generate",
-        "--file", str(yaml_file),
-        "--partners-dir", str(partners_dir),
-        "--dry-run", "--json",
-    ])
+    result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "--file",
+            str(yaml_file),
+            "--partners-dir",
+            str(partners_dir),
+            "--dry-run",
+            "--json",
+        ],
+    )
 
     assert result.exit_code == 0, result.output
     data = json.loads(result.output)
@@ -358,11 +401,16 @@ def test_generate_conflict_exits_2(runner, tmp_path):
     yaml_file = tmp_path / "acme.yaml"
     yaml_file.write_text(VALID_YAML_FETCH)
 
-    result = runner.invoke(cli, [
-        "generate",
-        "--file", str(yaml_file),
-        "--partners-dir", str(partners_dir),
-    ])
+    result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "--file",
+            str(yaml_file),
+            "--partners-dir",
+            str(partners_dir),
+        ],
+    )
 
     assert result.exit_code == 2, result.output
 
@@ -378,12 +426,17 @@ def test_generate_force_overwrites(runner, tmp_path):
     yaml_file = tmp_path / "acme.yaml"
     yaml_file.write_text(VALID_YAML_FETCH)
 
-    result = runner.invoke(cli, [
-        "generate",
-        "--file", str(yaml_file),
-        "--partners-dir", str(partners_dir),
-        "--force",
-    ])
+    result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "--file",
+            str(yaml_file),
+            "--partners-dir",
+            str(partners_dir),
+            "--force",
+        ],
+    )
 
     assert result.exit_code == 0, result.output
     assert (acme_dir / "partner.yaml").read_text() == VALID_YAML_FETCH
@@ -396,11 +449,16 @@ def test_generate_invalid_yaml_schema_exits_1(runner, tmp_path):
     yaml_file = tmp_path / "bad.yaml"
     yaml_file.write_text(INVALID_YAML_MISSING_PATTERN)
 
-    result = runner.invoke(cli, [
-        "generate",
-        "--file", str(yaml_file),
-        "--partners-dir", str(partners_dir),
-    ])
+    result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "--file",
+            str(yaml_file),
+            "--partners-dir",
+            str(partners_dir),
+        ],
+    )
 
     assert result.exit_code == 1
 
@@ -412,11 +470,16 @@ def test_generate_invalid_yaml_syntax_exits_1(runner, tmp_path):
     yaml_file = tmp_path / "broken.yaml"
     yaml_file.write_text(INVALID_YAML_SYNTAX)
 
-    result = runner.invoke(cli, [
-        "generate",
-        "--file", str(yaml_file),
-        "--partners-dir", str(partners_dir),
-    ])
+    result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "--file",
+            str(yaml_file),
+            "--partners-dir",
+            str(partners_dir),
+        ],
+    )
 
     assert result.exit_code == 1
 
@@ -428,12 +491,17 @@ def test_generate_invalid_yaml_json_error_shape(runner, tmp_path):
     yaml_file = tmp_path / "bad.yaml"
     yaml_file.write_text(INVALID_YAML_MISSING_PATTERN)
 
-    result = runner.invoke(cli, [
-        "generate",
-        "--file", str(yaml_file),
-        "--partners-dir", str(partners_dir),
-        "--json",
-    ])
+    result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "--file",
+            str(yaml_file),
+            "--partners-dir",
+            str(partners_dir),
+            "--json",
+        ],
+    )
 
     assert result.exit_code == 1
     data = json.loads(result.output)
@@ -446,11 +514,16 @@ def test_generate_partners_dir_not_found_exits_3(runner, tmp_path):
     yaml_file = tmp_path / "acme.yaml"
     yaml_file.write_text(VALID_YAML_FETCH)
 
-    result = runner.invoke(cli, [
-        "generate",
-        "--file", str(yaml_file),
-        "--partners-dir", str(tmp_path / "nonexistent"),
-    ])
+    result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "--file",
+            str(yaml_file),
+            "--partners-dir",
+            str(tmp_path / "nonexistent"),
+        ],
+    )
 
     assert result.exit_code == 3
 
@@ -460,11 +533,17 @@ def test_generate_stdin(runner, tmp_path):
     partners_dir = tmp_path / "partners"
     partners_dir.mkdir()
 
-    result = runner.invoke(cli, [
-        "generate",
-        "--file", "-",
-        "--partners-dir", str(partners_dir),
-    ], input=VALID_YAML_FETCH)
+    result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "--file",
+            "-",
+            "--partners-dir",
+            str(partners_dir),
+        ],
+        input=VALID_YAML_FETCH,
+    )
 
     assert result.exit_code == 0, result.output
     assert (partners_dir / "acme" / "partner.yaml").exists()
@@ -477,12 +556,17 @@ def test_generate_oauth_no_admin_routes(runner, tmp_path):
     yaml_file = tmp_path / "ratesync.yaml"
     yaml_file.write_text(VALID_YAML_OAUTH_AND_ASYNC)
 
-    result = runner.invoke(cli, [
-        "generate",
-        "--file", str(yaml_file),
-        "--partners-dir", str(partners_dir),
-        "--json",
-    ])
+    result = runner.invoke(
+        cli,
+        [
+            "generate",
+            "--file",
+            str(yaml_file),
+            "--partners-dir",
+            str(partners_dir),
+            "--json",
+        ],
+    )
 
     assert result.exit_code == 0, result.output
     data = json.loads(result.output)
@@ -577,11 +661,16 @@ def test_start_writes_pid_file_during_run(runner, tmp_path):
             written_pids.append(pid_path.read_text().strip())
 
     with patch("imnot.cli.uvicorn.run", side_effect=capture_pid):
-        result = runner.invoke(cli, [
-            "start",
-            "--partners-dir", str(PARTNERS_DIR),
-            "--db", str(db_path),
-        ])
+        result = runner.invoke(
+            cli,
+            [
+                "start",
+                "--partners-dir",
+                str(PARTNERS_DIR),
+                "--db",
+                str(db_path),
+            ],
+        )
 
     assert result.exit_code == 0, result.output
     assert len(written_pids) == 1
@@ -594,11 +683,16 @@ def test_start_removes_pid_file_on_clean_exit(runner, tmp_path):
     pid_path = tmp_path / "test.pid"
 
     with patch("imnot.cli.uvicorn.run"):
-        runner.invoke(cli, [
-            "start",
-            "--partners-dir", str(PARTNERS_DIR),
-            "--db", str(db_path),
-        ])
+        runner.invoke(
+            cli,
+            [
+                "start",
+                "--partners-dir",
+                str(PARTNERS_DIR),
+                "--db",
+                str(db_path),
+            ],
+        )
 
     assert not pid_path.exists()
 
@@ -609,11 +703,16 @@ def test_start_removes_pid_file_on_exception(runner, tmp_path):
     pid_path = tmp_path / "test.pid"
 
     with patch("imnot.cli.uvicorn.run", side_effect=RuntimeError("boom")):
-        runner.invoke(cli, [
-            "start",
-            "--partners-dir", str(PARTNERS_DIR),
-            "--db", str(db_path),
-        ])
+        runner.invoke(
+            cli,
+            [
+                "start",
+                "--partners-dir",
+                str(PARTNERS_DIR),
+                "--db",
+                str(db_path),
+            ],
+        )
 
     assert not pid_path.exists()
 
@@ -775,10 +874,14 @@ def test_start_missing_partners_dir_suggests_init(runner, tmp_path):
     original = os.getcwd()
     try:
         os.chdir(tmp_path)  # no partners/ here or in any ancestor up to tmp_path
-        result = runner.invoke(cli, [
-            "start",
-            "--db", str(tmp_path / "test.db"),
-        ])
+        result = runner.invoke(
+            cli,
+            [
+                "start",
+                "--db",
+                str(tmp_path / "test.db"),
+            ],
+        )
     finally:
         os.chdir(original)
 

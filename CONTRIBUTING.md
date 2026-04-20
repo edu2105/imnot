@@ -35,8 +35,8 @@ pip install -e ".[dev]"
 .venv/bin/pytest
 ```
 
-All 228 tests should pass. The CI matrix runs on Python 3.11 and 3.12 — if you can,
-test on both before opening a PR.
+All tests should pass. The CI matrix runs on Python 3.11, 3.12, and 3.13 — if you can,
+test on all three before opening a PR.
 
 ## Running the security scan
 
@@ -77,7 +77,14 @@ the change — will be closed without merge.
 
 - Python 3.11+ type annotations on all public functions
 - `from __future__ import annotations` at the top of every module
-- No external formatters enforced — just match the existing style
+- Enforced by **ruff** (line length 120, E/F/I rules):
+
+```bash
+.venv/bin/ruff check imnot/ tests/
+.venv/bin/ruff format imnot/ tests/
+```
+
+Both checks run in CI and must pass before a PR can merge.
 
 ## Partner YAML authoring
 

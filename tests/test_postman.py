@@ -42,7 +42,9 @@ def _dp(name: str, pattern: str, endpoints: list[EndpointDef], description: str 
 
 
 def _partner(name: str, datapoints: list[DatapointDef], description: str = "") -> PartnerDef:
-    return PartnerDef(partner=name, datapoints=datapoints, description=description, source_path=Path("/fake/partner.yaml"))
+    return PartnerDef(
+        partner=name, datapoints=datapoints, description=description, source_path=Path("/fake/partner.yaml")
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -52,37 +54,51 @@ def _partner(name: str, datapoints: list[DatapointDef], description: str = "") -
 
 @pytest.fixture
 def fetch_partner():
-    return _partner("staylink", [
-        _dp("charges", "fetch", [_ep("GET", "/staylink/charges")]),
-    ])
+    return _partner(
+        "staylink",
+        [
+            _dp("charges", "fetch", [_ep("GET", "/staylink/charges")]),
+        ],
+    )
 
 
 @pytest.fixture
 def push_field_partner():
     """Push datapoint where callback URL comes from a request body field."""
-    ep = _ep("POST", "/partner/rates", {
-        "status": 202,
-        "callback_url_field": "callbackUrl",
-        "callback_method": "POST",
-    })
+    ep = _ep(
+        "POST",
+        "/partner/rates",
+        {
+            "status": 202,
+            "callback_url_field": "callbackUrl",
+            "callback_method": "POST",
+        },
+    )
     return _partner("bookingco", [_dp("rate-push", "push", [ep])])
 
 
 @pytest.fixture
 def push_header_partner():
     """Push datapoint where callback URL comes from a request header."""
-    ep = _ep("POST", "/partner/rates", {
-        "status": 202,
-        "callback_url_header": "X-Callback-URL",
-    })
+    ep = _ep(
+        "POST",
+        "/partner/rates",
+        {
+            "status": 202,
+            "callback_url_header": "X-Callback-URL",
+        },
+    )
     return _partner("bookingco", [_dp("rate-push", "push", [ep])])
 
 
 @pytest.fixture
 def oauth_partner():
-    return _partner("idp", [
-        _dp("token", "oauth", [_ep("POST", "/oauth/token", {"status": 200})]),
-    ])
+    return _partner(
+        "idp",
+        [
+            _dp("token", "oauth", [_ep("POST", "/oauth/token", {"status": 200})]),
+        ],
+    )
 
 
 @pytest.fixture
@@ -93,7 +109,12 @@ def static_partner():
 
 @pytest.fixture
 def async_partner():
-    ep1 = _ep("POST", "/async/jobs", {"status": 202, "generates_id": True, "id_header": "Location", "id_header_value": "/async/jobs/{id}"}, step=1)
+    ep1 = _ep(
+        "POST",
+        "/async/jobs",
+        {"status": 202, "generates_id": True, "id_header": "Location", "id_header_value": "/async/jobs/{id}"},
+        step=1,
+    )
     ep2 = _ep("GET", "/async/jobs/{id}", {"status": 200, "returns_payload": True}, step=2)
     return _partner("asyncco", [_dp("job", "async", [ep1, ep2])])
 
@@ -391,11 +412,17 @@ def runner():
 
 def test_export_postman_writes_file(runner, tmp_path):
     out = tmp_path / "collection.json"
-    result = runner.invoke(cli, [
-        "export", "postman",
-        "--partners-dir", str(PARTNERS_DIR),
-        "--out", str(out),
-    ])
+    result = runner.invoke(
+        cli,
+        [
+            "export",
+            "postman",
+            "--partners-dir",
+            str(PARTNERS_DIR),
+            "--out",
+            str(out),
+        ],
+    )
     assert result.exit_code == 0, result.output
     assert out.exists()
     data = json.loads(out.read_text())
@@ -404,10 +431,16 @@ def test_export_postman_writes_file(runner, tmp_path):
 
 def test_export_postman_default_filename(runner, tmp_path):
     """--out defaults to imnot-collection.json in CWD."""
-    result = runner.invoke(cli, [
-        "export", "postman",
-        "--partners-dir", str(PARTNERS_DIR),
-    ], catch_exceptions=False)
+    result = runner.invoke(
+        cli,
+        [
+            "export",
+            "postman",
+            "--partners-dir",
+            str(PARTNERS_DIR),
+        ],
+        catch_exceptions=False,
+    )
     # CliRunner runs in a temp isolated filesystem only if we use mix_stderr / with fs_root —
     # just verify the command parsed correctly and no SystemExit(1)
     assert result.exit_code == 0, result.output
@@ -415,22 +448,34 @@ def test_export_postman_default_filename(runner, tmp_path):
 
 def test_export_postman_summary_output(runner, tmp_path):
     out = tmp_path / "collection.json"
-    result = runner.invoke(cli, [
-        "export", "postman",
-        "--partners-dir", str(PARTNERS_DIR),
-        "--out", str(out),
-    ])
+    result = runner.invoke(
+        cli,
+        [
+            "export",
+            "postman",
+            "--partners-dir",
+            str(PARTNERS_DIR),
+            "--out",
+            str(out),
+        ],
+    )
     assert "Collection written to" in result.output
     assert "Partners" in result.output
     assert "Requests" in result.output
 
 
 def test_export_postman_invalid_partners_dir(runner, tmp_path):
-    result = runner.invoke(cli, [
-        "export", "postman",
-        "--partners-dir", str(tmp_path / "nonexistent"),
-        "--out", str(tmp_path / "out.json"),
-    ])
+    result = runner.invoke(
+        cli,
+        [
+            "export",
+            "postman",
+            "--partners-dir",
+            str(tmp_path / "nonexistent"),
+            "--out",
+            str(tmp_path / "out.json"),
+        ],
+    )
     assert result.exit_code != 0
 
 
@@ -438,12 +483,19 @@ def test_export_postman_single_partner_filter(runner, tmp_path):
     """--partner filters the collection to just that partner."""
     out = tmp_path / "collection.json"
     # PARTNERS_DIR has staylink and bookingco
-    result = runner.invoke(cli, [
-        "export", "postman",
-        "--partners-dir", str(PARTNERS_DIR),
-        "--out", str(out),
-        "--partner", "staylink",
-    ])
+    result = runner.invoke(
+        cli,
+        [
+            "export",
+            "postman",
+            "--partners-dir",
+            str(PARTNERS_DIR),
+            "--out",
+            str(out),
+            "--partner",
+            "staylink",
+        ],
+    )
     assert result.exit_code == 0, result.output
     data = json.loads(out.read_text())
     folder_names = [item["name"] for item in data["item"]]
@@ -453,13 +505,21 @@ def test_export_postman_single_partner_filter(runner, tmp_path):
 def test_export_postman_multiple_partner_filter(runner, tmp_path):
     """Multiple --partner flags are all included."""
     out = tmp_path / "collection.json"
-    result = runner.invoke(cli, [
-        "export", "postman",
-        "--partners-dir", str(PARTNERS_DIR),
-        "--out", str(out),
-        "--partner", "staylink",
-        "--partner", "bookingco",
-    ])
+    result = runner.invoke(
+        cli,
+        [
+            "export",
+            "postman",
+            "--partners-dir",
+            str(PARTNERS_DIR),
+            "--out",
+            str(out),
+            "--partner",
+            "staylink",
+            "--partner",
+            "bookingco",
+        ],
+    )
     assert result.exit_code == 0, result.output
     data = json.loads(out.read_text())
     folder_names = {item["name"] for item in data["item"]}
@@ -470,12 +530,19 @@ def test_export_postman_multiple_partner_filter(runner, tmp_path):
 def test_export_postman_unknown_partner_exits_nonzero(runner, tmp_path):
     """--partner with an unknown name exits non-zero with a helpful error."""
     out = tmp_path / "collection.json"
-    result = runner.invoke(cli, [
-        "export", "postman",
-        "--partners-dir", str(PARTNERS_DIR),
-        "--out", str(out),
-        "--partner", "doesnotexist",
-    ])
+    result = runner.invoke(
+        cli,
+        [
+            "export",
+            "postman",
+            "--partners-dir",
+            str(PARTNERS_DIR),
+            "--out",
+            str(out),
+            "--partner",
+            "doesnotexist",
+        ],
+    )
     assert result.exit_code != 0
     assert "doesnotexist" in result.output
 

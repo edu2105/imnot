@@ -11,7 +11,7 @@ Responsibilities:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -29,26 +29,26 @@ SUPPORTED_PATTERNS = {"oauth", "async", "push", "static", "fetch"}
 
 @dataclass
 class EndpointDef:
-    method: str                        # HTTP verb, upper-cased
-    path: str                          # e.g. /staylink/reservations/{uuid}
-    step: int | None                   # async step number (1/2/3); None for oauth/static/fetch
-    response: dict[str, Any]           # raw response config from YAML
+    method: str  # HTTP verb, upper-cased
+    path: str  # e.g. /staylink/reservations/{uuid}
+    step: int | None  # async step number (1/2/3); None for oauth/static/fetch
+    response: dict[str, Any]  # raw response config from YAML
 
 
 @dataclass
 class DatapointDef:
-    name: str                          # e.g. "reservation"
+    name: str  # e.g. "reservation"
     description: str
-    pattern: str                       # "oauth" | "async" | "fetch" | "static" | "push"
+    pattern: str  # "oauth" | "async" | "fetch" | "static" | "push"
     endpoints: list[EndpointDef]
 
 
 @dataclass
 class PartnerDef:
-    partner: str                       # e.g. "staylink"
+    partner: str  # e.g. "staylink"
     description: str
     datapoints: list[DatapointDef]
-    source_path: Path                  # absolute path to the partner.yaml file
+    source_path: Path  # absolute path to the partner.yaml file
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +68,7 @@ def _parse_endpoint(raw: dict[str, Any]) -> EndpointDef:
     return EndpointDef(
         method=method.upper(),
         path=path,
-        step=raw.get("step"),          # optional; only async endpoints carry this
+        step=raw.get("step"),  # optional; only async endpoints carry this
         response=raw.get("response") or {},
     )
 
