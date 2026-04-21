@@ -76,6 +76,16 @@ def _resolve_config() -> Path | None:
         current = parent
 
 
+def _setup_logging(log_dir: Path | None = None) -> logging.Logger:
+    """Configure logging from imnot.toml (if found) and return the imnot.cli logger."""
+    config = load_config(_resolve_config())
+    resolved = Path(config.logging.log_dir)
+    if not resolved.is_absolute():
+        resolved = ((log_dir or Path.cwd()) / resolved).resolve()
+    configure_logging(config.logging, resolved)
+    return logging.getLogger("imnot.cli")
+
+
 def _resolve_partners_dir(given: str) -> Path:
     """Resolve the partners directory path.
 
@@ -243,6 +253,7 @@ _STOP_POLL_INTERVAL = 0.1
 )
 def stop(pid_file: str) -> None:
     """Stop a running imnot server."""
+    cli_log = _setup_logging()
     stop_timeout = load_config(_resolve_config()).server.stop_timeout_seconds
 
     try:
@@ -268,6 +279,7 @@ def stop(pid_file: str) -> None:
         click.echo(f"No permission to signal process {pid}.", err=True)
         raise SystemExit(1)
 
+    cli_log.info("Sending SIGTERM to pid %d", pid)
     os.kill(pid, signal.SIGTERM)
 
     deadline = time.monotonic() + stop_timeout
@@ -276,10 +288,12 @@ def stop(pid_file: str) -> None:
             os.kill(pid, 0)
         except ProcessLookupError:
             pid_path.unlink(missing_ok=True)
+            cli_log.info("imnot stopped (pid %d)", pid)
             click.echo(f"imnot stopped (pid {pid}).")
             return
         time.sleep(_STOP_POLL_INTERVAL)
 
+    cli_log.warning("Process %d did not exit within %gs", pid, stop_timeout)
     click.echo(
         f"Process {pid} did not exit within {stop_timeout:.0f}s. Run `kill -9 {pid}` to force-stop it.",
         err=True,
@@ -319,6 +333,7 @@ def init(target_dir: str) -> None:
         raise SystemExit(1)
 
     target.mkdir(parents=True, exist_ok=True)
+    cli_log = _setup_logging(target)
 
     written: list[tuple[Path, str]] = []
     for partner_name, patterns in _EXAMPLES:
@@ -333,6 +348,7 @@ def init(target_dir: str) -> None:
     if not toml_path.exists():
         toml_path.write_text(_IMNOT_TOML_TEMPLATE, encoding="utf-8")
 
+    cli_log.info("Initialized imnot project in %s", target)
     click.echo(f"Initialized imnot project in {target}\n")
     for path, patterns in written:
         click.echo(f"  {path}   ({patterns})")
@@ -378,6 +394,7 @@ def status(db: str) -> None:
 )
 def routes(partners_dir: str) -> None:
     """List all consumer and admin endpoints for loaded partners."""
+    _setup_logging()
     try:
         resolved = _resolve_partners_dir(partners_dir)
     except FileNotFoundError as exc:
@@ -450,6 +467,7 @@ def _fail(msg: str, json_output: bool, code: int) -> None:
 @click.option("--force", is_flag=True, default=False, help="Overwrite existing partner.yaml if it already exists.")
 def generate(file_path: str, partners_dir: str, dry_run: bool, json_output: bool, force: bool) -> None:
     """Validate and register a partner YAML definition."""
+    cli_log = _setup_logging()
     try:
         resolved_partners_dir = _resolve_partners_dir(partners_dir)
     except FileNotFoundError as exc:
@@ -471,6 +489,7 @@ def generate(file_path: str, partners_dir: str, dry_run: bool, json_output: bool
         _fail(str(exc), json_output, 2)
 
     partner = result.partner
+    cli_log.info("generate partner=%s dry_run=%s created=%s", partner.partner, dry_run, result.created)
     payload_dps = [dp for dp in partner.datapoints if dp.pattern in _PAYLOAD_PATTERNS]
     payload_dp_names = {dp.name for dp in payload_dps}
 
@@ -569,6 +588,7 @@ def export() -> None:
 )
 def export_postman(out: str, partners_dir: str, selected_partners: tuple[str, ...]) -> None:
     """Generate a Postman collection v2.1 JSON file from loaded partner definitions."""
+    cli_log = _setup_logging()
     try:
         resolved = _resolve_partners_dir(partners_dir)
     except FileNotFoundError as exc:
@@ -597,6 +617,7 @@ def export_postman(out: str, partners_dir: str, selected_partners: tuple[str, ..
     out_path.write_text(json.dumps(collection, indent=2))
 
     stats = collection_stats(partners)
+    cli_log.info("export postman out=%s partners=%d", out_path, stats["partners"])
     click.echo(f"Collection written to {out_path}")
     click.echo(f"  Partners : {stats['partners']} ({', '.join(stats['partner_names'])})")
     click.echo(
