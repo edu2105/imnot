@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 import pytest
 
 from imnot.config import LoggingConfig
 from imnot.logging_setup import ArchivingRotatingHandler, configure_logging
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -134,6 +132,7 @@ def test_dorollover_date_format(tmp_path):
     assert len(archived) == 1
     # Name should match date pattern YYYY-MM-DD
     import re
+
     assert re.search(r"\d{4}-\d{2}-\d{2}", archived[0].name)
 
 
@@ -156,6 +155,7 @@ def test_dorollover_epoch_format(tmp_path):
     archived = list(archived_dir.glob("imnot.cli.*.log"))
     assert len(archived) == 1
     import re
+
     assert re.search(r"\d{10}", archived[0].name)
 
 
@@ -166,6 +166,7 @@ def test_dorollover_same_day_collision(tmp_path):
 
     # Pre-create a file with today's date to force collision
     from datetime import datetime, timezone
+
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     (archived_dir / f"imnot.cli.{today}.log").write_text("old")
 

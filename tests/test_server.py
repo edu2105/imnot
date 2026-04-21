@@ -178,6 +178,7 @@ def test_create_app_with_no_partners_healthz_still_works(tmp_path):
 
 def test_logging_middleware_emits_http_log(tmp_path, caplog):
     import logging
+
     app = create_app(partners_dir=PARTNERS_DIR, db_path=tmp_path / "test.db")
     with TestClient(app) as c:
         with caplog.at_level(logging.INFO, logger="imnot.http"):
@@ -187,6 +188,7 @@ def test_logging_middleware_emits_http_log(tmp_path, caplog):
 
 def test_logging_middleware_excludes_healthz(tmp_path, caplog):
     import logging
+
     app = create_app(partners_dir=PARTNERS_DIR, db_path=tmp_path / "test.db")
     with TestClient(app) as c:
         with caplog.at_level(logging.INFO, logger="imnot.http"):

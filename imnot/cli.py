@@ -336,7 +336,7 @@ def init(target_dir: str) -> None:
     click.echo(f"Initialized imnot project in {target}\n")
     for path, patterns in written:
         click.echo(f"  {path}   ({patterns})")
-    click.echo(f"  imnot.toml")
+    click.echo("  imnot.toml")
     click.echo()
     click.echo("Run `imnot start` to launch the mock server.")
 

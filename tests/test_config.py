@@ -2,12 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
-import pytest
-
 from imnot.config import ImnotConfig, LoggingConfig, ServerConfig, load_config
-
 
 # ---------------------------------------------------------------------------
 # Defaults
