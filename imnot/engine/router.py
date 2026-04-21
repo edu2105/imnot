@@ -29,6 +29,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from imnot.engine.patterns.async_ import make_async_handlers
 from imnot.engine.patterns.fetch import make_fetch_handler
 from imnot.engine.patterns.oauth import make_oauth_handler
+from imnot.engine.patterns.paginated import make_paginated_handler
 from imnot.engine.patterns.push import fire_callback, make_push_handler
 from imnot.engine.patterns.static import make_static_handler
 from imnot.engine.session_store import SessionStore
@@ -45,7 +46,7 @@ _IMNOT_VERSION = _pkg_version("imnot")
 # Patterns that store payload in the session store and therefore need admin
 # payload endpoints (GET/POST global + session).  oauth and static are fully
 # defined by the YAML and never consult the store, so they get no admin routes.
-_PAYLOAD_PATTERNS = {"fetch", "async", "push"}
+_PAYLOAD_PATTERNS = {"fetch", "async", "push", "paginated"}
 
 
 def register_routes(
@@ -55,6 +56,7 @@ def register_routes(
     admin_key: str | None = None,
     partners_dir: Path | None = None,
     base_url: str = "http://localhost:8000",
+    default_limit: int = 50,
 ) -> None:
     """Register all routes on *app* derived from *partners*, plus fixed infra routes.
 
@@ -81,6 +83,7 @@ def register_routes(
     app.state.base_url = base_url
     app.state.registered_routes = registered_routes
     app.state.registered_admin_dps = registered_admin_dps
+    app.state.default_limit = default_limit
 
     if admin_key:
         _register_admin_auth_middleware(app, admin_key)
@@ -88,7 +91,7 @@ def register_routes(
     _register_infra_routes(app, partners, store)
     for partner in partners:
         for datapoint in partner.datapoints:
-            _register_consumer_routes(app, partner, datapoint, store, configs, registered_routes)
+            _register_consumer_routes(app, partner, datapoint, store, configs, registered_routes, default_limit)
             if datapoint.pattern in _PAYLOAD_PATTERNS:
                 _register_admin_routes(app, partner, datapoint, store)
                 registered_admin_dps.add((partner.partner, datapoint.name))
@@ -161,6 +164,7 @@ def _register_consumer_routes(
     store: SessionStore,
     configs: dict[tuple, dict[str, Any]],
     registered_routes: dict[tuple[str, str], str],
+    default_limit: int = 50,
 ) -> None:
     owner = f"{partner.partner}/{datapoint.name}"
 
@@ -214,6 +218,14 @@ def _register_consumer_routes(
             app.add_api_route(endpoint.path, handler, methods=[endpoint.method])
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered push route %s %s", endpoint.method, endpoint.path)
+
+    elif datapoint.pattern == "paginated":
+        for endpoint in datapoint.endpoints:
+            _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
+            handler = make_paginated_handler(partner.partner, datapoint, endpoint, store, default_limit)
+            app.add_api_route(endpoint.path, handler, methods=[endpoint.method])
+            registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
+            logger.debug("Registered paginated route %s %s", endpoint.method, endpoint.path)
 
 
 # ---------------------------------------------------------------------------
@@ -416,7 +428,10 @@ def _register_infra_routes(
                 new_eps = [ep for ep in dp.endpoints if (ep.method.upper(), ep.path) not in registered]
                 if new_eps:
                     try:
-                        _register_consumer_routes(request.app, partner, dp, store_, configs, registered)
+                        _register_consumer_routes(
+                            request.app, partner, dp, store_, configs, registered,
+                            request.app.state.default_limit,
+                        )
                         for ep in new_eps:
                             added.append(f"{ep.method.upper()} {ep.path}")
                     except ValueError as exc:
@@ -489,7 +504,10 @@ def _register_infra_routes(
             new_eps = [ep for ep in dp.endpoints if (ep.method.upper(), ep.path) not in registered_]
             if new_eps:
                 try:
-                    _register_consumer_routes(request.app, partner, dp, store_, configs_, registered_)
+                    _register_consumer_routes(
+                        request.app, partner, dp, store_, configs_, registered_,
+                        request.app.state.default_limit,
+                    )
                     for ep in new_eps:
                         added.append(f"{ep.method.upper()} {ep.path}")
                 except ValueError as exc:

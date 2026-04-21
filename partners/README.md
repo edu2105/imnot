@@ -57,7 +57,7 @@ datapoints:
 |-------|----------|-------|
 | `name` | Yes | Used in admin URLs: `/imnot/admin/{partner}/{name}/...` |
 | `description` | No | |
-| `pattern` | Yes | Must be one of: `oauth`, `async`, `static`, `fetch`, `push` |
+| `pattern` | Yes | Must be one of: `oauth`, `async`, `static`, `fetch`, `push`, `paginated` |
 | `endpoints` | Yes | At least one required |
 
 **Rule:** one datapoint = one payload stored. If two API resources need separate
@@ -451,9 +451,91 @@ curl -X POST http://localhost:8000/imnot/admin/partner/rate-push/push/<request_i
 
 ---
 
+### Pattern: `paginated`
+
+**Use when:** the endpoint returns a list of items that consumers will page through using
+`offset` and `limit` query parameters.
+
+**How it works:** you upload an array payload (the full dataset) via the admin API; imnot
+slices it at request time based on the `offset` and `limit` query parameters and wraps the
+slice in an envelope whose field names you define in the `pagination:` block. Supports
+session isolation via `X-Imnot-Session` — two test sessions can hold independent datasets.
+
+**Required endpoints:** at least one endpoint (typically a `GET`).
+
+**Required YAML block:** `pagination:` must be present alongside `endpoints:`.
+
+**Pagination config fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `style` | Yes | Must be `offset_limit` (v1 only; `cursor` and `page_number` reserved) |
+| `items_field` | Yes | Top-level response key that holds the item array (e.g. `items`, `results`, `data`) |
+| `total_field` | No | Top-level response key for total dataset count |
+| `has_more_field` | No | Top-level response key for boolean "more pages exist" flag |
+| `next_offset_field` | No | Top-level response key for the next page's offset value (null when no more pages) |
+
+**Query parameters accepted by the handler:**
+
+| Param | Default | Behavior |
+|-------|---------|----------|
+| `offset` | `0` | Start position (0-based). Negative values treated as 0 |
+| `limit` | `default_limit` (50) | Page size. Values ≤ 0 fall back to `default_limit` |
+
+`default_limit` is configurable via `imnot.toml` `[pagination] default_limit`.
+
+**Out-of-bounds:** if `offset >= total`, the response returns an empty array, `total`, and
+`hasMore: false` — no error.
+
+**Payload validation:** the uploaded payload must be a JSON **array**. If it is not, the
+handler returns `422` with `"Payload must be a JSON array for the paginated pattern"`.
+
+**Example:**
+
+```yaml
+- name: listing
+  description: Paginated property listings
+  pattern: paginated
+  endpoints:
+    - method: GET
+      path: /ratesync/listings
+      response:
+        status: 200
+  pagination:
+    style: offset_limit
+    items_field: results
+    total_field: total
+    has_more_field: hasMore
+    next_offset_field: nextOffset
+```
+
+Upload the dataset:
+```bash
+curl -X POST http://localhost:8000/imnot/admin/ratesync/listing/payload \
+  -H "Content-Type: application/json" \
+  -d '[{"id":1,"name":"Apt A"},{"id":2,"name":"Apt B"},{"id":3,"name":"Apt C"}]'
+```
+
+Request the first page:
+```bash
+curl "http://localhost:8000/ratesync/listings?offset=0&limit=2"
+```
+
+Response:
+```json
+{
+  "results": [{"id":1,"name":"Apt A"},{"id":2,"name":"Apt B"}],
+  "total": 3,
+  "hasMore": true,
+  "nextOffset": 2
+}
+```
+
+---
+
 ## Auto-generated admin endpoints
 
-For every `fetch`, `async`, or `push` datapoint, imnot automatically registers these
+For every `fetch`, `async`, `push`, or `paginated` datapoint, imnot automatically registers these
 admin endpoints — no extra YAML required:
 
 | Method | Path | Description |
@@ -464,7 +546,8 @@ admin endpoints — no extra YAML required:
 | `GET`  | `/imnot/admin/{partner}/{datapoint}/payload/session/{session_id}` | Inspect a session payload |
 
 `oauth` and `static` datapoints do **not** get these endpoints. Their responses are fully
-defined by the YAML and never use the payload store.
+defined by the YAML and never use the payload store. `paginated` follows the same admin
+routes as `fetch` — upload the full array once; the handler slices at request time.
 
 Fixed infra endpoints (always available regardless of partners loaded):
 
@@ -484,7 +567,7 @@ runs in a container and you cannot exec in to run the CLI. See the main README f
 
 - [ ] `partner` value is lowercase with no spaces or special characters
 - [ ] Each datapoint has a unique `name` within the file
-- [ ] `pattern` is one of `oauth`, `async`, `static`, `fetch`, `push`
+- [ ] `pattern` is one of `oauth`, `async`, `static`, `fetch`, `push`, `paginated`
 - [ ] If the token endpoint returns non-standard fields, use `static` not `oauth`
 - [ ] Every `oauth` datapoint has exactly one `POST` endpoint
 - [ ] Every `async` datapoint has at least two endpoints, each with a unique `step` number
@@ -493,6 +576,9 @@ runs in a container and you cannot exec in to run the CLI. See the main README f
 - [ ] Async steps that reference the generated UUID use `{id}` in their path
 - [ ] The async fetch step has `returns_payload: true`
 - [ ] Every `push` datapoint has exactly one endpoint with exactly one of `callback_url_field` or `callback_url_header` set (not both, not neither)
+- [ ] Every `paginated` datapoint has a `pagination:` block with `style: offset_limit` and `items_field` set
+- [ ] The `pagination:` block contains only recognized keys: `style`, `items_field`, `total_field`, `has_more_field`, `next_offset_field`
+- [ ] The payload uploaded for a `paginated` datapoint is a JSON array (not an object)
 - [ ] All `response` blocks are nested inside their endpoint, not at the datapoint level
 - [ ] No two endpoints across the whole file share the same `method` + `path` combination
 - [ ] No endpoint in this file shares `method` + `path` with an endpoint in any other partner file — imnot enforces this at startup and will refuse to start if a conflict is detected
@@ -513,13 +599,17 @@ or API documentation, follow this process:
    later (by polling a status endpoint or following a location header), map the full
    sequence to the `async` pattern. Define as many steps as the real API uses.
 
-3. **Identify sync resources** — if an endpoint simply returns the current state of a
-   resource, use the `fetch` pattern.
+3. **Identify paginated list endpoints** — if an endpoint returns a list of items with
+   `offset`/`limit` (or page-number) query parameters, use the `paginated` pattern. Upload
+   the full dataset as an array; imnot handles slicing at request time.
 
-4. **One datapoint per independent resource** — if the API has `/reservations` and
+4. **Identify sync resources** — if an endpoint simply returns the current state of a
+   single resource (not a list), use the `fetch` pattern.
+
+5. **One datapoint per independent resource** — if the API has `/reservations` and
    `/guests` as separate resources with separate payloads, define two datapoints.
 
-5. **Do not invent patterns** — only use patterns listed in this guide. If the API
+6. **Do not invent patterns** — only use patterns listed in this guide. If the API
    behaviour does not fit any listed pattern, flag it rather than forcing a fit.
 
-6. **Use the checklist above** before finalising the output.
+7. **Use the checklist above** before finalising the output.

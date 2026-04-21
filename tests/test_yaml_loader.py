@@ -130,3 +130,162 @@ def test_async_pattern_is_valid(tmp_path):
     result = load_partners(tmp_path)
     assert len(result) == 1
     assert result[0].datapoints[0].pattern == "async"
+
+
+# ---------------------------------------------------------------------------
+# paginated pattern
+# ---------------------------------------------------------------------------
+
+_VALID_PAGINATED_YAML = (
+    "partner: ratesync\n"
+    "datapoints:\n"
+    "  - name: listing\n"
+    "    pattern: paginated\n"
+    "    endpoints:\n"
+    "      - method: GET\n"
+    "        path: /ratesync/listings\n"
+    "        response:\n"
+    "          status: 200\n"
+    "    pagination:\n"
+    "      style: offset_limit\n"
+    "      items_field: results\n"
+    "      total_field: total\n"
+    "      has_more_field: hasMore\n"
+    "      next_offset_field: nextOffset\n"
+)
+
+
+def test_paginated_pattern_is_valid(tmp_path):
+    partner_dir = tmp_path / "ratesync"
+    partner_dir.mkdir()
+    (partner_dir / "partner.yaml").write_text(_VALID_PAGINATED_YAML)
+    result = load_partners(tmp_path)
+    assert len(result) == 1
+    dp = result[0].datapoints[0]
+    assert dp.pattern == "paginated"
+    assert dp.pagination is not None
+    assert dp.pagination["style"] == "offset_limit"
+    assert dp.pagination["items_field"] == "results"
+    assert dp.pagination["total_field"] == "total"
+    assert dp.pagination["has_more_field"] == "hasMore"
+    assert dp.pagination["next_offset_field"] == "nextOffset"
+
+
+def test_paginated_missing_style(tmp_path):
+    partner_dir = tmp_path / "ratesync"
+    partner_dir.mkdir()
+    (partner_dir / "partner.yaml").write_text(
+        "partner: ratesync\n"
+        "datapoints:\n"
+        "  - name: listing\n"
+        "    pattern: paginated\n"
+        "    endpoints:\n"
+        "      - method: GET\n"
+        "        path: /ratesync/listings\n"
+        "        response:\n"
+        "          status: 200\n"
+        "    pagination:\n"
+        "      items_field: results\n"
+    )
+    result = load_partners(tmp_path)
+    assert result == []
+
+
+def test_paginated_unknown_style(tmp_path):
+    partner_dir = tmp_path / "ratesync"
+    partner_dir.mkdir()
+    (partner_dir / "partner.yaml").write_text(
+        "partner: ratesync\n"
+        "datapoints:\n"
+        "  - name: listing\n"
+        "    pattern: paginated\n"
+        "    endpoints:\n"
+        "      - method: GET\n"
+        "        path: /ratesync/listings\n"
+        "        response:\n"
+        "          status: 200\n"
+        "    pagination:\n"
+        "      style: cursor\n"
+        "      items_field: results\n"
+    )
+    result = load_partners(tmp_path)
+    assert result == []
+
+
+def test_paginated_missing_items_field(tmp_path):
+    partner_dir = tmp_path / "ratesync"
+    partner_dir.mkdir()
+    (partner_dir / "partner.yaml").write_text(
+        "partner: ratesync\n"
+        "datapoints:\n"
+        "  - name: listing\n"
+        "    pattern: paginated\n"
+        "    endpoints:\n"
+        "      - method: GET\n"
+        "        path: /ratesync/listings\n"
+        "        response:\n"
+        "          status: 200\n"
+        "    pagination:\n"
+        "      style: offset_limit\n"
+    )
+    result = load_partners(tmp_path)
+    assert result == []
+
+
+def test_paginated_missing_pagination_block(tmp_path):
+    partner_dir = tmp_path / "ratesync"
+    partner_dir.mkdir()
+    (partner_dir / "partner.yaml").write_text(
+        "partner: ratesync\n"
+        "datapoints:\n"
+        "  - name: listing\n"
+        "    pattern: paginated\n"
+        "    endpoints:\n"
+        "      - method: GET\n"
+        "        path: /ratesync/listings\n"
+        "        response:\n"
+        "          status: 200\n"
+    )
+    result = load_partners(tmp_path)
+    assert result == []
+
+
+def test_paginated_unknown_key_in_pagination_block(tmp_path):
+    partner_dir = tmp_path / "ratesync"
+    partner_dir.mkdir()
+    (partner_dir / "partner.yaml").write_text(
+        "partner: ratesync\n"
+        "datapoints:\n"
+        "  - name: listing\n"
+        "    pattern: paginated\n"
+        "    endpoints:\n"
+        "      - method: GET\n"
+        "        path: /ratesync/listings\n"
+        "        response:\n"
+        "          status: 200\n"
+        "    pagination:\n"
+        "      style: offset_limit\n"
+        "      items_field: results\n"
+        "      typo_field: oops\n"
+    )
+    result = load_partners(tmp_path)
+    assert result == []
+
+
+def test_non_paginated_datapoint_has_none_pagination(tmp_path):
+    partner_dir = tmp_path / "bookingco"
+    partner_dir.mkdir()
+    (partner_dir / "partner.yaml").write_text(
+        "partner: bookingco\n"
+        "datapoints:\n"
+        "  - name: charges\n"
+        "    pattern: fetch\n"
+        "    endpoints:\n"
+        "      - method: GET\n"
+        "        path: /bookingco/charges\n"
+        "        response:\n"
+        "          status: 200\n"
+    )
+    result = load_partners(tmp_path)
+    assert len(result) == 1
+    assert result[0].datapoints[0].pagination is None

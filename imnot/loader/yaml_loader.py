@@ -19,7 +19,9 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_PATTERNS = {"oauth", "async", "push", "static", "fetch"}
+SUPPORTED_PATTERNS = {"oauth", "async", "push", "static", "fetch", "paginated"}
+
+_PAGINATION_VALID_KEYS = {"style", "items_field", "total_field", "has_more_field", "next_offset_field"}
 
 
 # ---------------------------------------------------------------------------
@@ -39,8 +41,9 @@ class EndpointDef:
 class DatapointDef:
     name: str  # e.g. "reservation"
     description: str
-    pattern: str  # "oauth" | "async" | "fetch" | "static" | "push"
+    pattern: str  # "oauth" | "async" | "fetch" | "static" | "push" | "paginated"
     endpoints: list[EndpointDef]
+    pagination: dict[str, Any] | None = None  # raw pagination block; None for non-paginated patterns
 
 
 @dataclass
@@ -91,11 +94,43 @@ def _parse_datapoint(raw: dict[str, Any], partner: str) -> DatapointDef:
     if not raw_endpoints:
         raise ValueError(f"Datapoint '{name}' in partner '{partner}' has no endpoints")
 
+    pagination: dict[str, Any] | None = None
+    if pattern == "paginated":
+        raw_pagination = raw.get("pagination")
+        if not raw_pagination:
+            raise ValueError(
+                f"Datapoint '{name}' in partner '{partner}' with pattern 'paginated' "
+                f"requires a 'pagination:' block"
+            )
+        unknown_keys = set(raw_pagination.keys()) - _PAGINATION_VALID_KEYS
+        if unknown_keys:
+            raise ValueError(
+                f"Datapoint '{name}' in partner '{partner}': unrecognized key(s) in "
+                f"'pagination:' block: {sorted(unknown_keys)}. "
+                f"Recognized keys: {sorted(_PAGINATION_VALID_KEYS)}"
+            )
+        style = raw_pagination.get("style")
+        if not style:
+            raise ValueError(
+                f"Datapoint '{name}' in partner '{partner}': 'pagination.style' is required"
+            )
+        if style != "offset_limit":
+            raise ValueError(
+                f"Datapoint '{name}' in partner '{partner}': 'pagination.style' must be "
+                f"'offset_limit' (got '{style}'). Other styles are not supported in v1."
+            )
+        if not raw_pagination.get("items_field"):
+            raise ValueError(
+                f"Datapoint '{name}' in partner '{partner}': 'pagination.items_field' is required"
+            )
+        pagination = raw_pagination
+
     return DatapointDef(
         name=name,
         description=raw.get("description", ""),
         pattern=pattern,
         endpoints=[_parse_endpoint(e) for e in raw_endpoints],
+        pagination=pagination,
     )
 
 

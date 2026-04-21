@@ -150,6 +150,10 @@ assert_contains "imnot routes — shows bookingco" "bookingco" "$ROUTES_OUT"
 assert_contains "imnot routes — shows admin section" "ADMIN"  "$ROUTES_OUT"
 assert_contains "imnot routes — shows infra endpoints" "INFRA"  "$ROUTES_OUT"
 
+# generate dry-run for testingpartner — check paginated admin routes appear
+ROUTES_TP_DRY=$(imnot generate --file "$QA_DIR/testingpartner.yaml" --dry-run 2>&1)
+assert_contains "imnot generate --dry-run — paginated admin routes shown" "/imnot/admin/testingpartner/listing/payload" "$ROUTES_TP_DRY"
+
 # export postman (reads YAML, no server needed)
 imnot export postman --out postman.json > /dev/null 2>&1
 [ -f "postman.json" ] && ok "imnot export postman — file written" || fail "imnot export postman — file missing"
@@ -299,6 +303,7 @@ assert_contains "imnot generate — output lists async step 1"    "/testingpartn
 assert_contains "imnot generate — output lists static endpoint" "/testingpartner/config"      "$GENERATE_OUT"
 assert_contains "imnot generate — output lists fetch endpoint"  "/testingpartner/records"     "$GENERATE_OUT"
 assert_contains "imnot generate — output lists push endpoint"   "/testingpartner/notifications" "$GENERATE_OUT"
+assert_contains "imnot generate — output lists paginated endpoint" "/testingpartner/listings" "$GENERATE_OUT"
 
 # Second generate without --force → should fail
 if ! imnot generate --file "$QA_DIR/testingpartner.yaml" > /dev/null 2>&1; then
@@ -437,6 +442,36 @@ assert_contains "Push callback — payload contains event field" "qa.triggered" 
 
 kill "$CALLBACK_SERVER_PID" 2>/dev/null || true
 unset CALLBACK_SERVER_PID
+
+echo ""
+echo "  ── paginated ──"
+# Upload 10-item array
+curl -s -X POST "$BASE/imnot/admin/testingpartner/listing/payload" \
+  -H "Content-Type: application/json" \
+  -d '[{"id":0},{"id":1},{"id":2},{"id":3},{"id":4},{"id":5},{"id":6},{"id":7},{"id":8},{"id":9}]' > /dev/null
+
+# First page
+PAGE1=$(curl -s "$BASE/testingpartner/listings?offset=0&limit=3")
+PAGE1_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE/testingpartner/listings?offset=0&limit=3")
+assert_status "GET /testingpartner/listings?offset=0&limit=3" 200 "$PAGE1_STATUS"
+PAGE1_COUNT=$(echo "$PAGE1" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['items']))" 2>/dev/null)
+[ "$PAGE1_COUNT" = "3" ] && ok "paginated — first page returns 3 items" || fail "paginated — first page expected 3 items, got $PAGE1_COUNT"
+PAGE1_TOTAL=$(echo "$PAGE1" | python3 -c "import sys,json; print(json.load(sys.stdin)['total'])" 2>/dev/null)
+[ "$PAGE1_TOTAL" = "10" ] && ok "paginated — total is 10" || fail "paginated — expected total=10, got $PAGE1_TOTAL"
+PAGE1_HAS_MORE=$(echo "$PAGE1" | python3 -c "import sys,json; print(json.load(sys.stdin)['hasMore'])" 2>/dev/null)
+[ "$PAGE1_HAS_MORE" = "True" ] && ok "paginated — hasMore is true on first page" || fail "paginated — expected hasMore=True, got $PAGE1_HAS_MORE"
+
+# Mid-dataset
+PAGE_MID=$(curl -s "$BASE/testingpartner/listings?offset=5&limit=3")
+PAGE_MID_FIRST_ID=$(echo "$PAGE_MID" | python3 -c "import sys,json; print(json.load(sys.stdin)['items'][0]['id'])" 2>/dev/null)
+[ "$PAGE_MID_FIRST_ID" = "5" ] && ok "paginated — mid-page first item id=5" || fail "paginated — expected first id=5, got $PAGE_MID_FIRST_ID"
+
+# Out-of-bounds offset
+PAGE_OOB=$(curl -s "$BASE/testingpartner/listings?offset=20&limit=5")
+PAGE_OOB_COUNT=$(echo "$PAGE_OOB" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['items']))" 2>/dev/null)
+[ "$PAGE_OOB_COUNT" = "0" ] && ok "paginated — out-of-bounds offset returns empty array" || fail "paginated — expected 0 items, got $PAGE_OOB_COUNT"
+PAGE_OOB_HAS_MORE=$(echo "$PAGE_OOB" | python3 -c "import sys,json; print(json.load(sys.stdin)['hasMore'])" 2>/dev/null)
+[ "$PAGE_OOB_HAS_MORE" = "False" ] && ok "paginated — out-of-bounds hasMore is false" || fail "paginated — expected hasMore=False, got $PAGE_OOB_HAS_MORE"
 
 phase_result 4
 

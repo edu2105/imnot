@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from imnot.config import ImnotConfig, LoggingConfig, ServerConfig, load_config
+from imnot.config import ImnotConfig, LoggingConfig, PaginationConfig, ServerConfig, load_config
 
 # ---------------------------------------------------------------------------
 # Defaults
@@ -102,3 +102,40 @@ def test_load_config_stop_timeout(tmp_path):
     toml.write_text("[server]\nstop_timeout_seconds = 10.5\n", encoding="utf-8")
     config = load_config(toml)
     assert config.server.stop_timeout_seconds == 10.5
+
+
+# ---------------------------------------------------------------------------
+# PaginationConfig
+# ---------------------------------------------------------------------------
+
+
+def test_pagination_config_defaults():
+    c = PaginationConfig()
+    assert c.default_limit == 50
+
+
+def test_load_config_pagination_section(tmp_path):
+    toml = tmp_path / "imnot.toml"
+    toml.write_text("[pagination]\ndefault_limit = 25\n", encoding="utf-8")
+    config = load_config(toml)
+    assert config.pagination.default_limit == 25
+
+
+def test_load_config_pagination_default_when_absent(tmp_path):
+    toml = tmp_path / "imnot.toml"
+    toml.write_text("[server]\nport = 8001\n", encoding="utf-8")
+    config = load_config(toml)
+    assert config.pagination.default_limit == 50
+
+
+def test_load_config_pagination_unknown_keys_ignored(tmp_path):
+    toml = tmp_path / "imnot.toml"
+    toml.write_text("[pagination]\ndefault_limit = 10\nunknown_key = 99\n", encoding="utf-8")
+    config = load_config(toml)
+    assert config.pagination.default_limit == 10
+
+
+def test_imnot_config_has_pagination_field():
+    config = load_config(None)
+    assert isinstance(config.pagination, PaginationConfig)
+    assert config.pagination.default_limit == 50

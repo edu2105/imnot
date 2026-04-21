@@ -1,5 +1,5 @@
 partner: testingpartner
-description: QA test partner — covers all five patterns (oauth, async, static, fetch, push)
+description: QA test partner — covers all six patterns (oauth, async, static, fetch, push, paginated)
 
 datapoints:
 
@@ -70,3 +70,18 @@ datapoints:
         response:
           status: 202
           callback_url_header: X-Callback-Url
+
+  - name: listing
+    description: Paginated list of items
+    pattern: paginated
+    endpoints:
+      - method: GET
+        path: /testingpartner/listings
+        response:
+          status: 200
+    pagination:
+      style: offset_limit
+      items_field: items
+      total_field: total
+      has_more_field: hasMore
+      next_offset_field: nextOffset

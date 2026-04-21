@@ -27,7 +27,7 @@ from typing import Any
 
 from imnot.loader.yaml_loader import DatapointDef, EndpointDef, PartnerDef
 
-_PAYLOAD_PATTERNS = {"fetch", "async", "push"}
+_PAYLOAD_PATTERNS = {"fetch", "async", "push", "paginated"}
 _BODY_METHODS = {"POST", "PUT", "PATCH"}
 
 
