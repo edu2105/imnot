@@ -84,7 +84,14 @@ def _setup_logging(log_dir: Path | None = None) -> logging.Logger:
     config = load_config(_resolve_config())
     resolved = Path(config.logging.log_dir)
     if not resolved.is_absolute():
-        resolved = ((log_dir or Path.cwd()) / resolved).resolve()
+        # Prefer the DB directory (guaranteed writable) over CWD, which may be read-only
+        # in container environments.  Fall back to CWD if the DB can't be located.
+        if log_dir is None:
+            try:
+                log_dir = _resolve_db(config.server.db).parent
+            except (FileNotFoundError, Exception):
+                log_dir = Path.cwd()
+        resolved = (log_dir / resolved).resolve()
     configure_logging(config.logging, resolved)
     return logging.getLogger("imnot.cli")
 
@@ -172,9 +179,11 @@ def start(
     db_path = Path(effective_db)
 
     # Configure logging before anything else so all subsequent events are captured.
+    # Resolve relative log_dir against db_path.parent (guaranteed writable in any
+    # deployment) rather than CWD, which is read-only in the official Docker image.
     log_dir = Path(config.logging.log_dir)
     if not log_dir.is_absolute():
-        log_dir = (Path.cwd() / log_dir).resolve()
+        log_dir = (db_path.parent / log_dir).resolve()
     configure_logging(config.logging, log_dir)
     cli_log = logging.getLogger("imnot.cli")
 
