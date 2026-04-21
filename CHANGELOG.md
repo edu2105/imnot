@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
+### Fixed
+
+- Resolve log dir relative to db_path.parent, not CWD ([b04f3c2](https://github.com/edu2105/imnot/commit/b04f3c23d86c1f587ace729acda2db0940a71608))
+
+## [0.5.0] - 2026-04-21
+
 ### Added
 
 - Add paginated pattern with offset/limit slicing and configurable default ([161d37b](https://github.com/edu2105/imnot/commit/161d37bec09fc0995abaa376bd53b68ba8a6cb65))
