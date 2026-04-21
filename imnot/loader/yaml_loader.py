@@ -70,7 +70,7 @@ def _parse_endpoint(raw: dict[str, Any]) -> EndpointDef:
 
     return EndpointDef(
         method=method.upper(),
-        path=path,
+        path=path.rstrip("/") or "/",
         step=raw.get("step"),  # optional; only async endpoints carry this
         response=raw.get("response") or {},
     )

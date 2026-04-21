@@ -9,6 +9,7 @@ from imnot.loader.yaml_loader import (
     EndpointDef,
     PartnerDef,
     load_partners,
+    parse_partner_yaml,
 )
 
 PARTNERS_DIR = Path(__file__).parent.parent / "partners"
@@ -289,3 +290,61 @@ def test_non_paginated_datapoint_has_none_pagination(tmp_path):
     result = load_partners(tmp_path)
     assert len(result) == 1
     assert result[0].datapoints[0].pagination is None
+
+
+# ---------------------------------------------------------------------------
+# Trailing slash normalisation
+# ---------------------------------------------------------------------------
+
+_TRAILING_SLASH_YAML = """\
+partner: ratesync
+datapoints:
+  - name: rates
+    pattern: static
+    endpoints:
+      - method: GET
+        path: /api/v2/rates/
+        response:
+          status: 200
+          body:
+            ok: true
+"""
+
+
+def test_trailing_slash_stripped_from_endpoint_path():
+    partner = parse_partner_yaml(_TRAILING_SLASH_YAML)
+    assert partner.datapoints[0].endpoints[0].path == "/api/v2/rates"
+
+
+def test_root_path_preserved():
+    yaml = """\
+partner: ratesync
+datapoints:
+  - name: root
+    pattern: static
+    endpoints:
+      - method: GET
+        path: /
+        response:
+          status: 200
+"""
+    partner = parse_partner_yaml(yaml)
+    assert partner.datapoints[0].endpoints[0].path == "/"
+
+
+def test_trailing_slash_endpoint_reachable_without_slash():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from imnot.engine.patterns.static import make_static_handler
+
+    partner = parse_partner_yaml(_TRAILING_SLASH_YAML)
+    ep = partner.datapoints[0].endpoints[0]
+    configs: dict = {}
+    handler = make_static_handler("ratesync", "rates", ep, configs)
+    app = FastAPI()
+    app.add_api_route(ep.path, handler, methods=["GET"])
+    c = TestClient(app, follow_redirects=False)
+    r = c.get("/api/v2/rates")
+    assert r.status_code == 200
+    assert r.json() == {"ok": True}
