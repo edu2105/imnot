@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [Unreleased]
+
+### Added
+
+- Add paginated pattern with offset/limit slicing and configurable default ([161d37b](https://github.com/edu2105/imnot/commit/161d37bec09fc0995abaa376bd53b68ba8a6cb65))
+- Wire configure_logging into all CLI subcommands ([85fca7d](https://github.com/edu2105/imnot/commit/85fca7d2e67e0d6fba0b57d6f160a6c76f6f65c0))
+- Structured logging, imnot.toml config, zero-partners start ([8e344a3](https://github.com/edu2105/imnot/commit/8e344a3f586cd51d136debec0ecf67596f45b75a))
+
+### Fixed
+
+- Strip trailing slashes from endpoint paths at load time ([6878537](https://github.com/edu2105/imnot/commit/687853787bfa305afb9008ffbf40d367b3e864b8))
+- Ruff formatting and add missing patch coverage for paginated + server ([af340b5](https://github.com/edu2105/imnot/commit/af340b5074748ad08e1acabf853cf11c74456737))
+
+### Maintenance
+
+- Fix ruff lint errors in new files ([488c3a1](https://github.com/edu2105/imnot/commit/488c3a126485ebf042f60a1cdc7dc87c48b2a84b))
+- Add CODECOV_TOKEN to coverage upload step ([62ad514](https://github.com/edu2105/imnot/commit/62ad514677590df6912198d2a5336153a129d668))
+- Add ruff linting and pytest-cov coverage reporting ([7fd9a91](https://github.com/edu2105/imnot/commit/7fd9a91e4b5cad3720e00f2338107bac3a000eec))
+- Improve git-cliff config for clean, readable release notes ([09d20eb](https://github.com/edu2105/imnot/commit/09d20ebb56ad06729581936eae878c3456af7ab8))
+
 ## [0.4.5] - 2026-04-19
 
 ### Added

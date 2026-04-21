@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "imnot"
-version = "0.4.5"
+version = "0.5.0"
 description = "A stateful API mock server for integration testing"
 readme = "README.md"
 requires-python = ">=3.11"
