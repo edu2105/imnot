@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Write imnot.toml and logs to db_path.parent, not CWD ([6552d05](https://github.com/edu2105/imnot/commit/6552d05c4f4d906eb721a64a891a1418327649ca))
+
+## [0.5.1] - 2026-04-21
+
+### Fixed
+
 - Resolve log dir relative to db_path.parent, not CWD ([b04f3c2](https://github.com/edu2105/imnot/commit/b04f3c23d86c1f587ace729acda2db0940a71608))
 
 ## [0.5.0] - 2026-04-21
