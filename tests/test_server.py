@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from imnot.api.server import create_app
+from imnot.api.server import create_app, create_app_from_env
 
 PARTNERS_DIR = Path(__file__).parent.parent / "partners"
 
@@ -208,3 +208,21 @@ def test_logging_middleware_echoes_provided_request_id(tmp_path):
     with TestClient(app) as c:
         r = c.get("/imnot/admin/partners", headers={"X-Request-ID": "my-trace-id"})
     assert r.headers["x-request-id"] == "my-trace-id"
+
+
+def test_create_app_from_env_uses_default_limit(tmp_path, monkeypatch):
+    monkeypatch.setenv("IMNOT_PARTNERS_DIR", str(PARTNERS_DIR))
+    monkeypatch.setenv("IMNOT_DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("IMNOT_CONFIG_PATH", str(tmp_path / "nonexistent.toml"))
+    app = create_app_from_env()
+    assert app.state.default_limit == 50
+
+
+def test_create_app_from_env_reads_toml_default_limit(tmp_path, monkeypatch):
+    toml = tmp_path / "imnot.toml"
+    toml.write_text("[pagination]\ndefault_limit = 25\n")
+    monkeypatch.setenv("IMNOT_PARTNERS_DIR", str(PARTNERS_DIR))
+    monkeypatch.setenv("IMNOT_DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("IMNOT_CONFIG_PATH", str(toml))
+    app = create_app_from_env()
+    assert app.state.default_limit == 25

@@ -429,7 +429,12 @@ def _register_infra_routes(
                 if new_eps:
                     try:
                         _register_consumer_routes(
-                            request.app, partner, dp, store_, configs, registered,
+                            request.app,
+                            partner,
+                            dp,
+                            store_,
+                            configs,
+                            registered,
                             request.app.state.default_limit,
                         )
                         for ep in new_eps:
@@ -505,7 +510,12 @@ def _register_infra_routes(
             if new_eps:
                 try:
                     _register_consumer_routes(
-                        request.app, partner, dp, store_, configs_, registered_,
+                        request.app,
+                        partner,
+                        dp,
+                        store_,
+                        configs_,
+                        registered_,
                         request.app.state.default_limit,
                     )
                     for ep in new_eps:

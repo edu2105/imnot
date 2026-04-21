@@ -883,6 +883,7 @@ def _make_paginated_client(tmp_path, store):
     partner_dir.mkdir()
     (partner_dir / "partner.yaml").write_text(_PAGINATED_PARTNER_YAML)
     from imnot.loader.yaml_loader import load_partners
+
     app = FastAPI()
     partners = load_partners(partners_dir)
     register_routes(app, partners, store, partners_dir=partners_dir)
@@ -922,6 +923,7 @@ def test_paginated_default_limit_from_register_routes(tmp_path, store):
     partner_dir.mkdir()
     (partner_dir / "partner.yaml").write_text(_PAGINATED_PARTNER_YAML)
     from imnot.loader.yaml_loader import load_partners
+
     app = FastAPI()
     partners = load_partners(partners_dir)
     register_routes(app, partners, store, partners_dir=partners_dir, default_limit=2)

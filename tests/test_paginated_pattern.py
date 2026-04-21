@@ -270,6 +270,27 @@ def test_payload_not_list_returns_422(client):
 
 
 # ---------------------------------------------------------------------------
+# Invalid query param values (non-numeric offset / limit)
+# ---------------------------------------------------------------------------
+
+
+def test_non_numeric_offset_treated_as_zero(client):
+    c, store = client
+    store.store_global_payload("ratesync", "listing", _ten_items())
+    r = c.get("/ratesync/listings?offset=abc&limit=3")
+    assert r.status_code == 200
+    assert r.json()["items"] == _ten_items()[:3]
+
+
+def test_non_numeric_limit_uses_default(client):
+    c, store = client
+    store.store_global_payload("ratesync", "listing", _ten_items())
+    r = c.get("/ratesync/listings?offset=0&limit=bad")
+    assert r.status_code == 200
+    assert len(r.json()["items"]) == len(_ten_items())
+
+
+# ---------------------------------------------------------------------------
 # Custom status code
 # ---------------------------------------------------------------------------
 

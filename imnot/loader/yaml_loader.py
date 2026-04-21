@@ -99,8 +99,7 @@ def _parse_datapoint(raw: dict[str, Any], partner: str) -> DatapointDef:
         raw_pagination = raw.get("pagination")
         if not raw_pagination:
             raise ValueError(
-                f"Datapoint '{name}' in partner '{partner}' with pattern 'paginated' "
-                f"requires a 'pagination:' block"
+                f"Datapoint '{name}' in partner '{partner}' with pattern 'paginated' requires a 'pagination:' block"
             )
         unknown_keys = set(raw_pagination.keys()) - _PAGINATION_VALID_KEYS
         if unknown_keys:
@@ -111,18 +110,14 @@ def _parse_datapoint(raw: dict[str, Any], partner: str) -> DatapointDef:
             )
         style = raw_pagination.get("style")
         if not style:
-            raise ValueError(
-                f"Datapoint '{name}' in partner '{partner}': 'pagination.style' is required"
-            )
+            raise ValueError(f"Datapoint '{name}' in partner '{partner}': 'pagination.style' is required")
         if style != "offset_limit":
             raise ValueError(
                 f"Datapoint '{name}' in partner '{partner}': 'pagination.style' must be "
                 f"'offset_limit' (got '{style}'). Other styles are not supported in v1."
             )
         if not raw_pagination.get("items_field"):
-            raise ValueError(
-                f"Datapoint '{name}' in partner '{partner}': 'pagination.items_field' is required"
-            )
+            raise ValueError(f"Datapoint '{name}' in partner '{partner}': 'pagination.items_field' is required")
         pagination = raw_pagination
 
     return DatapointDef(

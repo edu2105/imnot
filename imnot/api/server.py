@@ -104,7 +104,9 @@ def create_app(
 
     app.add_middleware(LoggingMiddleware)
     register_routes(
-        app, partners, store,
+        app,
+        partners,
+        store,
         admin_key=admin_key,
         partners_dir=partners_dir,
         base_url=base_url,
