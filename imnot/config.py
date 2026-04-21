@@ -26,9 +26,15 @@ class LoggingConfig:
 
 
 @dataclass
+class PaginationConfig:
+    default_limit: int = 50
+
+
+@dataclass
 class ImnotConfig:
     server: ServerConfig = field(default_factory=ServerConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
+    pagination: PaginationConfig = field(default_factory=PaginationConfig)
 
 
 def _from_dict(cls, data: dict):
@@ -45,4 +51,5 @@ def load_config(path: Path | None) -> ImnotConfig:
     return ImnotConfig(
         server=_from_dict(ServerConfig, data.get("server", {})),
         logging=_from_dict(LoggingConfig, data.get("logging", {})),
+        pagination=_from_dict(PaginationConfig, data.get("pagination", {})),
     )

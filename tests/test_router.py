@@ -848,3 +848,96 @@ def test_create_partner_admin_routes_registered_for_fetch(tmp_path, store):
     # Admin payload endpoint is live
     r2 = c.post("/imnot/admin/bookingco/reservation/payload", json={"id": "123"})
     assert r2.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Paginated pattern — router integration
+# ---------------------------------------------------------------------------
+
+_PAGINATED_PARTNER_YAML = """\
+partner: ratesync
+description: RateSync mock
+
+datapoints:
+  - name: listing
+    description: Paginated listing
+    pattern: paginated
+    endpoints:
+      - method: GET
+        path: /ratesync/listings
+        response:
+          status: 200
+    pagination:
+      style: offset_limit
+      items_field: results
+      total_field: total
+      has_more_field: hasMore
+      next_offset_field: nextOffset
+"""
+
+
+def _make_paginated_client(tmp_path, store):
+    partners_dir = tmp_path / "partners"
+    partners_dir.mkdir()
+    partner_dir = partners_dir / "ratesync"
+    partner_dir.mkdir()
+    (partner_dir / "partner.yaml").write_text(_PAGINATED_PARTNER_YAML)
+    from imnot.loader.yaml_loader import load_partners
+
+    app = FastAPI()
+    partners = load_partners(partners_dir)
+    register_routes(app, partners, store, partners_dir=partners_dir)
+    return TestClient(app, raise_server_exceptions=True), store
+
+
+def test_paginated_consumer_route_registered(tmp_path, store):
+    c, _ = _make_paginated_client(tmp_path, store)
+    r = c.get("/ratesync/listings")
+    assert r.status_code == 404
+
+
+def test_paginated_admin_payload_routes_registered(tmp_path, store):
+    c, s = _make_paginated_client(tmp_path, store)
+    items = [{"id": i} for i in range(5)]
+    r = c.post("/imnot/admin/ratesync/listing/payload", json=items)
+    assert r.status_code == 200
+    assert r.json()["status"] == "ok"
+
+
+def test_paginated_returns_slice(tmp_path, store):
+    c, s = _make_paginated_client(tmp_path, store)
+    items = [{"id": i} for i in range(10)]
+    c.post("/imnot/admin/ratesync/listing/payload", json=items)
+    r = c.get("/ratesync/listings?offset=0&limit=3")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["results"]) == 3
+    assert body["total"] == 10
+    assert body["hasMore"] is True
+
+
+def test_paginated_default_limit_from_register_routes(tmp_path, store):
+    partners_dir = tmp_path / "partners"
+    partners_dir.mkdir()
+    partner_dir = partners_dir / "ratesync"
+    partner_dir.mkdir()
+    (partner_dir / "partner.yaml").write_text(_PAGINATED_PARTNER_YAML)
+    from imnot.loader.yaml_loader import load_partners
+
+    app = FastAPI()
+    partners = load_partners(partners_dir)
+    register_routes(app, partners, store, partners_dir=partners_dir, default_limit=2)
+    c = TestClient(app, raise_server_exceptions=True)
+    items = [{"id": i} for i in range(10)]
+    c.post("/imnot/admin/ratesync/listing/payload", json=items)
+    r = c.get("/ratesync/listings")
+    assert r.status_code == 200
+    assert len(r.json()["results"]) == 2
+
+
+def test_paginated_default_limit_on_app_state(tmp_path, store):
+    partners_dir = tmp_path / "partners"
+    partners_dir.mkdir()
+    app = FastAPI()
+    register_routes(app, [], store, partners_dir=partners_dir, default_limit=25)
+    assert app.state.default_limit == 25

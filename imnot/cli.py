@@ -58,6 +58,9 @@ _IMNOT_TOML_TEMPLATE = """\
 # debug = false                           # enable DEBUG-level logs
 # stdout = false                          # also emit to stdout (useful for Docker/ECS)
 
+# [pagination]
+# default_limit = 50                      # default page size for paginated pattern endpoints
+
 # [ui]
 # Reserved for the future admin UI configuration.
 """
@@ -228,6 +231,7 @@ def start(
                 db_path=db_path,
                 admin_key=effective_admin_key,
                 base_url=config.server.base_url,
+                default_limit=config.pagination.default_limit,
             )
             uvicorn.run(app, host=effective_host, port=effective_port)
     finally:

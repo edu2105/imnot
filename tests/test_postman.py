@@ -309,6 +309,59 @@ def test_push_callback_url_header_has_no_body(push_header_partner):
 
 
 # ---------------------------------------------------------------------------
+# Paginated — Admin sub-folder (4 requests) and session header
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def paginated_partner():
+    ep = _ep("GET", "/ratesync/listings", {"status": 200})
+    dp = DatapointDef(
+        name="listing",
+        pattern="paginated",
+        endpoints=[ep],
+        description="",
+        pagination={"style": "offset_limit", "items_field": "results"},
+    )
+    return _partner("ratesync", [dp])
+
+
+def test_paginated_datapoint_has_admin_subfolder(paginated_partner):
+    col = build_postman_collection([paginated_partner])
+    dp_folder = col["item"][0]["item"][0]
+    admin = next((i for i in dp_folder["item"] if i["name"] == "Admin"), None)
+    assert admin is not None
+
+
+def test_paginated_admin_subfolder_has_4_requests(paginated_partner):
+    col = build_postman_collection([paginated_partner])
+    dp_folder = col["item"][0]["item"][0]
+    admin = next(i for i in dp_folder["item"] if i["name"] == "Admin")
+    assert len(admin["item"]) == 4
+
+
+def test_paginated_admin_subfolder_has_no_retrigger(paginated_partner):
+    col = build_postman_collection([paginated_partner])
+    dp_folder = col["item"][0]["item"][0]
+    admin = next(i for i in dp_folder["item"] if i["name"] == "Admin")
+    names = [i["name"] for i in admin["item"]]
+    assert not any("retrigger" in n for n in names)
+
+
+def test_paginated_consumer_has_session_header_disabled(paginated_partner):
+    col = build_postman_collection([paginated_partner])
+    consumer = col["item"][0]["item"][0]["item"][0]
+    session_headers = [h for h in consumer["request"]["header"] if h["key"] == "X-Imnot-Session"]
+    assert len(session_headers) == 1
+    assert session_headers[0]["disabled"] is True
+
+
+def test_collection_stats_paginated_counts_4_admin(paginated_partner):
+    stats = collection_stats([paginated_partner])
+    assert stats["admin_requests"] == 4
+
+
+# ---------------------------------------------------------------------------
 # X-Imnot-Session header
 # ---------------------------------------------------------------------------
 

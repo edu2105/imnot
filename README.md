@@ -85,6 +85,7 @@ imnot routes
   - `fetch` — synchronous GET that returns the stored payload for a datapoint, with optional session isolation.
   - `async` — flexible N-step async flow defined in YAML: submit → optional status check(s) → fetch result.
   - `push` — imnot proactively delivers a payload to a callback URL after receiving a submit request.
+  - `paginated` — offset/limit list endpoint that slices a stored array payload at request time.
 - **Payload storage** supports two modes:
   - *Global* — one payload per datapoint, last write wins.
   - *Session* — isolated payload per test run, selected via `X-Imnot-Session` header.
@@ -321,9 +322,54 @@ curl -X POST http://localhost:8000/imnot/admin/{partner}/{datapoint}/push/{reque
 The retrigger always uses the **current** stored payload, so you can update the payload
 between attempts.
 
+### `paginated`
+
+Upload a full array of items once; imnot slices the array at request time based on `offset`
+and `limit` query parameters. Use for list endpoints that consumers page through.
+
+```yaml
+- name: listing
+  pattern: paginated
+  endpoints:
+    - method: GET
+      path: /ratesync/listings
+      response:
+        status: 200
+  pagination:
+    style: offset_limit      # v1 only value
+    items_field: results     # required: key that holds the page in the response
+    total_field: total       # optional: total dataset count
+    has_more_field: hasMore  # optional: boolean — more pages exist
+    next_offset_field: nextOffset  # optional: offset for the next page (null on last page)
+```
+
+Upload the dataset:
+```bash
+curl -X POST http://localhost:8000/imnot/admin/ratesync/listing/payload \
+  -H "Content-Type: application/json" \
+  -d '[{"id":1},{"id":2},{"id":3},{"id":4},{"id":5}]'
+```
+
+Fetch the first page:
+```bash
+curl "http://localhost:8000/ratesync/listings?offset=0&limit=2"
+# → {"results":[{"id":1},{"id":2}],"total":5,"hasMore":true,"nextOffset":2}
+```
+
+The default page size (when `limit` is not sent) is configured via `imnot.toml`:
+```toml
+[pagination]
+default_limit = 50
+```
+
+Session isolation (`X-Imnot-Session`) is supported — two sessions can hold different datasets
+and page through them independently.
+
+For full schema documentation see [partners/README.md](partners/README.md#pattern-paginated).
+
 ## Session-isolated testing
 
-Any `fetch` or `async` endpoint supports session isolation via `X-Imnot-Session`.
+Any `fetch`, `async`, or `paginated` endpoint supports session isolation via `X-Imnot-Session`.
 
 ```bash
 # Upload a session-scoped payload — returns a session_id
@@ -339,7 +385,7 @@ Multiple test users can run in parallel with isolated payloads — each gets the
 
 ## Admin endpoints
 
-For every `fetch`, `async`, or `push` datapoint, imnot auto-generates payload endpoints:
+For every `fetch`, `async`, `push`, or `paginated` datapoint, imnot auto-generates payload endpoints:
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -443,6 +489,9 @@ Set `IMNOT_ADMIN_KEY` in `docker-compose.yml` for Docker deployments.
 # archived_logs_dir = "./archived-logs"   # rotated backups, relative to log_dir
 # debug = false                           # enable DEBUG-level logs
 # stdout = false                          # also emit to stdout (useful for Docker/ECS)
+
+[pagination]
+# default_limit = 50                      # default page size for paginated pattern endpoints
 ```
 
 imnot writes two log files alongside `imnot.db`:
@@ -563,7 +612,7 @@ imnot/
 ├── imnot/
 │   ├── api/           # FastAPI app factory
 │   ├── engine/
-│   │   ├── patterns/  # oauth / static / fetch / async handlers
+│   │   ├── patterns/  # oauth / static / fetch / async / push / paginated handlers
 │   │   ├── router.py  # dynamic route registration
 │   │   └── session_store.py  # SQLite persistence
 │   ├── loader/        # YAML partner definition parser
@@ -605,8 +654,8 @@ pytest
 The QA suite spins up a real server in a fresh temp directory and runs five phases:
 1. CLI commands (`imnot init`, `routes`, `export postman`, `generate`)
 2. Full pattern flows for the default partners (staylink + bookingco)
-3. `imnot generate testingpartner` covering all five patterns + hot reload
-4. Endpoint flows for the generated partner (oauth, async, static, fetch, push)
+3. `imnot generate testingpartner` covering all six patterns + hot reload
+4. Endpoint flows for the generated partner (oauth, async, static, fetch, push, paginated)
 5. Stop / restart / DB persistence check
 
 Run this after any change that could affect the public contract: YAML schema, CLI interface, pattern behaviour, or the session store.

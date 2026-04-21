@@ -24,6 +24,7 @@ from fastapi import FastAPI
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
+from imnot.config import load_config
 from imnot.engine.router import register_routes
 from imnot.engine.session_store import SessionStore
 from imnot.loader.yaml_loader import load_partners
@@ -71,6 +72,7 @@ def create_app(
     db_path: Path = DEFAULT_DB_PATH,
     admin_key: str | None = None,
     base_url: str = "http://localhost:8000",
+    default_limit: int = 50,
 ) -> FastAPI:
     """Build and return a fully configured FastAPI application.
 
@@ -101,7 +103,15 @@ def create_app(
     )
 
     app.add_middleware(LoggingMiddleware)
-    register_routes(app, partners, store, admin_key=admin_key, partners_dir=partners_dir, base_url=base_url)
+    register_routes(
+        app,
+        partners,
+        store,
+        admin_key=admin_key,
+        partners_dir=partners_dir,
+        base_url=base_url,
+        default_limit=default_limit,
+    )
     return app
 
 
@@ -114,8 +124,24 @@ def create_app_from_env() -> FastAPI:
     - ``IMNOT_PARTNERS_DIR``  (default: ``partners``)
     - ``IMNOT_DB_PATH``       (default: ``imnot.db``)
     - ``IMNOT_ADMIN_KEY``     (default: none)
+
+    ``default_limit`` for the paginated pattern is read from ``imnot.toml`` via ``load_config()``.
     """
-    partners_dir = Path(os.environ.get("IMNOT_PARTNERS_DIR", str(DEFAULT_PARTNERS_DIR)))
+    partners_dir_env = os.environ.get("IMNOT_PARTNERS_DIR", str(DEFAULT_PARTNERS_DIR))
+    partners_dir = Path(partners_dir_env) if partners_dir_env else None
     db_path = Path(os.environ.get("IMNOT_DB_PATH", str(DEFAULT_DB_PATH)))
     admin_key = os.environ.get("IMNOT_ADMIN_KEY") or None
-    return create_app(partners_dir=partners_dir, db_path=db_path, admin_key=admin_key)
+
+    config_path: Path | None = None
+    config_search = Path(os.environ.get("IMNOT_CONFIG_PATH", "imnot.toml"))
+    if config_search.exists():
+        config_path = config_search
+    config = load_config(config_path)
+    default_limit = config.pagination.default_limit
+
+    return create_app(
+        partners_dir=partners_dir,
+        db_path=db_path,
+        admin_key=admin_key,
+        default_limit=default_limit,
+    )
