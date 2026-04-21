@@ -66,8 +66,17 @@ _IMNOT_TOML_TEMPLATE = """\
 """
 
 
-def _resolve_config() -> Path | None:
-    """Walk up from CWD looking for imnot.toml. Returns path if found, None otherwise."""
+def _resolve_config(db_path: Path | None = None) -> Path | None:
+    """Walk up from CWD looking for imnot.toml. Returns path if found, None otherwise.
+
+    If *db_path* is provided, its parent directory is checked first — this handles
+    deployments where the DB lives in a writable subdirectory (e.g. /app/data in Docker)
+    while CWD is a read-only parent (e.g. /app).
+    """
+    if db_path is not None:
+        candidate = db_path.parent / "imnot.toml"
+        if candidate.exists():
+            return candidate
     current = Path.cwd()
     while True:
         candidate = current / "imnot.toml"
@@ -167,8 +176,10 @@ def start(
     admin_key: str | None,
 ) -> None:
     """Start the mock server and load partner definitions."""
-    # Load config; CLI flags take priority over imnot.toml values.
-    config_path = _resolve_config()
+    # Resolve db_path early so _resolve_config can find imnot.toml co-located with the
+    # DB (e.g. /app/data/imnot.toml) before we know the full config.
+    early_db_path = Path(db) if db else Path(DEFAULT_DB)
+    config_path = _resolve_config(db_path=early_db_path)
     config = load_config(config_path)
 
     effective_db = db or config.server.db
@@ -187,9 +198,9 @@ def start(
     configure_logging(config.logging, log_dir)
     cli_log = logging.getLogger("imnot.cli")
 
-    # Auto-write imnot.toml with defaults if not present anywhere in the tree.
+    # Auto-write imnot.toml co-located with the DB (guaranteed writable directory).
     if config_path is None:
-        toml_path = Path.cwd() / "imnot.toml"
+        toml_path = db_path.parent / "imnot.toml"
         if not toml_path.exists():
             toml_path.write_text(_IMNOT_TOML_TEMPLATE, encoding="utf-8")
             cli_log.info("Created imnot.toml with default configuration at %s", toml_path)
