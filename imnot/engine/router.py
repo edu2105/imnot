@@ -36,7 +36,9 @@ from imnot.loader.yaml_loader import DatapointDef, EndpointDef, PartnerDef, load
 from imnot.partners import register_partner
 from imnot.postman import build_postman_collection
 
-logger = logging.getLogger(__name__)
+_cli_logger = logging.getLogger("imnot.cli")
+_http_logger = logging.getLogger("imnot.http")
+logger = _cli_logger  # startup / registration events go to the CLI stream
 
 _IMNOT_VERSION = _pkg_version("imnot")
 
@@ -52,6 +54,7 @@ def register_routes(
     store: SessionStore,
     admin_key: str | None = None,
     partners_dir: Path | None = None,
+    base_url: str = "http://localhost:8000",
 ) -> None:
     """Register all routes on *app* derived from *partners*, plus fixed infra routes.
 
@@ -75,6 +78,7 @@ def register_routes(
     app.state.store = store
     app.state.partners = partners
     app.state.partners_dir = partners_dir
+    app.state.base_url = base_url
     app.state.registered_routes = registered_routes
     app.state.registered_admin_dps = registered_admin_dps
 
@@ -111,7 +115,7 @@ def _register_admin_auth_middleware(app: FastAPI, admin_key: str) -> None:
             if request.url.path.startswith("/imnot/admin/"):
                 auth = request.headers.get("Authorization", "")
                 if not hmac.compare_digest(auth, f"Bearer {admin_key}"):
-                    logger.warning(
+                    _http_logger.warning(
                         "Admin auth failure: %s %s from %s",
                         request.method,
                         request.url.path,
@@ -386,7 +390,7 @@ def _register_infra_routes(
         try:
             new_partners = load_partners(partners_dir)
         except Exception as exc:
-            logger.exception("Reload failed: %s", exc)
+            _http_logger.exception("Reload failed: %s", exc)
             return JSONResponse(status_code=500, content={"detail": "Reload failed. Check server logs for details."})
 
         configs: dict = request.app.state.configs
@@ -435,7 +439,7 @@ def _register_infra_routes(
                         partners[i] = new_partner
                         break
 
-        logger.info("Reload: updated=%s added=%s conflicts=%s", updated, added, conflicts)
+        _http_logger.info("Reload: updated=%s added=%s conflicts=%s", updated, added, conflicts)
         status = "ok" if not conflicts else "partial"
         return JSONResponse({"status": status, "updated": updated, "added": added, "conflicts": conflicts})
 
@@ -533,7 +537,12 @@ def _register_infra_routes(
         )
 
     async def postman_collection(request: Request) -> JSONResponse:
-        return JSONResponse(build_postman_collection(request.app.state.partners))
+        return JSONResponse(
+            build_postman_collection(
+                request.app.state.partners,
+                base_url=request.app.state.base_url,
+            )
+        )
 
     reload_partners.__name__ = "admin_reload_partners"
     create_partner_handler.__name__ = "admin_create_partner"

@@ -14,6 +14,7 @@ Responsibilities:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import signal
 import sys
@@ -26,14 +27,63 @@ import uvicorn
 import yaml
 
 from imnot.api.server import create_app
+from imnot.config import load_config
 from imnot.engine.router import _PAYLOAD_PATTERNS
 from imnot.engine.session_store import SessionStore
 from imnot.loader.yaml_loader import load_partners
+from imnot.logging_setup import configure_logging
 from imnot.partners import register_partner
 from imnot.postman import build_postman_collection, collection_stats
 
 DEFAULT_PARTNERS_DIR = "partners"
 DEFAULT_DB = Path("imnot.db")
+
+_IMNOT_TOML_TEMPLATE = """\
+# imnot.toml — runtime configuration for imnot
+# All values shown are defaults. Uncomment and change what you need.
+
+[server]
+# host = "127.0.0.1"                   # bind host
+# port = 8000                          # bind port
+# partners_dir = "partners"            # path to partner YAML directory
+# db = "imnot.db"                      # path to SQLite database file
+# base_url = "http://localhost:8000"   # used in generated Postman collections
+# stop_timeout_seconds = 5             # seconds to wait for graceful shutdown
+
+[logging]
+# log_dir = "."                           # directory for log files (default: current dir)
+# max_bytes = 10485760                    # rotate when log file reaches this size (10 MB)
+# backup_name_format = "date"             # "date" (2026-04-20) or "epoch" (1745789123)
+# archived_logs_dir = "./archived-logs"   # rotated backups, relative to log_dir
+# debug = false                           # enable DEBUG-level logs
+# stdout = false                          # also emit to stdout (useful for Docker/ECS)
+
+# [ui]
+# Reserved for the future admin UI configuration.
+"""
+
+
+def _resolve_config() -> Path | None:
+    """Walk up from CWD looking for imnot.toml. Returns path if found, None otherwise."""
+    current = Path.cwd()
+    while True:
+        candidate = current / "imnot.toml"
+        if candidate.exists():
+            return candidate
+        parent = current.parent
+        if parent == current:
+            return None
+        current = parent
+
+
+def _setup_logging(log_dir: Path | None = None) -> logging.Logger:
+    """Configure logging from imnot.toml (if found) and return the imnot.cli logger."""
+    config = load_config(_resolve_config())
+    resolved = Path(config.logging.log_dir)
+    if not resolved.is_absolute():
+        resolved = ((log_dir or Path.cwd()) / resolved).resolve()
+    configure_logging(config.logging, resolved)
+    return logging.getLogger("imnot.cli")
 
 
 def _resolve_partners_dir(given: str) -> Path:
@@ -80,18 +130,16 @@ def cli() -> None:
 @cli.command()
 @click.option(
     "--partners-dir",
-    default=str(DEFAULT_PARTNERS_DIR),
-    show_default=True,
-    help="Directory containing partner YAML definitions.",
+    default=None,
+    help=f"Directory containing partner YAML definitions. [default: {DEFAULT_PARTNERS_DIR}]",
 )
 @click.option(
     "--db",
-    default=str(DEFAULT_DB),
-    show_default=True,
-    help="Path to the SQLite database file.",
+    default=None,
+    help=f"Path to the SQLite database file. [default: {DEFAULT_DB}]",
 )
-@click.option("--host", default="127.0.0.1", show_default=True, help="Bind host.")
-@click.option("--port", default=8000, show_default=True, help="Bind port.")
+@click.option("--host", default=None, help="Bind host. [default: 127.0.0.1]")
+@click.option("--port", default=None, type=int, help="Bind port. [default: 8000]")
 @click.option("--reload", is_flag=True, default=False, help="Enable auto-reload (development only).")
 @click.option(
     "--admin-key",
@@ -100,33 +148,76 @@ def cli() -> None:
     help="Bearer token required for all /imnot/admin/* endpoints. "
     "Also readable from IMNOT_ADMIN_KEY env var. Omit for open access (local dev only).",
 )
-def start(partners_dir: str, db: str, host: str, port: int, reload: bool, admin_key: str | None) -> None:
+def start(
+    partners_dir: str | None,
+    db: str | None,
+    host: str | None,
+    port: int | None,
+    reload: bool,
+    admin_key: str | None,
+) -> None:
     """Start the mock server and load partner definitions."""
-    try:
-        resolved_partners_dir = _resolve_partners_dir(partners_dir)
-    except FileNotFoundError as exc:
-        click.echo(str(exc), err=True)
-        raise SystemExit(1)
+    # Load config; CLI flags take priority over imnot.toml values.
+    config_path = _resolve_config()
+    config = load_config(config_path)
 
-    db_path = Path(db)
+    effective_db = db or config.server.db
+    effective_host = host or config.server.host
+    effective_port = port if port is not None else config.server.port
+    effective_partners_dir = partners_dir or config.server.partners_dir
+
+    db_path = Path(effective_db)
+
+    # Configure logging before anything else so all subsequent events are captured.
+    log_dir = Path(config.logging.log_dir)
+    if not log_dir.is_absolute():
+        log_dir = (Path.cwd() / log_dir).resolve()
+    configure_logging(config.logging, log_dir)
+    cli_log = logging.getLogger("imnot.cli")
+
+    # Auto-write imnot.toml with defaults if not present anywhere in the tree.
+    if config_path is None:
+        toml_path = Path.cwd() / "imnot.toml"
+        if not toml_path.exists():
+            toml_path.write_text(_IMNOT_TOML_TEMPLATE, encoding="utf-8")
+            cli_log.info("Created imnot.toml with default configuration at %s", toml_path)
+
+    # Resolve partners dir. If missing, start with zero partners (not a fatal error).
+    try:
+        resolved_partners_dir: Path | None = _resolve_partners_dir(effective_partners_dir)
+    except FileNotFoundError:
+        resolved_partners_dir = None
+        click.echo(
+            "Warning: No partners directory found — server starting with zero partners.\n"
+            "Use `imnot generate` or POST /imnot/admin/partners to add partners.",
+            err=True,
+        )
+        cli_log.warning("No partners directory found — starting with zero partners")
+
     effective_admin_key = admin_key or None
     pid_path = db_path.with_suffix(".pid")
 
-    click.echo(f"Starting imnot on http://{host}:{port}")
+    click.echo(f"Starting imnot on http://{effective_host}:{effective_port}")
+    cli_log.info(
+        "Starting imnot host=%s port=%d db=%s partners_dir=%s admin_key=%s",
+        effective_host,
+        effective_port,
+        db_path,
+        resolved_partners_dir,
+        "set" if effective_admin_key else "unset",
+    )
 
     pid_path.write_text(str(os.getpid()))
     try:
         if reload:
-            # uvicorn reload mode requires a factory import string, not an app object.
-            # Export configuration via env vars so create_app_from_env() can pick them up.
-            os.environ["IMNOT_PARTNERS_DIR"] = str(resolved_partners_dir)
+            os.environ["IMNOT_PARTNERS_DIR"] = str(resolved_partners_dir) if resolved_partners_dir else ""
             os.environ["IMNOT_DB_PATH"] = str(db_path)
             if effective_admin_key:
                 os.environ["IMNOT_ADMIN_KEY"] = effective_admin_key
             uvicorn.run(
                 "imnot.api.server:create_app_from_env",
-                host=host,
-                port=port,
+                host=effective_host,
+                port=effective_port,
                 reload=True,
                 reload_includes=["*.yaml"],
                 factory=True,
@@ -136,11 +227,13 @@ def start(partners_dir: str, db: str, host: str, port: int, reload: bool, admin_
                 partners_dir=resolved_partners_dir,
                 db_path=db_path,
                 admin_key=effective_admin_key,
+                base_url=config.server.base_url,
             )
-            uvicorn.run(app, host=host, port=port)
+            uvicorn.run(app, host=effective_host, port=effective_port)
     finally:
         if pid_path.exists():
             pid_path.unlink()
+        cli_log.info("imnot stopped")
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +241,6 @@ def start(partners_dir: str, db: str, host: str, port: int, reload: bool, admin_
 # ---------------------------------------------------------------------------
 
 _DEFAULT_PID = "imnot.pid"
-_STOP_TIMEOUT = 5.0
 _STOP_POLL_INTERVAL = 0.1
 
 
@@ -161,6 +253,9 @@ _STOP_POLL_INTERVAL = 0.1
 )
 def stop(pid_file: str) -> None:
     """Stop a running imnot server."""
+    cli_log = _setup_logging()
+    stop_timeout = load_config(_resolve_config()).server.stop_timeout_seconds
+
     try:
         pid_path = _resolve_pid(pid_file)
     except FileNotFoundError as exc:
@@ -184,20 +279,23 @@ def stop(pid_file: str) -> None:
         click.echo(f"No permission to signal process {pid}.", err=True)
         raise SystemExit(1)
 
+    cli_log.info("Sending SIGTERM to pid %d", pid)
     os.kill(pid, signal.SIGTERM)
 
-    deadline = time.monotonic() + _STOP_TIMEOUT
+    deadline = time.monotonic() + stop_timeout
     while time.monotonic() < deadline:
         try:
             os.kill(pid, 0)
         except ProcessLookupError:
             pid_path.unlink(missing_ok=True)
+            cli_log.info("imnot stopped (pid %d)", pid)
             click.echo(f"imnot stopped (pid {pid}).")
             return
         time.sleep(_STOP_POLL_INTERVAL)
 
+    cli_log.warning("Process %d did not exit within %gs", pid, stop_timeout)
     click.echo(
-        f"Process {pid} did not exit within {_STOP_TIMEOUT:.0f}s. Run `kill -9 {pid}` to force-stop it.",
+        f"Process {pid} did not exit within {stop_timeout:.0f}s. Run `kill -9 {pid}` to force-stop it.",
         err=True,
     )
     raise SystemExit(1)
@@ -235,6 +333,7 @@ def init(target_dir: str) -> None:
         raise SystemExit(1)
 
     target.mkdir(parents=True, exist_ok=True)
+    cli_log = _setup_logging(target)
 
     written: list[tuple[Path, str]] = []
     for partner_name, patterns in _EXAMPLES:
@@ -245,9 +344,15 @@ def init(target_dir: str) -> None:
         dest.write_text(yaml_text, encoding="utf-8")
         written.append((dest.relative_to(target), patterns))
 
+    toml_path = target / "imnot.toml"
+    if not toml_path.exists():
+        toml_path.write_text(_IMNOT_TOML_TEMPLATE, encoding="utf-8")
+
+    cli_log.info("Initialized imnot project in %s", target)
     click.echo(f"Initialized imnot project in {target}\n")
     for path, patterns in written:
         click.echo(f"  {path}   ({patterns})")
+    click.echo("  imnot.toml")
     click.echo()
     click.echo("Run `imnot start` to launch the mock server.")
 
@@ -289,6 +394,7 @@ def status(db: str) -> None:
 )
 def routes(partners_dir: str) -> None:
     """List all consumer and admin endpoints for loaded partners."""
+    _setup_logging()
     try:
         resolved = _resolve_partners_dir(partners_dir)
     except FileNotFoundError as exc:
@@ -361,6 +467,7 @@ def _fail(msg: str, json_output: bool, code: int) -> None:
 @click.option("--force", is_flag=True, default=False, help="Overwrite existing partner.yaml if it already exists.")
 def generate(file_path: str, partners_dir: str, dry_run: bool, json_output: bool, force: bool) -> None:
     """Validate and register a partner YAML definition."""
+    cli_log = _setup_logging()
     try:
         resolved_partners_dir = _resolve_partners_dir(partners_dir)
     except FileNotFoundError as exc:
@@ -382,6 +489,7 @@ def generate(file_path: str, partners_dir: str, dry_run: bool, json_output: bool
         _fail(str(exc), json_output, 2)
 
     partner = result.partner
+    cli_log.info("generate partner=%s dry_run=%s created=%s", partner.partner, dry_run, result.created)
     payload_dps = [dp for dp in partner.datapoints if dp.pattern in _PAYLOAD_PATTERNS]
     payload_dp_names = {dp.name for dp in payload_dps}
 
@@ -480,6 +588,7 @@ def export() -> None:
 )
 def export_postman(out: str, partners_dir: str, selected_partners: tuple[str, ...]) -> None:
     """Generate a Postman collection v2.1 JSON file from loaded partner definitions."""
+    cli_log = _setup_logging()
     try:
         resolved = _resolve_partners_dir(partners_dir)
     except FileNotFoundError as exc:
@@ -502,11 +611,13 @@ def export_postman(out: str, partners_dir: str, selected_partners: tuple[str, ..
             raise SystemExit(1)
         partners = [p for p in partners if p.partner in set(selected_partners)]
 
-    collection = build_postman_collection(partners)
+    base_url = load_config(_resolve_config()).server.base_url
+    collection = build_postman_collection(partners, base_url=base_url)
     out_path = Path(out)
     out_path.write_text(json.dumps(collection, indent=2))
 
     stats = collection_stats(partners)
+    cli_log.info("export postman out=%s partners=%d", out_path, stats["partners"])
     click.echo(f"Collection written to {out_path}")
     click.echo(f"  Partners : {stats['partners']} ({', '.join(stats['partner_names'])})")
     click.echo(

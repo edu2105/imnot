@@ -401,6 +401,20 @@ def test_reload_returns_ok(client):
     assert isinstance(body["added"], list)
 
 
+def test_reload_load_partners_failure_returns_500(store, tmp_path):
+    """If load_partners raises during reload, the endpoint returns 500 with a generic message."""
+    from unittest.mock import patch
+
+    app = FastAPI()
+    register_routes(app, [], store, partners_dir=tmp_path)
+    with TestClient(app, raise_server_exceptions=False) as c:
+        with patch("imnot.engine.router.load_partners", side_effect=RuntimeError("disk error")):
+            r = c.post("/imnot/admin/reload")
+    assert r.status_code == 500
+    assert "detail" in r.json()
+    assert "disk error" not in r.json()["detail"]
+
+
 def test_reload_without_partners_dir_returns_400(store, tmp_path):
     """When partners_dir is not set (e.g. routes registered without it), reload returns 400."""
     app = FastAPI()

@@ -137,6 +137,12 @@ def test_collection_has_base_url_variable(fetch_partner):
     assert base_url_vars[0]["value"] == "http://localhost:8000"
 
 
+def test_collection_custom_base_url(fetch_partner):
+    col = build_postman_collection([fetch_partner], base_url="http://myserver:9000")
+    base_url_vars = [v for v in col["variable"] if v["key"] == "baseUrl"]
+    assert base_url_vars[0]["value"] == "http://myserver:9000"
+
+
 def test_one_folder_per_partner():
     partners = [
         _partner("alpha", [_dp("ep", "oauth", [_ep("POST", "/alpha/token")])]),
