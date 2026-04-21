@@ -64,6 +64,42 @@ jobs:
           pip install bandit -q
           bandit -r imnot/ -f screen
 
+  docker-smoke:
+    name: Docker smoke test (read-only /app)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Build image
+        run: docker build -t imnot-smoke .
+
+      - name: Run with read-only /app and writable /app/data only
+        run: |
+          mkdir -p /tmp/imnot-data
+          chmod 777 /tmp/imnot-data
+          docker run -d --name imnot-smoke \
+            --read-only \
+            --tmpfs /tmp \
+            -v /tmp/imnot-data:/app/data \
+            -e IMNOT_ADMIN_KEY=smoke-test \
+            -p 18080:8000 \
+            imnot-smoke
+          # Wait up to 15 s for the server to be ready
+          for i in $(seq 1 15); do
+            curl -sf http://localhost:18080/healthz && break
+            sleep 1
+          done
+          curl -sf http://localhost:18080/healthz
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker logs imnot-smoke
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f imnot-smoke || true
+
   qa:
     name: E2E QA suite
     runs-on: ubuntu-latest

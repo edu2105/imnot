@@ -922,3 +922,59 @@ def test_start_logs_written_to_db_dir_not_cwd(runner, tmp_path):
     assert result.exit_code == 0
     assert (db_dir / "imnot.cli.log").exists(), "log file should be in db_dir"
     assert not (cwd_dir / "imnot.cli.log").exists(), "log file must NOT be in CWD"
+
+
+def test_start_toml_written_to_db_dir_not_cwd(runner, tmp_path):
+    """imnot start writes imnot.toml to db_path.parent, not CWD."""
+    cwd_dir = tmp_path / "cwd"
+    db_dir = tmp_path / "data"
+    cwd_dir.mkdir()
+    db_dir.mkdir()
+
+    original = os.getcwd()
+    try:
+        os.chdir(cwd_dir)
+        with patch("imnot.cli.uvicorn.run"):
+            result = runner.invoke(
+                cli,
+                ["start", "--db", str(db_dir / "imnot.db")],
+            )
+    finally:
+        os.chdir(original)
+
+    assert result.exit_code == 0
+    assert (db_dir / "imnot.toml").exists(), "imnot.toml should be in db_dir"
+    assert not (cwd_dir / "imnot.toml").exists(), "imnot.toml must NOT be in CWD"
+
+
+def test_resolve_config_finds_toml_in_db_parent(tmp_path):
+    """_resolve_config(db_path) finds imnot.toml in db_path.parent before CWD walk."""
+    from imnot.cli import _resolve_config
+
+    db_dir = tmp_path / "data"
+    db_dir.mkdir()
+    toml = db_dir / "imnot.toml"
+    toml.write_text("[server]\n")
+
+    result = _resolve_config(db_path=db_dir / "imnot.db")
+    assert result == toml
+
+
+def test_resolve_config_falls_back_to_cwd_walk(tmp_path):
+    """_resolve_config falls back to CWD walk when db_path.parent has no toml."""
+    from imnot.cli import _resolve_config
+
+    db_dir = tmp_path / "data"
+    db_dir.mkdir()
+    # toml is in tmp_path (ancestor of CWD), not db_dir
+    toml = tmp_path / "imnot.toml"
+    toml.write_text("[server]\n")
+
+    original = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        result = _resolve_config(db_path=db_dir / "imnot.db")
+    finally:
+        os.chdir(original)
+
+    assert result == toml
