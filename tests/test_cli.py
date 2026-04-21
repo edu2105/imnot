@@ -890,3 +890,35 @@ def test_start_missing_partners_dir_warns_no_partners(runner, tmp_path):
 
     assert result.exit_code == 0
     assert "zero partners" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Log dir defaults to db_path.parent, not CWD
+# ---------------------------------------------------------------------------
+
+
+def test_start_logs_written_to_db_dir_not_cwd(runner, tmp_path):
+    """imnot start writes logs to db_path.parent, not CWD.
+
+    This is the container-safety fix: /app is read-only in Docker but
+    /app/data (where imnot.db lives) is writable.
+    """
+    cwd_dir = tmp_path / "cwd"
+    db_dir = tmp_path / "data"
+    cwd_dir.mkdir()
+    db_dir.mkdir()
+
+    original = os.getcwd()
+    try:
+        os.chdir(cwd_dir)
+        with patch("imnot.cli.uvicorn.run"):
+            result = runner.invoke(
+                cli,
+                ["start", "--db", str(db_dir / "imnot.db")],
+            )
+    finally:
+        os.chdir(original)
+
+    assert result.exit_code == 0
+    assert (db_dir / "imnot.cli.log").exists(), "log file should be in db_dir"
+    assert not (cwd_dir / "imnot.cli.log").exists(), "log file must NOT be in CWD"
