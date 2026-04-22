@@ -46,7 +46,7 @@ _IMNOT_VERSION = _pkg_version("imnot")
 # Patterns that store payload in the session store and therefore need admin
 # payload endpoints (GET/POST global + session).  oauth and static are fully
 # defined by the YAML and never consult the store, so they get no admin routes.
-_PAYLOAD_PATTERNS = {"fetch", "async", "push", "paginated"}
+_PAYLOAD_PATTERNS = {"fetch", "polling", "callback", "paginated"}
 
 
 def register_routes(
@@ -198,7 +198,7 @@ def _register_consumer_routes(
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered fetch route %s %s", endpoint.method, endpoint.path)
 
-    elif datapoint.pattern == "async":
+    elif datapoint.pattern == "polling":
         step_map: dict[int, EndpointDef] = {ep.step: ep for ep in datapoint.endpoints}
         handlers = make_async_handlers(
             partner=partner.partner,
@@ -211,19 +211,19 @@ def _register_consumer_routes(
             _add(endpoint.path, handler, endpoint.method)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug(
-                "Registered async step %d route %s %s",
+                "Registered polling step %d route %s %s",
                 step_num,
                 endpoint.method,
                 endpoint.path,
             )
 
-    elif datapoint.pattern == "push":
+    elif datapoint.pattern == "callback":
         for endpoint in datapoint.endpoints:
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             handler = make_push_handler(partner.partner, datapoint, endpoint, store)
             _add(endpoint.path, handler, endpoint.method)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
-            logger.debug("Registered push route %s %s", endpoint.method, endpoint.path)
+            logger.debug("Registered callback route %s %s", endpoint.method, endpoint.path)
 
     elif datapoint.pattern == "paginated":
         for endpoint in datapoint.endpoints:
@@ -296,8 +296,8 @@ def _register_admin_routes(
     session_get_path = f"/imnot/admin/{partner_name}/{dp_name}/payload/session/{{session_id}}"
     app.add_api_route(session_get_path, get_session, methods=["GET"])
 
-    if datapoint.pattern == "push":
-        retrigger_path = f"/imnot/admin/{partner_name}/{dp_name}/push/{{request_id}}/retrigger"
+    if datapoint.pattern == "callback":
+        retrigger_path = f"/imnot/admin/{partner_name}/{dp_name}/callback/{{request_id}}/retrigger"
 
         async def retrigger(request: Request, background_tasks: BackgroundTasks) -> JSONResponse:
             request_id: str = request.path_params["request_id"]

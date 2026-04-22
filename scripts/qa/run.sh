@@ -5,7 +5,7 @@
 #   Phase 1 — CLI commands (no server required)
 #   Phase 2 — Default partner endpoint flows (staylink + bookingco)
 #   Phase 3 — imnot generate testingpartner + hot reload
-#   Phase 4 — testingpartner endpoint flows (all 5 patterns)
+#   Phase 4 — testingpartner endpoint flows (all 6 patterns)
 #   Phase 5 — Stop / restart / persistence check
 #
 # Usage:
@@ -205,7 +205,7 @@ assert_contains "POST /oauth/token — token_type Bearer" "Bearer" "$TOKEN_BODY"
 assert_contains "POST /oauth/token — expires_in present" "expires_in" "$TOKEN_BODY"
 
 echo ""
-echo "  ── staylink: async (global payload) ──"
+echo "  ── staylink: polling (global payload) ──"
 ASYNC_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
   "$BASE/imnot/admin/staylink/reservation/payload" \
   -H "Content-Type: application/json" \
@@ -232,7 +232,7 @@ assert_status "GET /staylink/reservations/{id}" 200 \
   "$(curl -s -o /dev/null -w "%{http_code}" "$BASE/staylink/reservations/$ASYNC_UUID")"
 
 echo ""
-echo "  ── staylink: async (session isolation) ──"
+echo "  ── staylink: polling (session isolation) ──"
 SESSION_ID=$(curl -s -X POST \
   "$BASE/imnot/admin/staylink/reservation/payload/session" \
   -H "Content-Type: application/json" \
@@ -330,7 +330,7 @@ phase_result 3
 # Phase 4 — testingpartner endpoint flows (all 5 patterns)
 # ---------------------------------------------------------------------------
 
-phase 4 "testingpartner endpoint flows (all 5 patterns)"
+phase 4 "testingpartner endpoint flows (all 6 patterns)"
 
 echo ""
 echo "  ── oauth ──"
@@ -340,7 +340,7 @@ TP_TOKEN=$(echo "$TP_TOKEN_BODY" | python3 -c "import sys,json; print(json.load(
 assert_contains "POST /testingpartner/oauth/token — token_type Bearer" "Bearer" "$TP_TOKEN_BODY"
 
 echo ""
-echo "  ── async ──"
+echo "  ── polling ──"
 curl -s -X POST "$BASE/imnot/admin/testingpartner/job/payload" \
   -H "Content-Type: application/json" \
   -d '{"jobResult":"processed","recordCount":42}' > /dev/null
@@ -384,7 +384,7 @@ FETCH_BODY=$(curl -s "$BASE/testingpartner/records/rec-001")
 assert_contains "GET /testingpartner/records/{id} — payload matches" "QA Record" "$FETCH_BODY"
 
 echo ""
-echo "  ── push ──"
+echo "  ── callback ──"
 # Start a minimal callback capture server
 CALLBACK_FILE="$CALLBACK_FILE" CALLBACK_PORT="$CALLBACK_PORT" python3 - <<'PYEOF' &
 import http.server, os
@@ -434,11 +434,11 @@ for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25; do
   fi
 done
 [ "$CALLBACK_RECEIVED" -eq 1 ] \
-  && ok "Push callback — payload delivered to callback URL" \
-  || fail "Push callback — callback not received within 5 s"
+  && ok "Callback — payload delivered to callback URL" \
+  || fail "Callback — callback not received within 5 s"
 
 CALLBACK_BODY=$(cat "$CALLBACK_FILE" 2>/dev/null || echo "{}")
-assert_contains "Push callback — payload contains event field" "qa.triggered" "$CALLBACK_BODY"
+assert_contains "Callback — payload contains event field" "qa.triggered" "$CALLBACK_BODY"
 
 kill "$CALLBACK_SERVER_PID" 2>/dev/null || true
 unset CALLBACK_SERVER_PID

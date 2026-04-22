@@ -1,10 +1,10 @@
 """
-Async pattern handler.
+Polling pattern handler.
 
 Responsibilities:
 - Expose a factory function `make_async_handlers` that accepts a partner name,
   a DatapointDef, and a SessionStore instance, and returns a dict mapping
-  step number → FastAPI route coroutine for each async step.
+  step number → FastAPI route coroutine for each polling step.
 
 Handler types are determined at startup from response config flags:
   generates_id: true  → submit handler (generates UUID, persists it, returns it)
@@ -86,7 +86,7 @@ def _make_submit_handler(
         body = {**static_body, id_body_field: async_uuid}
         return JSONResponse(status_code=status_code, content=body)
 
-    handler.__name__ = f"async_submit_{partner}_{dp_name}"
+    handler.__name__ = f"polling_submit_{partner}_{dp_name}"
     return handler
 
 
@@ -117,7 +117,7 @@ def _make_static_handler(
         async def handler(request: Request) -> Response:
             return Response(status_code=status_code, headers=extra_headers)
 
-    handler.__name__ = f"async_static_{partner}_{datapoint.name}_{endpoint.step}"
+    handler.__name__ = f"polling_static_{partner}_{datapoint.name}_{endpoint.step}"
     return handler
 
 
@@ -161,5 +161,5 @@ def _make_fetch_handler(
 
         return JSONResponse(status_code=status_code, content=payload)
 
-    handler.__name__ = f"async_fetch_{partner}_{dp_name}"
+    handler.__name__ = f"polling_fetch_{partner}_{dp_name}"
     return handler

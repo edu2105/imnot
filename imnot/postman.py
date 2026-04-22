@@ -16,7 +16,7 @@ Collection structure:
                 ├── GET  .../payload
                 ├── POST .../payload/session
                 ├── GET  .../payload/session/:session_id
-                └── POST .../push/:request_id/retrigger  (push only)
+                └── POST .../callback/:request_id/retrigger  (callback only)
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from typing import Any
 
 from imnot.loader.yaml_loader import DatapointDef, EndpointDef, PartnerDef
 
-_PAYLOAD_PATTERNS = {"fetch", "async", "push", "paginated"}
+_PAYLOAD_PATTERNS = {"fetch", "polling", "callback", "paginated"}
 _BODY_METHODS = {"POST", "PUT", "PATCH"}
 
 
@@ -64,7 +64,10 @@ def collection_stats(partners: list[PartnerDef]) -> dict[str, Any]:
     """Return summary counts for CLI output."""
     consumer = sum(len(dp.endpoints) for p in partners for dp in p.datapoints)
     admin = sum(
-        (5 if dp.pattern == "push" else 4) for p in partners for dp in p.datapoints if dp.pattern in _PAYLOAD_PATTERNS
+        (5 if dp.pattern == "callback" else 4)
+        for p in partners
+        for dp in p.datapoints
+        if dp.pattern in _PAYLOAD_PATTERNS
     )
     return {
         "partners": len(partners),
@@ -114,8 +117,8 @@ def _consumer_request(dp: DatapointDef, ep: EndpointDef) -> dict[str, Any]:
             headers.append(_header("Content-Type", "application/json"))
             body = _raw_body(body_content)
 
-    # push with callback_url_header: add the header pre-filled with a placeholder
-    if dp.pattern == "push":
+    # callback with callback_url_header: add the header pre-filled with a placeholder
+    if dp.pattern == "callback":
         header_name: str | None = ep.response.get("callback_url_header")
         if header_name:
             headers.append(
@@ -150,7 +153,7 @@ def _consumer_request(dp: DatapointDef, ep: EndpointDef) -> dict[str, Any]:
 
 def _consumer_body(dp: DatapointDef, ep: EndpointDef) -> dict[str, Any] | None:
     """Return a pre-filled body for consumer endpoints where imnot knows the shape."""
-    if dp.pattern == "push":
+    if dp.pattern == "callback":
         field: str | None = ep.response.get("callback_url_field")
         if field:
             return {field: "http://your-service/webhook"}
@@ -200,8 +203,8 @@ def _admin_folder(partner_name: str, dp: DatapointDef) -> dict[str, Any]:
         },
     ]
 
-    if dp.pattern == "push":
-        retrigger = f"/imnot/admin/{partner_name}/{dp.name}/push/:request_id/retrigger"
+    if dp.pattern == "callback":
+        retrigger = f"/imnot/admin/{partner_name}/{dp.name}/callback/:request_id/retrigger"
         items.append(
             {
                 "name": f"POST {retrigger}",

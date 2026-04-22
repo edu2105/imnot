@@ -330,7 +330,7 @@ def stop(pid_file: str) -> None:
 # ---------------------------------------------------------------------------
 
 _EXAMPLES = [
-    ("staylink", "oauth + async"),
+    ("staylink", "oauth + polling"),
     ("bookingco", "static + fetch"),
 ]
 
@@ -448,8 +448,8 @@ def routes(partners_dir: str) -> None:
                 click.echo(f"    {'GET':<7} {base}")
                 click.echo(f"    {'POST':<7} {base}/session")
                 click.echo(f"    {'GET':<7} {base}/session/{{session_id}}")
-                if dp.pattern == "push":
-                    retrigger = f"/imnot/admin/{partner.partner}/{dp.name}/push/{{request_id}}/retrigger"
+                if dp.pattern == "callback":
+                    retrigger = f"/imnot/admin/{partner.partner}/{dp.name}/callback/{{request_id}}/retrigger"
                     click.echo(f"    {'POST':<7} {retrigger}")
 
     click.echo()
@@ -569,8 +569,8 @@ def generate(file_path: str, partners_dir: str, dry_run: bool, json_output: bool
             click.echo(f"  {'GET':<7} {base}")
             click.echo(f"  {'POST':<7} {base}/session")
             click.echo(f"  {'GET':<7} {base}/session/{{session_id}}")
-            if dp.pattern == "push":
-                retrigger = f"/imnot/admin/{partner.partner}/{dp.name}/push/{{request_id}}/retrigger"
+            if dp.pattern == "callback":
+                retrigger = f"/imnot/admin/{partner.partner}/{dp.name}/callback/{{request_id}}/retrigger"
                 click.echo(f"  {'POST':<7} {retrigger}")
 
     click.echo()

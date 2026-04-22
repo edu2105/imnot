@@ -1,8 +1,8 @@
 """
-Push pattern handler.
+Callback pattern handler.
 
 Responsibilities:
-- Handle the `push` pattern where imnot receives a submit request from a consumer,
+- Handle the `callback` pattern where imnot receives a submit request from a consumer,
   stores the callback URL, returns the configured status immediately, then fires an
   outbound HTTP call to the callback URL with the stored payload.
 - Expose `make_push_handler` (called by the router at startup) and `fire_callback`
@@ -103,7 +103,7 @@ def make_push_handler(
 
         return JSONResponse(status_code=status_code, content={"request_id": push_uuid})
 
-    handler.__name__ = f"push_submit_{partner}_{dp_name}"
+    handler.__name__ = f"callback_submit_{partner}_{dp_name}"
     return handler
 
 
@@ -126,7 +126,7 @@ async def fire_callback(
     payload = store.resolve_payload(partner, datapoint, session_id)
     if payload is None:
         logger.warning(
-            "Push: no payload found for %s/%s (session=%s) — callback to %s skipped",
+            "Callback: no payload found for %s/%s (session=%s) — callback to %s skipped",
             partner,
             datapoint,
             session_id,
@@ -139,15 +139,15 @@ async def fire_callback(
             resp = await client.request(callback_method, callback_url, json=payload)
         if resp.is_success:
             logger.info(
-                "Push: callback delivered to %s — HTTP %d",
+                "Callback: delivered to %s — HTTP %d",
                 callback_url,
                 resp.status_code,
             )
         else:
             logger.error(
-                "Push: callback to %s returned non-2xx status %d",
+                "Callback: to %s returned non-2xx status %d",
                 callback_url,
                 resp.status_code,
             )
     except Exception as exc:
-        logger.error("Push: callback to %s failed: %s", callback_url, exc)
+        logger.error("Callback: to %s failed: %s", callback_url, exc)

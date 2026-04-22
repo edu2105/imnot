@@ -1,4 +1,4 @@
-"""Tests for the async pattern handler."""
+"""Tests for the polling pattern handler."""
 
 import json
 
@@ -26,7 +26,7 @@ def _make_datapoint(endpoints: list[EndpointDef]) -> DatapointDef:
     return DatapointDef(
         name="job",
         description="",
-        pattern="async",
+        pattern="polling",
         endpoints=endpoints,
     )
 

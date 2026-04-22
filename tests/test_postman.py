@@ -6,7 +6,7 @@ Covers:
 - Consumer endpoint requests (method, URL, headers, body)
 - Admin sub-folder presence and contents
 - X-Imnot-Session header (disabled) on payload-pattern endpoints
-- Push-specific body / header pre-filling
+- Callback-specific body / header pre-filling
 - URL path variable conversion ({param} → :param)
 - CLI: `imnot export postman` writes file, respects --out, prints summary
 - Admin endpoint: GET /imnot/admin/postman returns collection JSON
@@ -63,8 +63,8 @@ def fetch_partner():
 
 
 @pytest.fixture
-def push_field_partner():
-    """Push datapoint where callback URL comes from a request body field."""
+def callback_field_partner():
+    """Callback datapoint where callback URL comes from a request body field."""
     ep = _ep(
         "POST",
         "/partner/rates",
@@ -74,12 +74,12 @@ def push_field_partner():
             "callback_method": "POST",
         },
     )
-    return _partner("bookingco", [_dp("rate-push", "push", [ep])])
+    return _partner("bookingco", [_dp("rate-push", "callback", [ep])])
 
 
 @pytest.fixture
-def push_header_partner():
-    """Push datapoint where callback URL comes from a request header."""
+def callback_header_partner():
+    """Callback datapoint where callback URL comes from a request header."""
     ep = _ep(
         "POST",
         "/partner/rates",
@@ -88,7 +88,7 @@ def push_header_partner():
             "callback_url_header": "X-Callback-URL",
         },
     )
-    return _partner("bookingco", [_dp("rate-push", "push", [ep])])
+    return _partner("bookingco", [_dp("rate-push", "callback", [ep])])
 
 
 @pytest.fixture
@@ -116,7 +116,7 @@ def async_partner():
         step=1,
     )
     ep2 = _ep("GET", "/async/jobs/{id}", {"status": 200, "returns_payload": True}, step=2)
-    return _partner("asyncco", [_dp("job", "async", [ep1, ep2])])
+    return _partner("asyncco", [_dp("job", "polling", [ep1, ep2])])
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +201,7 @@ def test_post_without_known_body_has_no_body(static_partner):
 
 def test_post_with_known_body_has_content_type():
     ep = _ep("POST", "/partner/rates", {"status": 202, "callback_url_field": "callbackUrl"})
-    col = build_postman_collection([_partner("co", [_dp("rate", "push", [ep])])])
+    col = build_postman_collection([_partner("co", [_dp("rate", "callback", [ep])])])
     consumer = col["item"][0]["item"][0]["item"][0]
     headers = {h["key"]: h["value"] for h in consumer["request"]["header"] if not h.get("disabled")}
     assert headers.get("Content-Type") == "application/json"
@@ -246,7 +246,7 @@ def test_fetch_admin_subfolder_has_4_requests(fetch_partner):
     assert len(admin["item"]) == 4
 
 
-def test_async_datapoint_has_admin_subfolder_with_4_requests(async_partner):
+def test_polling_datapoint_has_admin_subfolder_with_4_requests(async_partner):
     col = build_postman_collection([async_partner])
     dp_folder = col["item"][0]["item"][0]
     admin = next(i for i in dp_folder["item"] if i["name"] == "Admin")
@@ -266,27 +266,27 @@ def test_admin_subfolder_request_names_and_methods(fetch_partner):
 
 
 # ---------------------------------------------------------------------------
-# Push — Admin sub-folder (5 requests) and consumer pre-filling
+# Callback — Admin sub-folder (5 requests) and consumer pre-filling
 # ---------------------------------------------------------------------------
 
 
-def test_push_admin_subfolder_has_5_requests(push_field_partner):
-    col = build_postman_collection([push_field_partner])
+def test_callback_admin_subfolder_has_5_requests(callback_field_partner):
+    col = build_postman_collection([callback_field_partner])
     dp_folder = col["item"][0]["item"][0]
     admin = next(i for i in dp_folder["item"] if i["name"] == "Admin")
     assert len(admin["item"]) == 5
 
 
-def test_push_admin_subfolder_includes_retrigger(push_field_partner):
-    col = build_postman_collection([push_field_partner])
+def test_callback_admin_subfolder_includes_retrigger(callback_field_partner):
+    col = build_postman_collection([callback_field_partner])
     dp_folder = col["item"][0]["item"][0]
     admin = next(i for i in dp_folder["item"] if i["name"] == "Admin")
     names = [i["name"] for i in admin["item"]]
     assert any("retrigger" in n for n in names)
 
 
-def test_push_callback_url_field_prefills_body(push_field_partner):
-    col = build_postman_collection([push_field_partner])
+def test_callback_url_field_prefills_body(callback_field_partner):
+    col = build_postman_collection([callback_field_partner])
     consumer = col["item"][0]["item"][0]["item"][0]
     assert "body" in consumer["request"]
     body_dict = json.loads(consumer["request"]["body"]["raw"])
@@ -294,16 +294,16 @@ def test_push_callback_url_field_prefills_body(push_field_partner):
     assert body_dict["callbackUrl"] == "http://your-service/webhook"
 
 
-def test_push_callback_url_header_prefills_header(push_header_partner):
-    col = build_postman_collection([push_header_partner])
+def test_callback_url_header_prefills_header(callback_header_partner):
+    col = build_postman_collection([callback_header_partner])
     consumer = col["item"][0]["item"][0]["item"][0]
     headers = {h["key"]: h["value"] for h in consumer["request"]["header"]}
     assert "X-Callback-URL" in headers
     assert headers["X-Callback-URL"] == "http://your-service/webhook"
 
 
-def test_push_callback_url_header_has_no_body(push_header_partner):
-    col = build_postman_collection([push_header_partner])
+def test_callback_url_header_has_no_body(callback_header_partner):
+    col = build_postman_collection([callback_header_partner])
     consumer = col["item"][0]["item"][0]["item"][0]
     assert "body" not in consumer["request"]
 
@@ -374,7 +374,7 @@ def test_session_header_present_and_disabled_on_fetch(fetch_partner):
     assert session_headers[0].get("disabled") is True
 
 
-def test_session_header_present_on_async(async_partner):
+def test_session_header_present_on_polling(async_partner):
     col = build_postman_collection([async_partner])
     # step 1 consumer endpoint
     consumer = col["item"][0]["item"][0]["item"][0]
@@ -383,8 +383,8 @@ def test_session_header_present_on_async(async_partner):
     assert session_headers[0].get("disabled") is True
 
 
-def test_session_header_present_on_push(push_field_partner):
-    col = build_postman_collection([push_field_partner])
+def test_session_header_present_on_callback(callback_field_partner):
+    col = build_postman_collection([callback_field_partner])
     consumer = col["item"][0]["item"][0]["item"][0]
     session_headers = [h for h in consumer["request"]["header"] if h["key"] == "X-Imnot-Session"]
     assert len(session_headers) == 1
@@ -451,8 +451,8 @@ def test_collection_stats_counts(fetch_partner, oauth_partner):
     assert stats["total_requests"] == 6
 
 
-def test_collection_stats_push_counts_5_admin(push_field_partner):
-    stats = collection_stats([push_field_partner])
+def test_collection_stats_callback_counts_5_admin(callback_field_partner):
+    stats = collection_stats([callback_field_partner])
     assert stats["admin_requests"] == 5
 
 
