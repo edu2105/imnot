@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
+### Added
+
+- Rename async→polling and push→callback patterns ([d6fbd2e](https://github.com/edu2105/imnot/commit/d6fbd2e023e1de428616e05d45286ee66e1c5ee6))
+- Register trailing-slash alias for all consumer routes ([5d9477e](https://github.com/edu2105/imnot/commit/5d9477ef70a0e125070beaca226404385191d2dc))
+
+## [0.5.2] - 2026-04-21
+
 ### Fixed
 
 - Write imnot.toml and logs to db_path.parent, not CWD ([6552d05](https://github.com/edu2105/imnot/commit/6552d05c4f4d906eb721a64a891a1418327649ca))
