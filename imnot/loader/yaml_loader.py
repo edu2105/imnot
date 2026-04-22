@@ -19,7 +19,7 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_PATTERNS = {"oauth", "async", "push", "static", "fetch", "paginated"}
+SUPPORTED_PATTERNS = {"oauth", "polling", "callback", "static", "fetch", "paginated"}
 
 _PAGINATION_VALID_KEYS = {"style", "items_field", "total_field", "has_more_field", "next_offset_field"}
 
@@ -33,7 +33,7 @@ _PAGINATION_VALID_KEYS = {"style", "items_field", "total_field", "has_more_field
 class EndpointDef:
     method: str  # HTTP verb, upper-cased
     path: str  # e.g. /staylink/reservations/{uuid}
-    step: int | None  # async step number (1/2/3); None for oauth/static/fetch
+    step: int | None  # polling step number (1/2/3); None for oauth/static/fetch
     response: dict[str, Any]  # raw response config from YAML
 
 
@@ -41,7 +41,7 @@ class EndpointDef:
 class DatapointDef:
     name: str  # e.g. "reservation"
     description: str
-    pattern: str  # "oauth" | "async" | "fetch" | "static" | "push" | "paginated"
+    pattern: str  # "oauth" | "polling" | "fetch" | "static" | "callback" | "paginated"
     endpoints: list[EndpointDef]
     pagination: dict[str, Any] | None = None  # raw pagination block; None for non-paginated patterns
 
@@ -71,7 +71,7 @@ def _parse_endpoint(raw: dict[str, Any]) -> EndpointDef:
     return EndpointDef(
         method=method.upper(),
         path=path.rstrip("/") or "/",
-        step=raw.get("step"),  # optional; only async endpoints carry this
+        step=raw.get("step"),  # optional; only polling endpoints carry this
         response=raw.get("response") or {},
     )
 

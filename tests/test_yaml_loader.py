@@ -49,7 +49,7 @@ def test_staylink_reservation_datapoint():
     staylink = next(p for p in load_partners(PARTNERS_DIR) if p.partner == "staylink")
     reservation = next(dp for dp in staylink.datapoints if dp.name == "reservation")
 
-    assert reservation.pattern == "async"
+    assert reservation.pattern == "polling"
     assert len(reservation.endpoints) == 3
 
     steps = {ep.step: ep for ep in reservation.endpoints}
@@ -110,14 +110,14 @@ def test_unsupported_pattern(tmp_path):
     assert result == []
 
 
-def test_async_pattern_is_valid(tmp_path):
+def test_polling_pattern_is_valid(tmp_path):
     partner_dir = tmp_path / "testpartner"
     partner_dir.mkdir()
     (partner_dir / "partner.yaml").write_text(
         "partner: testpartner\n"
         "datapoints:\n"
         "  - name: job\n"
-        "    pattern: async\n"
+        "    pattern: polling\n"
         "    endpoints:\n"
         "      - step: 1\n"
         "        method: POST\n"
@@ -130,7 +130,7 @@ def test_async_pattern_is_valid(tmp_path):
     )
     result = load_partners(tmp_path)
     assert len(result) == 1
-    assert result[0].datapoints[0].pattern == "async"
+    assert result[0].datapoints[0].pattern == "polling"
 
 
 # ---------------------------------------------------------------------------

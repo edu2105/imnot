@@ -1,5 +1,5 @@
 partner: staylink
-description: StayLink fictional partner — demonstrates oauth and async patterns
+description: StayLink fictional partner — demonstrates oauth and polling patterns
 
 datapoints:
 
@@ -15,8 +15,8 @@ datapoints:
           expires_in: 3600
 
   - name: reservation
-    description: Async reservation creation and retrieval
-    pattern: async
+    description: Polling-based reservation creation and retrieval
+    pattern: polling
     endpoints:
       # Step 1 — submit reservation request
       - step: 1

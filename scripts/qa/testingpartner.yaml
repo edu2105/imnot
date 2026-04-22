@@ -1,5 +1,5 @@
 partner: testingpartner
-description: QA test partner — covers all six patterns (oauth, async, static, fetch, push, paginated)
+description: QA test partner — covers all six patterns (oauth, polling, static, fetch, callback, paginated)
 
 datapoints:
 
@@ -15,8 +15,8 @@ datapoints:
           expires_in: 3600
 
   - name: job
-    description: Async job submission and retrieval
-    pattern: async
+    description: Polling-based job submission and retrieval
+    pattern: polling
     endpoints:
       - step: 1
         method: POST
@@ -62,8 +62,8 @@ datapoints:
           status: 200
 
   - name: notification
-    description: Push notification with outbound callback
-    pattern: push
+    description: Callback notification with outbound webhook delivery
+    pattern: callback
     endpoints:
       - method: POST
         path: /testingpartner/notifications

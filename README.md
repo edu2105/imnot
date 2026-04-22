@@ -16,7 +16,7 @@ mock server — no code changes required to add new APIs or endpoints.
 ## Why imnot?
 
 - **YAML in, mock server out.** One file defines an external API's endpoints, patterns, and responses. No code, no JVM, no GUI.
-- **Stateful flows, not just fixed responses.** OAuth, async submit/poll/fetch, webhooks, and per-test session isolation — all modeled in YAML, not scripted.
+- **Stateful flows, not just fixed responses.** OAuth, polling submit/poll/fetch, callback webhooks, and per-test session isolation — all modeled in YAML, not scripted.
 - **Lives next to your code.** The mock definition is version-controlled alongside the integration it tests and runs anywhere Docker runs.
 
 Reach for other tools when you need conditional responses based on request body content, or prefer a GUI-first workflow.
@@ -83,8 +83,8 @@ imnot routes
   - `oauth` — client-credentials token endpoint that returns a static JWT.
   - `static` — endpoint that always returns a fixed JSON body defined in the YAML.
   - `fetch` — synchronous GET that returns the stored payload for a datapoint, with optional session isolation.
-  - `async` — flexible N-step async flow defined in YAML: submit → optional status check(s) → fetch result.
-  - `push` — imnot proactively delivers a payload to a callback URL after receiving a submit request.
+  - `polling` — flexible N-step async flow defined in YAML: submit → optional status check(s) → fetch result.
+  - `callback` — imnot proactively delivers a payload to a callback URL after receiving a submit request.
   - `paginated` — offset/limit list endpoint that slices a stored array payload at request time.
 - **Payload storage** supports two modes:
   - *Global* — one payload per datapoint, last write wins.
@@ -92,7 +92,7 @@ imnot routes
 - **Admin API** is always available at `/imnot/admin/` for uploading payloads and
   inspecting sessions.
 
-### Interaction sequence (async pattern)
+### Interaction sequence (polling pattern)
 
 ```
 Test Harness                       imnot
@@ -120,7 +120,7 @@ Test Harness                       imnot
 ```
 
 The number and shape of steps is configurable per partner — 2-step, 3-step, and
-body-delivered IDs are all supported. See the `async` pattern documentation below.
+body-delivered IDs are all supported. See the `polling` pattern documentation below.
 
 ## Patterns
 
@@ -193,7 +193,7 @@ curl -X POST http://localhost:8000/imnot/admin/bookingco/charges/payload \
 curl http://localhost:8000/bookingco/v1/charges
 ```
 
-### `async`
+### `polling`
 
 Flexible N-step async flow. Use for external APIs that submit work asynchronously and
 return the result via a separate endpoint. Step count and HTTP methods are fully
@@ -206,7 +206,7 @@ configurable. Behavior is opt-in via two response flags:
 
 ```yaml
 - name: reservation
-  pattern: async
+  pattern: polling
   endpoints:
     - step: 1
       method: POST
@@ -235,7 +235,7 @@ configurable. Behavior is opt-in via two response flags:
 
 ```yaml
 - name: rate-push
-  pattern: async
+  pattern: polling
   endpoints:
     - step: 1
       method: POST
@@ -259,7 +259,7 @@ configurable. Behavior is opt-in via two response flags:
         returns_payload: true
 ```
 
-### `push`
+### `callback`
 
 imnot receives a submit request, returns immediately, then fires an outbound HTTP call
 to a callback URL with the stored payload — simulating the external service calling back your
@@ -269,7 +269,7 @@ webhook endpoint.
 
 ```yaml
 - name: rate-push
-  pattern: push
+  pattern: callback
   endpoints:
     - method: POST
       path: /partner/rates
@@ -284,7 +284,7 @@ webhook endpoint.
 
 ```yaml
 - name: rate-push
-  pattern: push
+  pattern: callback
   endpoints:
     - method: POST
       path: /partner/rates
@@ -316,7 +316,7 @@ Test Harness                    imnot                     Test Harness Webhook
 
 To re-fire the callback without restarting the flow:
 ```bash
-curl -X POST http://localhost:8000/imnot/admin/{partner}/{datapoint}/push/{request_id}/retrigger
+curl -X POST http://localhost:8000/imnot/admin/{partner}/{datapoint}/callback/{request_id}/retrigger
 ```
 
 The retrigger always uses the **current** stored payload, so you can update the payload
@@ -369,7 +369,7 @@ For full schema documentation see [partners/README.md](partners/README.md#patter
 
 ## Session-isolated testing
 
-Any `fetch`, `async`, or `paginated` endpoint supports session isolation via `X-Imnot-Session`.
+Any `fetch`, `polling`, or `paginated` endpoint supports session isolation via `X-Imnot-Session`.
 
 ```bash
 # Upload a session-scoped payload — returns a session_id
@@ -385,7 +385,7 @@ Multiple test users can run in parallel with isolated payloads — each gets the
 
 ## Admin endpoints
 
-For every `fetch`, `async`, `push`, or `paginated` datapoint, imnot auto-generates payload endpoints:
+For every `fetch`, `polling`, `callback`, or `paginated` datapoint, imnot auto-generates payload endpoints:
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -393,7 +393,7 @@ For every `fetch`, `async`, `push`, or `paginated` datapoint, imnot auto-generat
 | `GET`  | `/imnot/admin/{partner}/{datapoint}/payload` | Inspect current global payload |
 | `POST` | `/imnot/admin/{partner}/{datapoint}/payload/session` | Upload session payload → returns `session_id` |
 | `GET`  | `/imnot/admin/{partner}/{datapoint}/payload/session/{session_id}` | Inspect a session payload |
-| `POST` | `/imnot/admin/{partner}/{datapoint}/push/{request_id}/retrigger` | Re-fire callback for a prior push submit (`push` pattern only) |
+| `POST` | `/imnot/admin/{partner}/{datapoint}/callback/{request_id}/retrigger` | Re-fire callback for a prior submit (`callback` pattern only) |
 
 `oauth` and `static` datapoints do **not** get payload endpoints — their responses are
 fully defined by the YAML and never use the payload store.
@@ -612,14 +612,14 @@ imnot/
 ├── imnot/
 │   ├── api/           # FastAPI app factory
 │   ├── engine/
-│   │   ├── patterns/  # oauth / static / fetch / async / push / paginated handlers
+│   │   ├── patterns/  # oauth / static / fetch / polling / callback / paginated handlers
 │   │   ├── router.py  # dynamic route registration
 │   │   └── session_store.py  # SQLite persistence
 │   ├── loader/        # YAML partner definition parser
 │   ├── partners.py    # register_partner() — shared by CLI and HTTP admin endpoint
 │   └── cli.py         # imnot CLI
 ├── partners/
-│   ├── staylink/      # StayLink example (oauth + async)
+│   ├── staylink/      # StayLink example (oauth + polling)
 │   │   ├── partner.yaml
 │   │   └── payloads/
 │   └── bookingco/     # BookingCo example (static token + fetch charges)
@@ -629,7 +629,7 @@ imnot/
 
 ## Limitations & Roadmap
 
-- `push` callbacks have no retry logic — if the callback URL is unreachable, the failure is logged and the retrigger endpoint can be used to re-fire.
+- `callback` pattern callbacks have no retry logic — if the callback URL is unreachable, the failure is logged and the retrigger endpoint can be used to re-fire.
 - No native HTTPS support — use a reverse proxy (Nginx, Caddy) to terminate TLS.
 - No web UI — all admin interactions are via the REST API or CLI.
 - XML response bodies are not supported — responses are always JSON.
@@ -655,14 +655,14 @@ The QA suite spins up a real server in a fresh temp directory and runs five phas
 1. CLI commands (`imnot init`, `routes`, `export postman`, `generate`)
 2. Full pattern flows for the default partners (staylink + bookingco)
 3. `imnot generate testingpartner` covering all six patterns + hot reload
-4. Endpoint flows for the generated partner (oauth, async, static, fetch, push, paginated)
+4. Endpoint flows for the generated partner (oauth, polling, static, fetch, callback, paginated)
 5. Stop / restart / DB persistence check
 
 Run this after any change that could affect the public contract: YAML schema, CLI interface, pattern behaviour, or the session store.
 
 **Add a new pattern:**
 Patterns live in `imnot/engine/patterns/`. Each pattern is a module that registers one or
-more FastAPI route handlers given an `EndpointDef`. Look at `fetch.py` or `async_.py` for the
+more FastAPI route handlers given an `EndpointDef`. Look at `fetch.py` or `async_.py` (polling pattern) for the
 interface — the router calls the pattern's handler factory for each datapoint whose pattern
 matches. Add your module there and wire it into `router.py`.
 

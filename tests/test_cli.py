@@ -243,8 +243,8 @@ datapoints:
           expires_in: 3600
 
   - name: rate-push
-    description: Async rate push
-    pattern: async
+    description: Polling-based rate push
+    pattern: polling
     endpoints:
       - step: 1
         method: POST

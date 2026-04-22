@@ -48,11 +48,11 @@ def async_client(tmp_path, store):
     partner_dir.mkdir()
     (partner_dir / "partner.yaml").write_text(
         "partner: asyncpartner\n"
-        "description: Async test partner\n"
+        "description: Polling test partner\n"
         "datapoints:\n"
         "  - name: job\n"
-        "    description: Async job\n"
-        "    pattern: async\n"
+        "    description: Polling job\n"
+        "    pattern: polling\n"
         "    endpoints:\n"
         "      - step: 1\n"
         "        method: POST\n"
@@ -248,7 +248,7 @@ def test_oauth_token(client):
 
 
 # ---------------------------------------------------------------------------
-# Staylink consumer routes (async pattern)
+# Staylink consumer routes (polling pattern)
 # ---------------------------------------------------------------------------
 
 
@@ -335,14 +335,14 @@ def test_staylink_two_sessions_are_isolated(client):
 # ---------------------------------------------------------------------------
 
 
-def test_async_step1_returns_202_and_location(async_client):
+def test_polling_step1_returns_202_and_location(async_client):
     r = async_client.post("/asyncpartner/jobs")
     assert r.status_code == 202
     assert "Location" in r.headers
     assert "/asyncpartner/jobs/" in r.headers["Location"]
 
 
-def test_async_step2_returns_201_and_status_header(async_client):
+def test_polling_step2_returns_201_and_status_header(async_client):
     r1 = async_client.post("/asyncpartner/jobs")
     uuid = r1.headers["Location"].split("/")[-1]
 
@@ -351,7 +351,7 @@ def test_async_step2_returns_201_and_status_header(async_client):
     assert r2.headers.get("Status") == "COMPLETED"
 
 
-def test_async_step3_returns_global_payload(async_client):
+def test_polling_step3_returns_global_payload(async_client):
     async_client.post("/imnot/admin/asyncpartner/job/payload", json={"result": "ok"})
     r1 = async_client.post("/asyncpartner/jobs")
     uuid = r1.headers["Location"].split("/")[-1]
@@ -361,19 +361,19 @@ def test_async_step3_returns_global_payload(async_client):
     assert r3.json() == {"result": "ok"}
 
 
-def test_async_step3_unknown_uuid_returns_404(async_client):
+def test_polling_step3_unknown_uuid_returns_404(async_client):
     r = async_client.get("/asyncpartner/jobs/nonexistent-uuid")
     assert r.status_code == 404
 
 
-def test_async_step3_no_payload_returns_404(async_client):
+def test_polling_step3_no_payload_returns_404(async_client):
     r1 = async_client.post("/asyncpartner/jobs")
     uuid = r1.headers["Location"].split("/")[-1]
     r3 = async_client.get(f"/asyncpartner/jobs/{uuid}")
     assert r3.status_code == 404
 
 
-def test_async_full_session_flow(async_client):
+def test_polling_full_session_flow(async_client):
     session_id = async_client.post(
         "/imnot/admin/asyncpartner/job/payload/session",
         json={"result": "session-ok"},
@@ -595,8 +595,8 @@ datapoints:
           expires_in: 3600
 
   - name: rate-push
-    description: Async rate push job
-    pattern: async
+    description: Polling-based rate push job
+    pattern: polling
     endpoints:
       - step: 1
         method: POST
@@ -669,7 +669,7 @@ def test_generate_then_reload_activates_routes(runner, tmp_path):
     assert r.status_code == 200
     assert "access_token" in r.json()
 
-    # Step 4: upload payload and run the async flow end-to-end
+    # Step 4: upload payload and run the polling flow end-to-end
     payload = {"rates": [{"roomType": "DBL", "rate": 199.00, "date": "2026-05-01"}]}
     r = c.post("/imnot/admin/ratesync/rate-push/payload", json=payload)
     assert r.status_code == 200

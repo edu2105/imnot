@@ -57,7 +57,7 @@ datapoints:
 |-------|----------|-------|
 | `name` | Yes | Used in admin URLs: `/imnot/admin/{partner}/{name}/...` |
 | `description` | No | |
-| `pattern` | Yes | Must be one of: `oauth`, `async`, `static`, `fetch`, `push`, `paginated` |
+| `pattern` | Yes | Must be one of: `oauth`, `polling`, `static`, `fetch`, `callback`, `paginated` |
 | `endpoints` | Yes | At least one required |
 
 **Rule:** one datapoint = one payload stored. If two API resources need separate
@@ -73,7 +73,7 @@ Each endpoint maps to one HTTP route registered by imnot.
 endpoints:
   - method: <string>        # HTTP verb: GET, POST, HEAD, PUT, PATCH, DELETE
     path: <string>          # URL path, may contain {id} placeholder
-    step: <int>             # async pattern only: step number (1, 2, 3, ...)
+    step: <int>             # polling pattern only: step number (1, 2, 3, ...)
     response:               # response configuration (fields vary by pattern)
       status: <int>
       ...
@@ -83,7 +83,7 @@ endpoints:
 |-------|----------|-------|
 | `method` | Yes | Case-insensitive, stored as uppercase |
 | `path` | Yes | Leading `/` required. Use `{id}` for dynamic segments |
-| `step` | Async only | Identifies the step number within the async sequence |
+| `step` | Polling only | Identifies the step number within the polling sequence |
 | `response` | Yes | At minimum must contain `status` |
 
 ---
@@ -215,7 +215,7 @@ Supports session isolation via `X-Imnot-Session`.
 
 ---
 
-### Pattern: `async`
+### Pattern: `polling`
 
 **Use when:** the partner API is asynchronous — the consumer submits a request and later
 fetches the result, with any number of steps in between.
@@ -270,8 +270,8 @@ The same `{id}` token appears in the submit step's `id_header_value` and in subs
 
 ```yaml
 - name: reservation
-  description: Async reservation flow
-  pattern: async
+  description: Polling-based reservation flow
+  pattern: polling
   endpoints:
     - step: 1
       method: POST
@@ -302,8 +302,8 @@ The same `{id}` token appears in the submit step's `id_header_value` and in subs
 
 ```yaml
 - name: rate-push
-  description: Async rate push to Cloudbeds
-  pattern: async
+  description: Polling-based rate push to Cloudbeds
+  pattern: polling
   endpoints:
     - step: 1
       method: POST
@@ -333,7 +333,7 @@ The same `{id}` token appears in the submit step's `id_header_value` and in subs
 
 ```yaml
 - name: booking
-  pattern: async
+  pattern: polling
   endpoints:
     - step: 1
       method: POST
@@ -360,7 +360,7 @@ The same `{id}` token appears in the submit step's `id_header_value` and in subs
 
 ---
 
-### Pattern: `push`
+### Pattern: `callback`
 
 **Use when:** the partner API calls back your webhook endpoint with a result instead of
 waiting for you to poll. You submit a request, the partner returns immediately, and later
@@ -390,7 +390,7 @@ both or neither is a validation error caught at startup.
 ```yaml
 - name: rate-push
   description: Partner confirms rate update via webhook
-  pattern: push
+  pattern: callback
   endpoints:
     - method: POST
       path: /partner/rates
@@ -418,7 +418,7 @@ Then fires `POST http://your-service/webhook` with the stored payload.
 ```yaml
 - name: rate-push
   description: Partner confirms rate update via webhook
-  pattern: push
+  pattern: callback
   endpoints:
     - method: POST
       path: /partner/rates
@@ -429,18 +429,18 @@ Then fires `POST http://your-service/webhook` with the stored payload.
 
 **Retrigger admin endpoint:**
 
-For every `push` datapoint, imnot registers an additional admin route:
+For every `callback` datapoint, imnot registers an additional admin route:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/imnot/admin/{partner}/{datapoint}/push/{request_id}/retrigger` | Re-fire the callback for a prior submit |
+| `POST` | `/imnot/admin/{partner}/{datapoint}/callback/{request_id}/retrigger` | Re-fire the callback for a prior submit |
 
 Use this when the callback failed or you need to test how your service handles a repeated
 delivery, without restarting the whole flow. The retrigger always uses the **current**
 stored payload, so you can update the payload between attempts.
 
 ```bash
-curl -X POST http://localhost:8000/imnot/admin/partner/rate-push/push/<request_id>/retrigger
+curl -X POST http://localhost:8000/imnot/admin/partner/rate-push/callback/<request_id>/retrigger
 ```
 
 **Session behaviour:**
@@ -535,7 +535,7 @@ Response:
 
 ## Auto-generated admin endpoints
 
-For every `fetch`, `async`, `push`, or `paginated` datapoint, imnot automatically registers these
+For every `fetch`, `polling`, `callback`, or `paginated` datapoint, imnot automatically registers these
 admin endpoints — no extra YAML required:
 
 | Method | Path | Description |
@@ -567,15 +567,15 @@ runs in a container and you cannot exec in to run the CLI. See the main README f
 
 - [ ] `partner` value is lowercase with no spaces or special characters
 - [ ] Each datapoint has a unique `name` within the file
-- [ ] `pattern` is one of `oauth`, `async`, `static`, `fetch`, `push`, `paginated`
+- [ ] `pattern` is one of `oauth`, `polling`, `static`, `fetch`, `callback`, `paginated`
 - [ ] If the token endpoint returns non-standard fields, use `static` not `oauth`
 - [ ] Every `oauth` datapoint has exactly one `POST` endpoint
-- [ ] Every `async` datapoint has at least two endpoints, each with a unique `step` number
-- [ ] The async submit step has `generates_id: true` with either `id_header` or `id_body_field`
+- [ ] Every `polling` datapoint has at least two endpoints, each with a unique `step` number
+- [ ] The polling submit step has `generates_id: true` with either `id_header` or `id_body_field`
 - [ ] If `id_header` is used, `id_header_value` contains `{id}`
-- [ ] Async steps that reference the generated UUID use `{id}` in their path
-- [ ] The async fetch step has `returns_payload: true`
-- [ ] Every `push` datapoint has exactly one endpoint with exactly one of `callback_url_field` or `callback_url_header` set (not both, not neither)
+- [ ] Polling steps that reference the generated UUID use `{id}` in their path
+- [ ] The polling fetch step has `returns_payload: true`
+- [ ] Every `callback` datapoint has exactly one endpoint with exactly one of `callback_url_field` or `callback_url_header` set (not both, not neither)
 - [ ] Every `paginated` datapoint has a `pagination:` block with `style: offset_limit` and `items_field` set
 - [ ] The `pagination:` block contains only recognized keys: `style`, `items_field`, `total_field`, `has_more_field`, `next_offset_field`
 - [ ] The payload uploaded for a `paginated` datapoint is a JSON array (not an object)
@@ -595,9 +595,9 @@ or API documentation, follow this process:
    the standard `access_token / token_type / expires_in` shape, use the `oauth` pattern.
    If the token response contains **any custom fields**, use `static` with a `body:` block.
 
-2. **Identify async resources** — if an endpoint submits work and the result is fetched
+2. **Identify polling resources** — if an endpoint submits work and the result is fetched
    later (by polling a status endpoint or following a location header), map the full
-   sequence to the `async` pattern. Define as many steps as the real API uses.
+   sequence to the `polling` pattern. Define as many steps as the real API uses.
 
 3. **Identify paginated list endpoints** — if an endpoint returns a list of items with
    `offset`/`limit` (or page-number) query parameters, use the `paginated` pattern. Upload
