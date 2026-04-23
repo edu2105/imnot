@@ -978,3 +978,22 @@ def test_resolve_config_falls_back_to_cwd_walk(tmp_path):
         os.chdir(original)
 
     assert result == toml
+
+
+def test_resolve_db_finds_db_in_data_subdir(tmp_path):
+    """_resolve_db finds imnot.db in data/ subdirectory (Docker: /app/data/ bind-mount)."""
+    from imnot.cli import _resolve_db
+
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    db = data_dir / "imnot.db"
+    db.write_bytes(b"")
+
+    original = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        result = _resolve_db("imnot.db")
+    finally:
+        os.chdir(original)
+
+    assert result == db.resolve()
