@@ -741,8 +741,14 @@ def _resolve_db(given: str) -> Path:
         raise FileNotFoundError(f"Database '{given}' not found. Has the server been started yet?")
     if given_path.exists():
         return given_path.resolve()
-    # Walk up from CWD looking for the filename
+    # Check the conventional data/ subdirectory before walking up — in Docker deployments
+    # (e.g. /app as CWD, /app/data as the bind-mounted writable volume) the DB lives one
+    # level down, not up.
     name = given_path.name
+    data_candidate = Path.cwd() / "data" / name
+    if data_candidate.exists():
+        return data_candidate.resolve()
+    # Walk up from CWD looking for the filename
     current = Path.cwd()
     while True:
         candidate = current / name
