@@ -408,6 +408,7 @@ Fixed infra endpoints (always available regardless of which partners are loaded)
 | `GET`  | `/imnot/admin/sessions` | List all active sessions |
 | `POST` | `/imnot/admin/reload`   | Hot-reload partner YAMLs without restarting the server |
 | `GET`  | `/imnot/admin/postman`  | Download a Postman collection v2.1 JSON for all loaded partners |
+| `GET`  | `/imnot/admin/ui`       | Admin web UI — partners, sessions, payload inspector/upload, reload button. Auth-gated by the same Bearer token as all other admin routes. |
 
 `POST /imnot/admin/partners` accepts a raw YAML body (same format as `partner.yaml` files).
 Use `?force=true` to overwrite an existing partner. Returns `201` on create, `200` on overwrite,
@@ -631,7 +632,7 @@ imnot/
 
 - `callback` pattern callbacks have no retry logic — if the callback URL is unreachable, the failure is logged and the retrigger endpoint can be used to re-fire.
 - No native HTTPS support — use a reverse proxy (Nginx, Caddy) to terminate TLS.
-- No web UI — all admin interactions are via the REST API or CLI.
+- Admin UI is desktop-only — no mobile layout; session payload upload and partner registration via UI are v2 items.
 - XML response bodies are not supported — responses are always JSON.
 - No built-in mTLS support.
 - Single-node only — the SQLite session store is not shared across instances.

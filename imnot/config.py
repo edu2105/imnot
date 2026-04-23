@@ -3,6 +3,7 @@ from __future__ import annotations
 import tomllib
 from dataclasses import dataclass, field, fields
 from pathlib import Path
+from typing import Literal
 
 
 @dataclass
@@ -31,10 +32,17 @@ class PaginationConfig:
 
 
 @dataclass
+class UIConfig:
+    enabled: bool = True
+    default_theme: Literal["light", "dark", "system"] = "light"
+
+
+@dataclass
 class ImnotConfig:
     server: ServerConfig = field(default_factory=ServerConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     pagination: PaginationConfig = field(default_factory=PaginationConfig)
+    ui: UIConfig = field(default_factory=UIConfig)
 
 
 def _from_dict(cls, data: dict):
@@ -52,4 +60,5 @@ def load_config(path: Path | None) -> ImnotConfig:
         server=_from_dict(ServerConfig, data.get("server", {})),
         logging=_from_dict(LoggingConfig, data.get("logging", {})),
         pagination=_from_dict(PaginationConfig, data.get("pagination", {})),
+        ui=_from_dict(UIConfig, data.get("ui", {})),
     )

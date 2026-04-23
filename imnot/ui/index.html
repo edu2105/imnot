@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="__IMNOT_THEME__">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>imnot — admin</title>
+  <script>
+    (function () {
+      var stored = localStorage.getItem('imnot-theme');
+      var html = document.documentElement;
+      if (stored === 'dark' || stored === 'light') {
+        html.setAttribute('data-theme', stored);
+      } else if (stored === 'system' || html.getAttribute('data-theme') === 'system') {
+        html.setAttribute('data-theme',
+          window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      }
+    })();
+  </script>
+  <!-- TAILWIND_CSS_PLACEHOLDER -->
+  <style>
+    /* Fallback base styles when Tailwind is not inlined (dev without make ui) */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f5f5f5; color: #1a1a1a; }
+    [data-theme="dark"] body { background: #1a1a1a; color: #f0f0f0; }
+    code, pre, .mono { font-family: ui-monospace, 'Cascadia Code', 'Fira Code', monospace; }
+    a { color: #E63946; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    button { cursor: pointer; }
+  </style>
+</head>
+<body class="bg-surface dark:bg-surface-dark text-ink dark:text-ink-dark min-h-screen">
+
+  <!-- ======= NAV ======= -->
+  <header class="bg-brand sticky top-0 z-50 shadow-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <span class="text-white font-bold text-xl tracking-tight select-none">imnot</span>
+        <span class="text-white/60 text-sm hidden sm:inline">admin console</span>
+      </div>
+      <div class="flex items-center gap-4">
+        <span id="server-status" class="text-white/70 text-xs font-mono"></span>
+        <button
+          id="theme-toggle"
+          onclick="toggleTheme()"
+          title="Toggle dark/light mode"
+          class="text-white/80 hover:text-white transition-colors p-1.5 rounded-md hover:bg-white/10"
+          aria-label="Toggle theme"
+        >
+          <svg id="icon-sun" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M17.657 17.657l-.707-.707M6.343 6.343l-.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z"/>
+          </svg>
+          <svg id="icon-moon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+          </svg>
+        </button>
+        <button
+          onclick="reloadAll()"
+          class="bg-white/10 hover:bg-white/20 text-white text-sm font-medium px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          Reload
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ======= MAIN ======= -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+    <!-- Notification banner -->
+    <div id="notification" class="hidden rounded-lg px-4 py-3 text-sm font-medium flex items-center gap-2"></div>
+
+    <!-- ---- Partners ---- -->
+    <section>
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold text-ink dark:text-ink-dark">Partners</h2>
+        <button onclick="loadPartners()" class="text-xs text-muted dark:text-muted-dark hover:text-brand transition-colors">Refresh</button>
+      </div>
+      <div id="partners-container" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div class="animate-pulse bg-surface-alt dark:bg-surface-alt-dark rounded-xl h-32"></div>
+      </div>
+    </section>
+
+    <!-- ---- Sessions ---- -->
+    <section>
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold text-ink dark:text-ink-dark">Active Sessions</h2>
+        <button onclick="loadSessions()" class="text-xs text-muted dark:text-muted-dark hover:text-brand transition-colors">Refresh</button>
+      </div>
+      <div class="bg-surface dark:bg-surface-dark rounded-xl border border-border dark:border-border-dark overflow-hidden shadow-sm">
+        <table class="w-full text-sm">
+          <thead class="bg-surface-alt dark:bg-surface-alt-dark">
+            <tr>
+              <th class="text-left px-4 py-3 font-medium text-muted dark:text-muted-dark text-xs uppercase tracking-wide">Session ID</th>
+              <th class="text-left px-4 py-3 font-medium text-muted dark:text-muted-dark text-xs uppercase tracking-wide">Partner</th>
+              <th class="text-left px-4 py-3 font-medium text-muted dark:text-muted-dark text-xs uppercase tracking-wide">Datapoint</th>
+              <th class="text-left px-4 py-3 font-medium text-muted dark:text-muted-dark text-xs uppercase tracking-wide">Created At</th>
+            </tr>
+          </thead>
+          <tbody id="sessions-tbody">
+            <tr>
+              <td colspan="4" class="px-4 py-6 text-center text-muted dark:text-muted-dark text-sm">Loading…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ---- Payload Inspector ---- -->
+    <section>
+      <h2 class="text-lg font-semibold text-ink dark:text-ink-dark mb-4">Payload Inspector</h2>
+      <div class="bg-surface dark:bg-surface-dark rounded-xl border border-border dark:border-border-dark shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-border dark:border-border-dark bg-surface-alt dark:bg-surface-alt-dark">
+          <div class="flex flex-wrap gap-3 items-end">
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium text-muted dark:text-muted-dark uppercase tracking-wide" for="payload-partner">Partner</label>
+              <input
+                id="payload-partner"
+                type="text"
+                placeholder="staylink"
+                class="bg-surface dark:bg-surface-dark border border-border dark:border-border-dark rounded-md px-3 py-1.5 text-sm text-ink dark:text-ink-dark w-36 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent"
+              />
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium text-muted dark:text-muted-dark uppercase tracking-wide" for="payload-datapoint">Datapoint</label>
+              <input
+                id="payload-datapoint"
+                type="text"
+                placeholder="reservation"
+                class="bg-surface dark:bg-surface-dark border border-border dark:border-border-dark rounded-md px-3 py-1.5 text-sm text-ink dark:text-ink-dark w-36 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent"
+              />
+            </div>
+            <button
+              onclick="fetchPayload()"
+              class="bg-brand hover:bg-brand/90 text-white text-sm font-medium px-4 py-1.5 rounded-md transition-colors"
+            >
+              Fetch
+            </button>
+          </div>
+        </div>
+        <div class="p-4">
+          <pre id="payload-display" class="mono text-xs text-ink dark:text-ink-dark bg-surface-alt dark:bg-surface-alt-dark rounded-lg p-4 overflow-x-auto min-h-16 whitespace-pre-wrap break-words">Select a partner and datapoint above to inspect the global payload.</pre>
+        </div>
+        <!-- Upload form -->
+        <div class="p-4 border-t border-border dark:border-border-dark">
+          <h3 class="text-sm font-semibold text-ink dark:text-ink-dark mb-3">Upload Global Payload</h3>
+          <div class="flex flex-col gap-3">
+            <div class="flex flex-wrap gap-3">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium text-muted dark:text-muted-dark uppercase tracking-wide" for="upload-partner">Partner</label>
+                <input
+                  id="upload-partner"
+                  type="text"
+                  placeholder="staylink"
+                  class="bg-surface dark:bg-surface-dark border border-border dark:border-border-dark rounded-md px-3 py-1.5 text-sm text-ink dark:text-ink-dark w-36 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent"
+                />
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium text-muted dark:text-muted-dark uppercase tracking-wide" for="upload-datapoint">Datapoint</label>
+                <input
+                  id="upload-datapoint"
+                  type="text"
+                  placeholder="reservation"
+                  class="bg-surface dark:bg-surface-dark border border-border dark:border-border-dark rounded-md px-3 py-1.5 text-sm text-ink dark:text-ink-dark w-36 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent"
+                />
+              </div>
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium text-muted dark:text-muted-dark uppercase tracking-wide" for="upload-json">JSON Body</label>
+              <textarea
+                id="upload-json"
+                rows="6"
+                placeholder='{"reservationId": "RES001", "status": "confirmed"}'
+                spellcheck="false"
+                class="mono bg-surface dark:bg-surface-dark border border-border dark:border-border-dark rounded-md px-3 py-2 text-sm text-ink dark:text-ink-dark w-full focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent resize-y"
+              ></textarea>
+            </div>
+            <div>
+              <button
+                onclick="uploadPayload()"
+                class="bg-brand hover:bg-brand/90 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors"
+              >
+                Upload Payload
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ======= FOOTER ======= -->
+  <footer class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 mt-4 border-t border-rule dark:border-rule-dark">
+    <p class="text-xs text-muted dark:text-muted-dark text-center">
+      imnot &mdash; stateful API mock server &mdash;
+      <a href="/imnot/docs" class="hover:text-brand transition-colors">docs</a>
+      &middot;
+      <a href="/healthz" class="hover:text-brand transition-colors">healthz</a>
+    </p>
+  </footer>
+
+  <script>
+    // ---- Auth ----
+    function getToken() {
+      return localStorage.getItem('imnot-admin-key') || '';
+    }
+
+    function authHeaders() {
+      var token = getToken();
+      var h = { 'Content-Type': 'application/json' };
+      if (token) h['Authorization'] = 'Bearer ' + token;
+      return h;
+    }
+
+    // ---- Theme ----
+    function toggleTheme() {
+      var html = document.documentElement;
+      var current = html.getAttribute('data-theme');
+      var next = current === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', next);
+      localStorage.setItem('imnot-theme', next);
+      updateThemeIcon(next);
+    }
+
+    function updateThemeIcon(theme) {
+      var sun = document.getElementById('icon-sun');
+      var moon = document.getElementById('icon-moon');
+      if (theme === 'dark') {
+        sun.classList.remove('hidden');
+        moon.classList.add('hidden');
+      } else {
+        sun.classList.add('hidden');
+        moon.classList.remove('hidden');
+      }
+    }
+
+    // ---- Notifications ----
+    var _notifTimeout;
+    function notify(msg, type) {
+      var el = document.getElementById('notification');
+      el.className = 'rounded-lg px-4 py-3 text-sm font-medium flex items-center gap-2 ' + (
+        type === 'error'
+          ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border border-red-200 dark:border-red-800'
+          : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border border-green-200 dark:border-green-800'
+      );
+      el.textContent = msg;
+      el.classList.remove('hidden');
+      clearTimeout(_notifTimeout);
+      _notifTimeout = setTimeout(function () { el.classList.add('hidden'); }, 4000);
+    }
+
+    // ---- Partners ----
+    function loadPartners() {
+      fetch('/imnot/admin/partners', { headers: authHeaders() })
+        .then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(renderPartners)
+        .catch(function (e) { notify('Failed to load partners: ' + e.message, 'error'); });
+    }
+
+    function renderPartners(data) {
+      var container = document.getElementById('partners-container');
+      if (!data || data.length === 0) {
+        container.innerHTML = '<p class="text-muted dark:text-muted-dark text-sm col-span-full">No partners loaded.</p>';
+        return;
+      }
+      container.innerHTML = data.map(function (p) {
+        var dps = p.datapoints.map(function (dp) {
+          return '<span class="inline-block bg-surface-alt dark:bg-surface-alt-dark text-ink dark:text-ink-dark text-xs px-2 py-0.5 rounded-full border border-border dark:border-border-dark font-mono">' + dp + '</span>';
+        }).join(' ');
+        return [
+          '<div class="bg-surface dark:bg-surface-dark rounded-xl border border-border dark:border-border-dark shadow-sm p-5 hover:shadow-md transition-shadow">',
+            '<div class="flex items-center gap-2 mb-2">',
+              '<span class="w-2 h-2 rounded-full bg-brand flex-shrink-0"></span>',
+              '<h3 class="font-semibold text-ink dark:text-ink-dark font-mono">' + p.partner + '</h3>',
+            '</div>',
+            '<p class="text-xs text-muted dark:text-muted-dark mb-3">' + (p.description || '—') + '</p>',
+            '<div class="flex flex-wrap gap-1.5">' + dps + '</div>',
+          '</div>',
+        ].join('');
+      }).join('');
+    }
+
+    // ---- Sessions ----
+    function loadSessions() {
+      fetch('/imnot/admin/sessions', { headers: authHeaders() })
+        .then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(renderSessions)
+        .catch(function (e) { notify('Failed to load sessions: ' + e.message, 'error'); });
+    }
+
+    function renderSessions(data) {
+      var tbody = document.getElementById('sessions-tbody');
+      if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-6 text-center text-muted dark:text-muted-dark text-sm">No active sessions.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.map(function (s, i) {
+        var bg = i % 2 === 0 ? '' : 'bg-surface-alt dark:bg-surface-alt-dark';
+        return [
+          '<tr class="' + bg + ' hover:bg-brand/5 transition-colors">',
+            '<td class="px-4 py-2.5 font-mono text-xs text-muted dark:text-muted-dark">' + s.session_id + '</td>',
+            '<td class="px-4 py-2.5 text-sm font-medium">' + s.partner + '</td>',
+            '<td class="px-4 py-2.5 text-sm">' + s.datapoint + '</td>',
+            '<td class="px-4 py-2.5 text-xs text-muted dark:text-muted-dark font-mono">' + (s.created_at || '—') + '</td>',
+          '</tr>',
+        ].join('');
+      }).join('');
+    }
+
+    // ---- Payload ----
+    function fetchPayload() {
+      var partner = document.getElementById('payload-partner').value.trim();
+      var dp = document.getElementById('payload-datapoint').value.trim();
+      if (!partner || !dp) { notify('Enter partner and datapoint names.', 'error'); return; }
+      fetch('/imnot/admin/' + encodeURIComponent(partner) + '/' + encodeURIComponent(dp) + '/payload', { headers: authHeaders() })
+        .then(function (r) {
+          if (r.status === 404) return null;
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function (data) {
+          var el = document.getElementById('payload-display');
+          if (data === null) {
+            el.textContent = 'No global payload set for ' + partner + '/' + dp + '.';
+          } else {
+            el.textContent = JSON.stringify(data, null, 2);
+          }
+        })
+        .catch(function (e) { notify('Failed to fetch payload: ' + e.message, 'error'); });
+    }
+
+    function uploadPayload() {
+      var partner = document.getElementById('upload-partner').value.trim();
+      var dp = document.getElementById('upload-datapoint').value.trim();
+      var raw = document.getElementById('upload-json').value.trim();
+      if (!partner || !dp) { notify('Enter partner and datapoint names.', 'error'); return; }
+      var body;
+      try {
+        body = JSON.parse(raw);
+      } catch (e) {
+        notify('Invalid JSON: ' + e.message, 'error');
+        return;
+      }
+      fetch('/imnot/admin/' + encodeURIComponent(partner) + '/' + encodeURIComponent(dp) + '/payload', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(body),
+      })
+        .then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function () {
+          notify('Payload uploaded for ' + partner + '/' + dp + '.', 'ok');
+          loadSessions();
+        })
+        .catch(function (e) { notify('Upload failed: ' + e.message, 'error'); });
+    }
+
+    // ---- Reload ----
+    function reloadAll() {
+      fetch('/imnot/admin/reload', { method: 'POST', headers: authHeaders() })
+        .then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function (data) {
+          var msg = 'Reload ' + data.status;
+          if (data.updated && data.updated.length) msg += ' — updated: ' + data.updated.join(', ');
+          if (data.added && data.added.length) msg += ' — added: ' + data.added.join(', ');
+          if (data.conflicts && data.conflicts.length) msg += ' — conflicts: ' + data.conflicts.join(', ');
+          notify(msg, data.status === 'ok' ? 'ok' : 'error');
+          loadPartners();
+          loadSessions();
+        })
+        .catch(function (e) { notify('Reload failed: ' + e.message, 'error'); });
+    }
+
+    // ---- Server status ----
+    function checkHealth() {
+      fetch('/healthz')
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          document.getElementById('server-status').textContent = 'v' + (d.version || '?');
+        })
+        .catch(function () {
+          document.getElementById('server-status').textContent = 'offline';
+        });
+    }
+
+    // ---- Init ----
+    (function init() {
+      var theme = document.documentElement.getAttribute('data-theme') || 'light';
+      updateThemeIcon(theme);
+      checkHealth();
+      loadPartners();
+      loadSessions();
+    })();
+  </script>
+</body>
+</html>

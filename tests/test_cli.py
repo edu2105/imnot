@@ -205,6 +205,20 @@ def test_routes_works_from_subdirectory(runner):
     assert "staylink" in result.output
 
 
+def test_routes_shows_ui_endpoint(runner):
+    """imnot routes must include GET /imnot/admin/ui in the INFRA ENDPOINTS section."""
+    project_root = Path(__file__).parent.parent
+    original = os.getcwd()
+    try:
+        os.chdir(project_root)
+        result = runner.invoke(cli, ["routes", "--partners-dir", str(PARTNERS_DIR)])
+    finally:
+        os.chdir(original)
+
+    assert result.exit_code == 0, result.output
+    assert "/imnot/admin/ui" in result.output
+
+
 # ---------------------------------------------------------------------------
 # imnot generate
 # ---------------------------------------------------------------------------
