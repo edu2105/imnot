@@ -15,7 +15,6 @@
 .main .page-container {
   display: flex;
   flex-direction: column;
-  gap: var(--space-12);
 }
 
 
@@ -212,6 +211,7 @@
   color: var(--color-brand);
   opacity: 0.75;
   font-size: 0.6875rem;
+  text-box: auto;
 }
 
 /* Skeleton loading placeholders */
