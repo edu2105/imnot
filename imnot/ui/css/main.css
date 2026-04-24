@@ -473,6 +473,102 @@
 }
 
 
+/* ---- Card wrapper (card + accordion stacked) -------------- */
+
+/* The actual grid child: stacks the card above its accordion panel. */
+.card-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Override: card inside a wrapper loses its own hover lift to avoid
+   the wrapper clipping the accordion shadow. */
+.card-wrapper .card {
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.card-wrapper .card:not(:has(+ .dp-accordion[style*="display: block"])) {
+  border-radius: var(--radius-lg);
+}
+
+
+/* ---- Datapoint pill active state -------------------------- */
+
+.datapoint-tag--active {
+  border-color: var(--color-brand);
+  color: var(--color-brand);
+  background-color: var(--color-brand-subtle);
+}
+
+
+/* ---- Accordion panel (below a card) ----------------------- */
+
+.dp-accordion {
+  display: none;
+  border: 1px solid var(--color-border);
+  border-top: 2px solid var(--color-brand);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  background-color: var(--color-surface-alt);
+  box-shadow: var(--shadow-md);
+}
+
+.dp-accordion .acc-section {
+  padding: var(--space-4) var(--space-5);
+}
+
+.dp-accordion .acc-section + .acc-section {
+  border-top: 1px solid var(--color-border);
+}
+
+.dp-accordion .acc-section h3 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink);
+  margin-bottom: 0.625rem;
+}
+
+.dp-accordion .acc-note {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  margin-top: 0.375rem;
+}
+
+/* Response display <pre> inside tester */
+.response-display {
+  margin-top: 0.625rem;
+  min-height: 4rem;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  overflow-x: auto;
+  font-size: 0.75rem;
+  cursor: default;
+  font-family: var(--font-mono);
+  padding: 0.75rem 0.875rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-ink);
+}
+
+/* Endpoint selector <select> */
+.endpoint-select {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  background-color: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-ink);
+  outline: none;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+  max-width: 100%;
+}
+
+.endpoint-select:focus {
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.15);
+}
+
+
 /* ---- Responsive ------------------------------------------- */
 
 @media (min-width: 40rem) {

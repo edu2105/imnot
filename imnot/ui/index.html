@@ -862,6 +862,102 @@ img, svg {
 }
 
 
+/* ---- Card wrapper (card + accordion stacked) -------------- */
+
+/* The actual grid child: stacks the card above its accordion panel. */
+.card-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Override: card inside a wrapper loses its own hover lift to avoid
+   the wrapper clipping the accordion shadow. */
+.card-wrapper .card {
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.card-wrapper .card:not(:has(+ .dp-accordion[style*="display: block"])) {
+  border-radius: var(--radius-lg);
+}
+
+
+/* ---- Datapoint pill active state -------------------------- */
+
+.datapoint-tag--active {
+  border-color: var(--color-brand);
+  color: var(--color-brand);
+  background-color: var(--color-brand-subtle);
+}
+
+
+/* ---- Accordion panel (below a card) ----------------------- */
+
+.dp-accordion {
+  display: none;
+  border: 1px solid var(--color-border);
+  border-top: 2px solid var(--color-brand);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  background-color: var(--color-surface-alt);
+  box-shadow: var(--shadow-md);
+}
+
+.dp-accordion .acc-section {
+  padding: var(--space-4) var(--space-5);
+}
+
+.dp-accordion .acc-section + .acc-section {
+  border-top: 1px solid var(--color-border);
+}
+
+.dp-accordion .acc-section h3 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink);
+  margin-bottom: 0.625rem;
+}
+
+.dp-accordion .acc-note {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  margin-top: 0.375rem;
+}
+
+/* Response display <pre> inside tester */
+.response-display {
+  margin-top: 0.625rem;
+  min-height: 4rem;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  overflow-x: auto;
+  font-size: 0.75rem;
+  cursor: default;
+  font-family: var(--font-mono);
+  padding: 0.75rem 0.875rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-ink);
+}
+
+/* Endpoint selector <select> */
+.endpoint-select {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  background-color: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-ink);
+  outline: none;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+  max-width: 100%;
+}
+
+.endpoint-select:focus {
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.15);
+}
+
+
 /* ---- Responsive ------------------------------------------- */
 
 @media (min-width: 40rem) {
@@ -960,7 +1056,6 @@ img, svg {
     <div class="page-container">
       <button class="subnav-tab subnav-tab--active" data-tab="partners"  onclick="showSection('partners')">Partners</button>
       <button class="subnav-tab"                    data-tab="sessions"  onclick="showSection('sessions')">Active Sessions</button>
-      <button class="subnav-tab"                    data-tab="payload"   onclick="showSection('payload')">Payload Inspector</button>
     </div>
   </nav>
 
@@ -974,7 +1069,7 @@ img, svg {
         <div class="section-header">
           <div class="section-title">
             <h2>Partners</h2>
-            <p>Loaded partner definitions and their datapoints</p>
+            <p>Loaded partner definitions and their datapoints. Click a datapoint pill to inspect and test it.</p>
           </div>
           <button onclick="loadPartners()" class="btn btn-secondary">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -1025,73 +1120,6 @@ img, svg {
       </section>
 
 
-      <!-- ---- Payload Inspector ---- -->
-      <section data-section="payload" hidden>
-        <div class="section-title">
-          <h2>Payload Inspector</h2>
-          <p>Inspect and upload global payloads for partner datapoints</p>
-        </div>
-        <div class="panel">
-
-          <!-- Inspect -->
-          <div class="panel-section">
-            <h3>Inspect</h3>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label" for="payload-partner">Partner</label>
-                <input id="payload-partner" type="text" placeholder="staylink" class="form-input" />
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="payload-datapoint">Datapoint</label>
-                <input id="payload-datapoint" type="text" placeholder="reservation" class="form-input" />
-              </div>
-              <button onclick="fetchPayload()" class="btn btn-primary">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-                </svg>
-                Inspect
-              </button>
-            </div>
-            <pre id="payload-display" class="form-textarea">Select a partner and datapoint above to inspect the global payload.</pre>
-          </div>
-
-          <!-- Upload -->
-          <div class="panel-section">
-            <h3>Upload Global Payload</h3>
-            <div class="form-stack">
-              <div class="form-row">
-                <div class="form-group">
-                  <label class="form-label" for="upload-partner">Partner</label>
-                  <input id="upload-partner" type="text" placeholder="staylink" class="form-input" />
-                </div>
-                <div class="form-group">
-                  <label class="form-label" for="upload-datapoint">Datapoint</label>
-                  <input id="upload-datapoint" type="text" placeholder="reservation" class="form-input" />
-                </div>
-              </div>
-              <div class="form-group">
-                <label class="form-label" for="upload-json">JSON Body</label>
-                <textarea
-                  id="upload-json"
-                  rows="5"
-                  placeholder='{"reservationId": "RES001", "status": "confirmed"}'
-                  spellcheck="false"
-                  class="form-textarea"
-                ></textarea>
-              </div>
-              <div>
-                <button onclick="uploadPayload()" class="btn btn-primary">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
-                  </svg>
-                  Upload Payload
-                </button>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </section>
 
     </div>
   </main>
@@ -1166,6 +1194,9 @@ img, svg {
       }, 4000);
     }
 
+    // ---- Payload patterns that get a payload manager section ----
+    var PAYLOAD_PATTERNS = { fetch: true, polling: true, callback: true, paginated: true };
+
     // ---- Partners ----
     function loadPartners() {
       fetch('/imnot/admin/partners', { headers: authHeaders() })
@@ -1173,6 +1204,7 @@ img, svg {
         .then(renderPartners)
         .catch(function (e) { notify('Failed to load partners: ' + e.message, 'error'); });
     }
+
     function renderPartners(data) {
       var c = document.getElementById('partners-container');
       if (!data || !data.length) {
@@ -1184,11 +1216,29 @@ img, svg {
       }
       c.innerHTML = data.map(function (p) {
         var tags = (p.datapoints || []).map(function (dp) {
-          return '<span class="datapoint-tag">' + escHtml(dp.name)
+          var endpointsJson = escHtml(JSON.stringify(dp.endpoints));
+          var delay = dp.callback_delay_seconds !== null && dp.callback_delay_seconds !== undefined
+            ? dp.callback_delay_seconds : 'null';
+          return '<button class="datapoint-tag" '
+            + 'onclick="openPanel('
+            + '\'' + escHtml(p.partner) + '\','
+            + '\'' + escHtml(dp.name) + '\','
+            + '\'' + escHtml(dp.pattern) + '\','
+            + 'JSON.parse(this.dataset.endpoints),'
+            + 'this.dataset.delay === \'null\' ? null : parseInt(this.dataset.delay, 10),'
+            + 'this'
+            + ')" '
+            + 'data-partner="' + escHtml(p.partner) + '" '
+            + 'data-dp="' + escHtml(dp.name) + '" '
+            + 'data-endpoints="' + endpointsJson + '" '
+            + 'data-delay="' + delay + '">'
+            + escHtml(dp.name)
             + '<span class="datapoint-tag-pattern">' + escHtml(dp.pattern) + '</span>'
-            + '</span>';
+            + '</button>';
         }).join('');
-        return '<div class="card">'
+        var accordionId = 'acc-' + escHtml(p.partner);
+        return '<div class="card-wrapper">'
+          + '<div class="card">'
           + '<div class="card-stripe"></div>'
           + '<div class="card-body">'
           + '<div class="card-header">'
@@ -1198,8 +1248,256 @@ img, svg {
           + '<p class="card-desc">' + escHtml(p.description || '—') + '</p>'
           + '<div class="card-tags">' + tags + '</div>'
           + '</div>'
+          + '</div>'
+          + '<div class="dp-accordion" id="' + accordionId + '" '
+          + 'data-partner="' + escHtml(p.partner) + '"></div>'
           + '</div>';
       }).join('');
+    }
+
+    // ---- Panel open/close ----
+
+    function closeAllPanels() {
+      document.querySelectorAll('.dp-accordion').forEach(function (acc) {
+        acc.style.display = 'none';
+        acc.innerHTML = '';
+      });
+      document.querySelectorAll('.datapoint-tag--active').forEach(function (el) {
+        el.classList.remove('datapoint-tag--active');
+      });
+    }
+
+    function openPanel(partnerName, dpName, pattern, endpoints, callbackDelay, pillEl) {
+      var accId = 'acc-' + partnerName;
+      var acc = document.getElementById(accId);
+      if (!acc) return;
+
+      var isOpen = acc.style.display === 'block';
+      var isSamePill = pillEl.classList.contains('datapoint-tag--active');
+
+      closeAllPanels();
+
+      if (isSamePill && isOpen) {
+        return;
+      }
+
+      pillEl.classList.add('datapoint-tag--active');
+      acc.innerHTML = buildAccordionHtml(partnerName, dpName, pattern, endpoints, callbackDelay);
+      acc.style.display = 'block';
+
+      if (PAYLOAD_PATTERNS[pattern]) {
+        var displayEl = document.getElementById('acc-payload-display-' + partnerName + '-' + dpName);
+        if (displayEl) loadAccordionPayload(partnerName, dpName, displayEl);
+      }
+    }
+
+    function buildAccordionHtml(partner, dp, pattern, endpoints, callbackDelay) {
+      var html = '';
+
+      if (PAYLOAD_PATTERNS[pattern]) {
+        var pid = escHtml(partner + '-' + dp);
+        html += '<div class="acc-section">'
+          + '<h3>Payload Manager</h3>'
+          + '<div class="form-stack">'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="acc-session-' + pid + '">Session ID (optional — leave blank for global)</label>'
+          + '<input id="acc-session-' + pid + '" type="text" placeholder="leave blank for global" class="form-input" style="width:100%;max-width:28rem;" />'
+          + '</div>'
+          + '<pre id="acc-payload-display-' + pid + '" class="response-display">Loading…</pre>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="acc-upload-json-' + pid + '">New JSON payload</label>'
+          + '<textarea id="acc-upload-json-' + pid + '" rows="4" placeholder=\'{"key": "value"}\' spellcheck="false" class="form-textarea"></textarea>'
+          + '</div>'
+          + '<div>'
+          + '<button onclick="uploadAccordionPayload(' + '\'' + escHtml(partner) + '\',\'' + escHtml(dp) + '\',' + 'document.getElementById(\'acc-upload-json-' + pid + '\'),document.getElementById(\'acc-payload-display-' + pid + '\')" class="btn btn-primary">'
+          + '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>'
+          + 'Upload Payload'
+          + '</button>'
+          + '</div>'
+          + '</div>'
+          + '</div>';
+      }
+
+      var epOptions = endpoints.map(function (ep) {
+        return '<option value="' + escHtml(ep.method + ' ' + ep.path) + '">'
+          + escHtml(ep.method + ' ' + ep.path)
+          + (ep.step !== null && ep.step !== undefined ? ' (step ' + ep.step + ')' : '')
+          + '</option>';
+      }).join('');
+
+      var tid = escHtml(partner + '-' + dp);
+      html += '<div class="acc-section">'
+        + '<h3>Endpoint Tester</h3>'
+        + '<div class="form-stack">'
+        + '<div class="form-group">'
+        + '<label class="form-label" for="acc-ep-select-' + tid + '">Endpoint</label>'
+        + '<select id="acc-ep-select-' + tid + '" class="endpoint-select">' + epOptions + '</select>'
+        + '</div>'
+        + '<div class="form-group">'
+        + '<label class="form-label" for="acc-body-' + tid + '">Request body (JSON, optional)</label>'
+        + '<textarea id="acc-body-' + tid + '" rows="3" placeholder=\'{"key": "value"}\' spellcheck="false" class="form-textarea"></textarea>'
+        + '</div>'
+        + '<div>'
+        + '<button onclick="runEndpointTest('
+        + '\'' + escHtml(partner) + '\','
+        + '\'' + escHtml(dp) + '\','
+        + '\'' + escHtml(pattern) + '\','
+        + 'document.getElementById(\'acc-ep-select-' + tid + '\'),'
+        + 'document.getElementById(\'acc-body-' + tid + '\'),'
+        + 'document.getElementById(\'acc-response-' + tid + '\'),'
+        + (callbackDelay !== null && callbackDelay !== undefined ? callbackDelay : 'null')
+        + ')" class="btn btn-primary">'
+        + '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>'
+        + 'Run'
+        + '</button>'
+        + '</div>'
+        + '<pre id="acc-response-' + tid + '" class="response-display">Response will appear here.</pre>'
+        + (callbackDelay !== null && callbackDelay !== undefined
+          ? '<p class="acc-note">Callback fires in ' + callbackDelay + ' second(s) after the request.</p>'
+          : '')
+        + '</div>'
+        + '</div>';
+
+      return html;
+    }
+
+    // ---- Accordion payload load/upload ----
+
+    function loadAccordionPayload(partner, dp, displayEl) {
+      fetch('/imnot/admin/' + encodeURIComponent(partner) + '/' + encodeURIComponent(dp) + '/payload', { headers: authHeaders() })
+        .then(function (r) {
+          if (r.status === 404) return null;
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function (data) {
+          displayEl.textContent = data === null
+            ? 'No global payload set.'
+            : JSON.stringify(data.payload !== undefined ? data.payload : data, null, 2);
+        })
+        .catch(function (e) { displayEl.textContent = 'Error: ' + e.message; });
+    }
+
+    function uploadAccordionPayload(partner, dp, textareaEl, displayEl) {
+      var raw = textareaEl.value.trim();
+      var body;
+      try { body = JSON.parse(raw); } catch (e) { notify('Invalid JSON: ' + e.message, 'error'); return; }
+      fetch('/imnot/admin/' + encodeURIComponent(partner) + '/' + encodeURIComponent(dp) + '/payload', {
+        method: 'POST', headers: authHeaders(), body: JSON.stringify(body),
+      })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function () {
+          notify('Payload uploaded for ' + partner + '/' + dp + '.', 'ok');
+          loadAccordionPayload(partner, dp, displayEl);
+        })
+        .catch(function (e) { notify('Upload failed: ' + e.message, 'error'); });
+    }
+
+    // ---- Endpoint tester ----
+
+    function runEndpointTest(partner, dp, pattern, epSelectEl, bodyInputEl, responseDisplayEl, callbackDelay) {
+      var selected = epSelectEl.value;
+      var spaceIdx = selected.indexOf(' ');
+      var method = selected.substring(0, spaceIdx);
+      var path = selected.substring(spaceIdx + 1);
+
+      var rawBody = bodyInputEl.value.trim();
+
+      if (pattern === 'polling') {
+        _runPollingTest(method, path, rawBody, responseDisplayEl);
+      } else {
+        _runSingleRequest(method, path, rawBody, responseDisplayEl);
+      }
+    }
+
+    function _runSingleRequest(method, path, rawBody, displayEl) {
+      displayEl.textContent = 'Running…';
+      var opts = { method: method, headers: { 'Content-Type': 'application/json' } };
+      if (rawBody && method !== 'GET' && method !== 'HEAD') {
+        try { JSON.parse(rawBody); opts.body = rawBody; } catch (e) {
+          notify('Invalid JSON body: ' + e.message, 'error'); return;
+        }
+      }
+      fetch(path, opts)
+        .then(function (r) {
+          var status = r.status + ' ' + r.statusText;
+          var locationHdr = r.headers.get('Location');
+          if (r.headers.get('Content-Type') && r.headers.get('Content-Type').indexOf('application/json') !== -1) {
+            return r.json().then(function (body) {
+              return { status: status, body: JSON.stringify(body, null, 2), location: locationHdr };
+            });
+          }
+          return r.text().then(function (text) {
+            return { status: status, body: text || '(no body)', location: locationHdr };
+          });
+        })
+        .then(function (result) {
+          var out = 'HTTP ' + result.status + '\n';
+          if (result.location) out += 'Location: ' + result.location + '\n';
+          out += '\n' + result.body;
+          displayEl.textContent = out;
+        })
+        .catch(function (e) { displayEl.textContent = 'Error: ' + e.message; });
+    }
+
+    function _runPollingTest(submitMethod, submitPath, rawBody, displayEl) {
+      displayEl.textContent = 'Step 1: submitting…';
+      var opts = { method: submitMethod, headers: { 'Content-Type': 'application/json' } };
+      if (rawBody) {
+        try { JSON.parse(rawBody); opts.body = rawBody; } catch (e) {
+          notify('Invalid JSON body: ' + e.message, 'error'); return;
+        }
+      }
+      var step1Status, step1Body, locationHdr;
+      fetch(submitPath, opts)
+        .then(function (r) {
+          step1Status = r.status + ' ' + r.statusText;
+          locationHdr = r.headers.get('Location');
+          if (r.headers.get('Content-Type') && r.headers.get('Content-Type').indexOf('application/json') !== -1) {
+            return r.json();
+          }
+          return r.text().then(function (t) { return t; });
+        })
+        .then(function (body) {
+          step1Body = typeof body === 'string' ? body : JSON.stringify(body, null, 2);
+
+          var jobId = null;
+          if (locationHdr) {
+            // Extract bare ID from the Location header path, e.g. "/jobs/abc-123" → "abc-123"
+            jobId = locationHdr.rsplit ? locationHdr.rsplit('/', 1)[1] : locationHdr.split('/').pop();
+          } else if (typeof body === 'object' && body !== null) {
+            var idKey = Object.keys(body).find(function (k) {
+              return k.toLowerCase().includes('id') || k.toLowerCase().includes('job');
+            });
+            if (idKey) jobId = body[idKey];
+          }
+
+          if (!jobId) {
+            displayEl.textContent = 'Step 1: HTTP ' + step1Status + '\n\n' + step1Body
+              + '\n\n[Could not extract job ID from step-1 response — cannot proceed to fetch step]';
+            return;
+          }
+
+          displayEl.textContent = 'Step 1: HTTP ' + step1Status + '\n\n' + step1Body
+            + '\n\nStep N: fetching result for id=' + jobId + '…';
+
+          var fetchPath = submitPath + '/' + jobId;
+          return fetch(fetchPath)
+            .then(function (r2) {
+              var s2 = r2.status + ' ' + r2.statusText;
+              if (r2.headers.get('Content-Type') && r2.headers.get('Content-Type').indexOf('application/json') !== -1) {
+                return r2.json().then(function (b2) {
+                  return { status: s2, body: JSON.stringify(b2, null, 2) };
+                });
+              }
+              return r2.text().then(function (t2) { return { status: s2, body: t2 || '(no body)' }; });
+            })
+            .then(function (r2result) {
+              displayEl.textContent = 'Step 1: HTTP ' + step1Status + '\n\n' + step1Body
+                + '\n\n---\nStep N: HTTP ' + r2result.status + '\n\n' + r2result.body;
+            });
+        })
+        .catch(function (e) { displayEl.textContent = 'Error: ' + e.message; });
     }
 
     // ---- Sessions ----
@@ -1226,35 +1524,6 @@ img, svg {
       }).join('');
     }
 
-    // ---- Payload ----
-    function fetchPayload() {
-      var partner = document.getElementById('payload-partner').value.trim();
-      var dp = document.getElementById('payload-datapoint').value.trim();
-      if (!partner || !dp) { notify('Enter partner and datapoint names.', 'error'); return; }
-      fetch('/imnot/admin/' + encodeURIComponent(partner) + '/' + encodeURIComponent(dp) + '/payload', { headers: authHeaders() })
-        .then(function (r) { if (r.status === 404) return null; if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-        .then(function (data) {
-          document.getElementById('payload-display').textContent = data === null
-            ? 'No global payload set for ' + partner + '/' + dp + '.'
-            : JSON.stringify(data, null, 2);
-        })
-        .catch(function (e) { notify('Failed to fetch payload: ' + e.message, 'error'); });
-    }
-    function uploadPayload() {
-      var partner = document.getElementById('upload-partner').value.trim();
-      var dp = document.getElementById('upload-datapoint').value.trim();
-      var raw = document.getElementById('upload-json').value.trim();
-      if (!partner || !dp) { notify('Enter partner and datapoint names.', 'error'); return; }
-      var body;
-      try { body = JSON.parse(raw); } catch (e) { notify('Invalid JSON: ' + e.message, 'error'); return; }
-      fetch('/imnot/admin/' + encodeURIComponent(partner) + '/' + encodeURIComponent(dp) + '/payload', {
-        method: 'POST', headers: authHeaders(), body: JSON.stringify(body),
-      })
-        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-        .then(function () { notify('Payload uploaded for ' + partner + '/' + dp + '.', 'ok'); loadSessions(); })
-        .catch(function (e) { notify('Upload failed: ' + e.message, 'error'); });
-    }
-
     // ---- Reload ----
     function reloadAll() {
       fetch('/imnot/admin/reload', { method: 'POST', headers: authHeaders() })
@@ -1265,8 +1534,8 @@ img, svg {
           if (d.added     && d.added.length)     msg += ' — added: '     + d.added.join(', ');
           if (d.conflicts && d.conflicts.length) msg += ' — conflicts: ' + d.conflicts.join(', ');
           notify(msg, d.status === 'ok' ? 'ok' : 'error');
+          closeAllPanels();
           loadPartners();
-          loadSessions();
         })
         .catch(function (e) { notify('Reload failed: ' + e.message, 'error'); });
     }
@@ -1288,16 +1557,17 @@ img, svg {
         t.classList.toggle('subnav-tab--active', t.dataset.tab === name);
       });
       localStorage.setItem('imnot-section', name);
+      if (name === 'sessions') loadSessions();
     }
 
     // ---- Init ----
     (function () {
       updateThemeIcon(document.documentElement.getAttribute('data-theme') || 'light');
       var section = localStorage.getItem('imnot-section') || 'partners';
+      if (section === 'payload') section = 'partners';
       showSection(section);
       checkHealth();
       loadPartners();
-      loadSessions();
     })();
   </script>
 

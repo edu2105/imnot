@@ -402,12 +402,23 @@ def _register_infra_routes(
         return JSONResponse(store.list_sessions())
 
     async def list_partners() -> JSONResponse:
+        def _serialize_dp(dp: DatapointDef) -> dict:
+            callback_delay: int | None = None
+            if dp.pattern == "callback" and dp.endpoints:
+                callback_delay = int(dp.endpoints[0].response.get("callback_delay_seconds", 0))
+            return {
+                "name": dp.name,
+                "pattern": dp.pattern,
+                "endpoints": [{"method": ep.method, "path": ep.path, "step": ep.step} for ep in dp.endpoints],
+                "callback_delay_seconds": callback_delay,
+            }
+
         return JSONResponse(
             [
                 {
                     "partner": p.partner,
                     "description": p.description,
-                    "datapoints": [{"name": dp.name, "pattern": dp.pattern} for dp in p.datapoints],
+                    "datapoints": [_serialize_dp(dp) for dp in p.datapoints],
                 }
                 for p in partners
             ]

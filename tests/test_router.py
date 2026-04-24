@@ -82,6 +82,31 @@ def async_client(tmp_path, store):
     return TestClient(app, raise_server_exceptions=True)
 
 
+@pytest.fixture
+def callback_client(tmp_path, store):
+    partner_dir = tmp_path / "hookpartner"
+    partner_dir.mkdir()
+    (partner_dir / "partner.yaml").write_text(
+        "partner: hookpartner\n"
+        "description: Callback test partner\n"
+        "datapoints:\n"
+        "  - name: event\n"
+        "    description: Webhook event\n"
+        "    pattern: callback\n"
+        "    endpoints:\n"
+        "      - method: POST\n"
+        "        path: /hookpartner/events\n"
+        "        response:\n"
+        "          status: 202\n"
+        "          callback_url_field: callbackUrl\n"
+        "          callback_delay_seconds: 5\n"
+    )
+    app = FastAPI()
+    partners = load_partners(tmp_path)
+    register_routes(app, partners, store)
+    return TestClient(app, raise_server_exceptions=True)
+
+
 # ---------------------------------------------------------------------------
 # Infra routes
 # ---------------------------------------------------------------------------
@@ -118,6 +143,36 @@ def test_list_partners(client):
     assert "reservation" in dp_names
     assert "token" in dp_names
     assert all("pattern" in dp for dp in staylink["datapoints"])
+    assert all("endpoints" in dp for dp in staylink["datapoints"])
+    assert all("callback_delay_seconds" in dp for dp in staylink["datapoints"])
+    reservation = next(dp for dp in staylink["datapoints"] if dp["name"] == "reservation")
+    assert len(reservation["endpoints"]) > 0
+    for ep in reservation["endpoints"]:
+        assert "method" in ep
+        assert "path" in ep
+        assert "step" in ep
+    assert reservation["callback_delay_seconds"] is None
+
+
+def test_list_partners_callback_delay(callback_client):
+    r = callback_client.get("/imnot/admin/partners")
+    assert r.status_code == 200
+    body = r.json()
+    hookpartner = next(p for p in body if p["partner"] == "hookpartner")
+    event_dp = hookpartner["datapoints"][0]
+    assert event_dp["callback_delay_seconds"] == 5
+    assert event_dp["endpoints"][0]["step"] is None
+
+
+def test_list_partners_polling_steps(async_client):
+    r = async_client.get("/imnot/admin/partners")
+    assert r.status_code == 200
+    body = r.json()
+    asyncpartner = next(p for p in body if p["partner"] == "asyncpartner")
+    job_dp = asyncpartner["datapoints"][0]
+    assert job_dp["callback_delay_seconds"] is None
+    steps = [ep["step"] for ep in job_dp["endpoints"]]
+    assert steps == [1, 2, 3]
 
 
 def test_list_sessions_empty(client):
