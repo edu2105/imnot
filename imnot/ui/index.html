@@ -551,6 +551,15 @@ img, svg {
   color: var(--color-brand);
 }
 
+.datapoint-tag-pattern {
+  margin-left: 0.375rem;
+  padding-left: 0.375rem;
+  border-left: 1px solid var(--color-rule);
+  color: var(--color-brand);
+  opacity: 0.75;
+  font-size: 0.6875rem;
+}
+
 /* Skeleton loading placeholders */
 .skeleton {
   display: none;
@@ -1122,7 +1131,9 @@ img, svg {
       }
       c.innerHTML = data.map(function (p) {
         var tags = (p.datapoints || []).map(function (dp) {
-          return '<span class="datapoint-tag">' + escHtml(dp) + '</span>';
+          return '<span class="datapoint-tag">' + escHtml(dp.name)
+            + '<span class="datapoint-tag-pattern">' + escHtml(dp.pattern) + '</span>'
+            + '</span>';
         }).join('');
         return '<div class="card">'
           + '<div class="card-stripe"></div>'

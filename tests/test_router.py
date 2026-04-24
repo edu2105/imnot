@@ -114,8 +114,10 @@ def test_list_partners(client):
     body = r.json()
     staylink = next((p for p in body if p["partner"] == "staylink"), None)
     assert staylink is not None
-    assert "reservation" in staylink["datapoints"]
-    assert "token" in staylink["datapoints"]
+    dp_names = [dp["name"] for dp in staylink["datapoints"]]
+    assert "reservation" in dp_names
+    assert "token" in dp_names
+    assert all("pattern" in dp for dp in staylink["datapoints"])
 
 
 def test_list_sessions_empty(client):

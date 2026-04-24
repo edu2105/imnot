@@ -407,7 +407,7 @@ def _register_infra_routes(
                 {
                     "partner": p.partner,
                     "description": p.description,
-                    "datapoints": [dp.name for dp in p.datapoints],
+                    "datapoints": [{"name": dp.name, "pattern": dp.pattern} for dp in p.datapoints],
                 }
                 for p in partners
             ]
