@@ -992,3 +992,187 @@ def test_resolve_config_falls_back_to_cwd_walk(tmp_path):
         os.chdir(original)
 
     assert result == toml
+
+
+# ---------------------------------------------------------------------------
+# Coverage gap fixes — cli.py lines 240, 426-428, 431-432, 454-455,
+#                      508-509, 576-577, 627-628, 672-684, 694-704, 722-725
+# ---------------------------------------------------------------------------
+
+CALLBACK_YAML = """\
+partner: hookco
+description: Callback test partner
+
+datapoints:
+  - name: event
+    description: Webhook event
+    pattern: callback
+    endpoints:
+      - method: POST
+        path: /hookco/events
+        response:
+          status: 202
+          callback_url_field: callbackUrl
+          callback_delay_seconds: 3
+"""
+
+
+def test_start_reload_with_admin_key_sets_env(runner, tmp_path):
+    """--reload + admin key must set IMNOT_ADMIN_KEY in env (line 240)."""
+    with patch("imnot.cli.uvicorn.run"):
+        result = runner.invoke(
+            cli,
+            [
+                "start",
+                "--partners-dir", str(PARTNERS_DIR),
+                "--db", str(tmp_path / "test.db"),
+                "--reload",
+            ],
+            env={"IMNOT_ADMIN_KEY": "reloadkey"},
+        )
+    assert result.exit_code == 0, result.output
+
+
+def test_routes_partners_dir_not_found_exits_1(runner, tmp_path):
+    """imnot routes with a non-existent partners dir exits 1 (lines 426-428)."""
+    result = runner.invoke(cli, ["routes", "--partners-dir", str(tmp_path / "nope")])
+    assert result.exit_code == 1
+
+
+def test_routes_no_partners_loaded(runner, tmp_path):
+    """imnot routes with an empty partners dir prints message and exits 0 (lines 431-432)."""
+    (tmp_path / "partners").mkdir()
+    result = runner.invoke(cli, ["routes", "--partners-dir", str(tmp_path / "partners")])
+    assert result.exit_code == 0
+    assert "No partners loaded" in result.output
+
+
+def test_routes_shows_callback_retrigger(runner, tmp_path):
+    """imnot routes prints the retrigger admin endpoint for callback datapoints (lines 454-455)."""
+    partner_dir = tmp_path / "hookco"
+    partner_dir.mkdir()
+    (partner_dir / "partner.yaml").write_text(CALLBACK_YAML)
+
+    result = runner.invoke(cli, ["routes", "--partners-dir", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert "retrigger" in result.output
+
+
+def test_generate_file_read_error_exits_1(runner, tmp_path):
+    """generate exits 1 when the YAML file cannot be read (lines 508-509)."""
+    partners_dir = tmp_path / "partners"
+    partners_dir.mkdir()
+    yaml_file = tmp_path / "partner.yaml"
+    yaml_file.write_text("dummy")
+    yaml_file.chmod(0o000)
+
+    try:
+        result = runner.invoke(
+            cli,
+            ["generate", "--file", str(yaml_file), "--partners-dir", str(partners_dir)],
+        )
+        assert result.exit_code == 1
+    finally:
+        yaml_file.chmod(0o644)
+
+
+def test_generate_shows_callback_retrigger(runner, tmp_path):
+    """generate output lists the retrigger admin endpoint for callback datapoints (lines 576-577)."""
+    partners_dir = tmp_path / "partners"
+    partners_dir.mkdir()
+    yaml_file = tmp_path / "hookco.yaml"
+    yaml_file.write_text(CALLBACK_YAML)
+
+    result = runner.invoke(
+        cli,
+        ["generate", "--file", str(yaml_file), "--partners-dir", str(partners_dir)],
+    )
+    assert result.exit_code == 0, result.output
+    assert "retrigger" in result.output
+
+
+def test_export_postman_no_partners_exits_1(runner, tmp_path):
+    """export postman exits 1 when no partners are loaded (lines 627-628)."""
+    (tmp_path / "partners").mkdir()
+    result = runner.invoke(
+        cli,
+        ["export", "postman", "--partners-dir", str(tmp_path / "partners")],
+    )
+    assert result.exit_code == 1
+    assert "nothing to export" in result.output.lower()
+
+
+def test_payload_get_not_found(runner, tmp_path):
+    """payload get exits 1 and prints message when no payload is stored (lines 676-678)."""
+    db = tmp_path / "test.db"
+    store = SessionStore(db_path=db)
+    store.init()
+    store.close()
+
+    result = runner.invoke(cli, ["payload", "get", "staylink", "report", "--db", str(db)])
+    assert result.exit_code == 1
+    assert "No global payload" in result.output
+
+
+def test_payload_get_found(runner, tmp_path):
+    """payload get prints payload details when a payload exists (lines 680-684)."""
+    db = tmp_path / "test.db"
+    store = SessionStore(db_path=db)
+    store.init()
+    store.store_global_payload("staylink", "report", {"reportId": "RPT-001"})
+    store.close()
+
+    result = runner.invoke(cli, ["payload", "get", "staylink", "report", "--db", str(db)])
+    assert result.exit_code == 0, result.output
+    assert "RPT-001" in result.output
+    assert "staylink" in result.output
+
+
+def test_payload_set_invalid_json_exits_1(runner, tmp_path):
+    """payload set exits 1 when the JSON file is invalid (lines 696-698)."""
+    db = tmp_path / "test.db"
+    store = SessionStore(db_path=db)
+    store.init()
+    store.close()
+
+    bad_file = tmp_path / "bad.json"
+    bad_file.write_text("not json")
+
+    result = runner.invoke(
+        cli, ["payload", "set", "staylink", "report", str(bad_file), "--db", str(db)]
+    )
+    assert result.exit_code == 1
+    assert "Invalid JSON" in result.output
+
+
+def test_payload_set_success(runner, tmp_path):
+    """payload set stores the payload and prints confirmation (lines 700-704)."""
+    db = tmp_path / "test.db"
+    store = SessionStore(db_path=db)
+    store.init()
+    store.close()
+
+    payload_file = tmp_path / "payload.json"
+    payload_file.write_text('{"reportId": "RPT-SET"}')
+
+    result = runner.invoke(
+        cli, ["payload", "set", "staylink", "report", str(payload_file), "--db", str(db)]
+    )
+    assert result.exit_code == 0, result.output
+    assert "Global payload set" in result.output
+
+
+def test_sessions_clear(runner, tmp_path):
+    """sessions clear removes all sessions and prints count (lines 722-725)."""
+    db = tmp_path / "test.db"
+    store = SessionStore(db_path=db)
+    store.init()
+    store.store_session_payload("staylink", "report", {"x": 1})
+    store.store_session_payload("staylink", "report", {"x": 2})
+    store.close()
+
+    result = runner.invoke(
+        cli, ["sessions", "clear", "--db", str(db)], input="y\n"
+    )
+    assert result.exit_code == 0, result.output
+    assert "Cleared 2" in result.output
