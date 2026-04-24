@@ -45,21 +45,21 @@ def test_staylink_token_datapoint():
     assert ep.response["token_type"] == "Bearer"
 
 
-def test_staylink_reservation_datapoint():
+def test_staylink_report_datapoint():
     staylink = next(p for p in load_partners(PARTNERS_DIR) if p.partner == "staylink")
-    reservation = next(dp for dp in staylink.datapoints if dp.name == "reservation")
+    report = next(dp for dp in staylink.datapoints if dp.name == "report")
 
-    assert reservation.pattern == "polling"
-    assert len(reservation.endpoints) == 3
+    assert report.pattern == "polling"
+    assert len(report.endpoints) == 3
 
-    steps = {ep.step: ep for ep in reservation.endpoints}
+    steps = {ep.step: ep for ep in report.endpoints}
     assert set(steps.keys()) == {1, 2, 3}
 
     assert steps[1].method == "POST"
     assert steps[1].response["status"] == 202
     assert steps[1].response["generates_id"] is True
     assert steps[1].response["id_header"] == "Location"
-    assert steps[1].response["id_header_value"] == "/staylink/reservations/{id}"
+    assert steps[1].response["id_header_value"] == "/staylink/reports/{id}"
 
     assert steps[2].method == "HEAD"
     assert steps[2].response["status"] == 201
