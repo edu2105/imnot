@@ -34,7 +34,7 @@ class PaginationConfig:
 @dataclass
 class UIConfig:
     enabled: bool = True
-    default_theme: Literal["light", "dark", "system"] = "light"
+    default_theme: Literal["light", "dark", "system"] = "dark"
 
 
 @dataclass

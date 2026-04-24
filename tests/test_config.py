@@ -149,14 +149,14 @@ def test_imnot_config_has_pagination_field():
 def test_ui_config_defaults():
     c = UIConfig()
     assert c.enabled is True
-    assert c.default_theme == "light"
+    assert c.default_theme == "dark"
 
 
 def test_imnot_config_has_ui_field():
     config = load_config(None)
     assert isinstance(config.ui, UIConfig)
     assert config.ui.enabled is True
-    assert config.ui.default_theme == "light"
+    assert config.ui.default_theme == "dark"
 
 
 def test_load_config_ui_section(tmp_path):
@@ -172,7 +172,7 @@ def test_load_config_ui_defaults_when_absent(tmp_path):
     toml.write_text("[server]\nport = 8001\n", encoding="utf-8")
     config = load_config(toml)
     assert config.ui.enabled is True
-    assert config.ui.default_theme == "light"
+    assert config.ui.default_theme == "dark"
 
 
 def test_load_config_ui_unknown_keys_ignored(tmp_path):

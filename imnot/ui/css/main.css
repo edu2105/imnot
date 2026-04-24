@@ -55,9 +55,20 @@
 }
 
 
-/* ---- Notification banner ---------------------------------- */
+/* ---- Toast notifications ---------------------------------- */
 
-.notification {
+#toast-container {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.toast {
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -66,23 +77,39 @@
   font-size: 0.875rem;
   font-weight: 500;
   border: 1px solid;
-  box-shadow: var(--shadow-sm);
-  margin-bottom: -1rem; /* pulls the next section up slightly */
+  box-shadow: var(--shadow-md);
+  max-width: 22rem;
+  pointer-events: auto;
+  animation: toast-in 0.2s ease-out;
 }
 
-.notification svg {
+.toast.toast--out {
+  animation: toast-out 0.2s ease-in forwards;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(1rem); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes toast-out {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(1rem); }
+}
+
+.toast svg {
   flex-shrink: 0;
   width: 1rem;
   height: 1rem;
 }
 
-.notification--success {
+.toast--success {
   background-color: var(--color-success-bg);
   color: var(--color-success-text);
   border-color: var(--color-success-border);
 }
 
-.notification--error {
+.toast--error {
   background-color: var(--color-error-bg);
   color: var(--color-error-text);
   border-color: var(--color-error-border);
@@ -108,7 +135,7 @@
 
 .card:hover {
   box-shadow: var(--shadow-lg);
-  transform: translateY(-2px);
+  /*transform: translateY(-2px); */
 }
 
 .card .card-stripe {

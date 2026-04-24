@@ -20,12 +20,846 @@
   </script>
 
   <!-- IMNOT:CSS:START — do not edit this line -->
-  <!-- Stylesheets: edit css/*.css files; Live Server picks up changes instantly.
-       Run `make ui` to inline for production. Run `make dev` to restore this dev state. -->
-  <link rel="stylesheet" href="css/base.css" />
-  <link rel="stylesheet" href="css/header.css" />
-  <link rel="stylesheet" href="css/main.css" />
-  <link rel="stylesheet" href="css/footer.css" />
+  <!-- Stylesheets inlined by make ui — run 'make dev' to restore link tags -->
+  <style>
+/* ============================================================
+   base.css
+   Design tokens, reset, and layout primitives.
+   Everything else inherits from here.
+   ============================================================ */
+
+
+/* ---- Design tokens ---------------------------------------- */
+/* To retheme the whole app: only edit values here.            */
+
+:root {
+  /* Brand */
+  --color-brand:          #E63946;
+  --color-brand-hover:    #b43a42;
+  --color-brand-active:   #bd2832;
+  --color-brand-subtle:   rgba(230, 57, 70, 0.08);
+
+  /* Text */
+  --color-ink:            #000000;
+  --color-muted:          #1A1A1A;
+
+  /* Page & surface backgrounds */
+  --color-page-bg:        #F5F5F5;
+  --color-surface:        #FFFFFF;
+  --color-surface-alt:    #F5F5F5;
+
+  /* Borders & dividers */
+  --color-border:         #272424;
+  --color-rule:           #D5D5D5;
+
+  /* Status: success */
+  --color-success:        #22C55E;
+  --color-success-bg:     #F0FDF4;
+  --color-success-border: #BBF7D0;
+  --color-success-text:   #166534;
+
+  /* Status: error */
+  --color-error-bg:       #FEF2F2;
+  --color-error-border:   #FECACA;
+  --color-error-text:     #991B1B;
+
+  /* Typography */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'Fira Code', Consolas, monospace;
+
+  /* Spacing scale */
+  --space-1:  0.25rem;
+  --space-2:  0.5rem;
+  --space-3:  0.75rem;
+  --space-4:  1rem;
+  --space-5:  1.25rem;
+  --space-6:  1.5rem;
+  --space-8:  2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  /* Border radii */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  /* Shadows */
+  --shadow-sm:     0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md:     0 1px 3px rgba(0, 0, 0, 0.10), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-lg:     0 10px 15px rgba(0, 0, 0, 0.10), 0 4px 6px rgba(0, 0, 0, 0.05);
+  --shadow-header: 0 4px 12px rgba(0, 0, 0, 0.15);
+
+  /* Transitions */
+  --t-fast:   150ms ease;
+  --t-normal: 200ms ease;
+}
+
+/* Dark theme: just swap the tokens, components update automatically */
+[data-theme="dark"] {
+  --color-page-bg:        #111111;
+  --color-ink:            #F0F0F0;
+  --color-muted:          #9A9A9A;
+  --color-surface:        #1A1A1A;
+  --color-surface-alt:    #242424;
+  --color-border:         #3A3A3A;
+  --color-rule:           #333333;
+
+  --color-success-bg:     rgba(21, 128, 61, 0.20);
+  --color-success-border: #166534;
+  --color-success-text:   #86EFAC;
+
+  --color-error-bg:       rgba(153, 27, 27, 0.20);
+  --color-error-border:   #991B1B;
+  --color-error-text:     #FCA5A5;
+}
+
+
+/* ---- Reset ------------------------------------------------- */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--color-ink);
+  background-color: var(--color-page-bg);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+}
+
+input, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+
+img, svg {
+  display: block;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+
+/* ---- Layout ----------------------------------------------- */
+
+/* Centering wrapper used inside header, main, and footer */
+.page-container {
+  width: 100%;
+  padding-left: var(--space-6);
+  padding-right: var(--space-6);
+}
+
+
+/* ---- Animations ------------------------------------------- */
+
+@keyframes pulse {
+  50% { opacity: 0.5; }
+}
+
+
+/* ---- Responsive ------------------------------------------- */
+
+@media (min-width: 40rem) {
+  .page-container {
+    padding-left: var(--space-10);
+    padding-right: var(--space-10);
+  }
+}
+
+/* ============================================================
+   header.css
+   Sticky top navigation bar: logo, server status, theme toggle,
+   and reload button.
+   ============================================================ */
+
+.header {
+  background-color: var(--color-brand);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  box-shadow: var(--shadow-header);
+}
+
+.header .page-container {
+  height: 4rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+
+/* ---- Logo (left side) ------------------------------------- */
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  user-select: none;
+}
+
+.header-brand .brand-name {
+  color: #fff;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.header-brand .brand-sep {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 1.5rem;
+  font-weight: 300;
+}
+
+.header-brand .brand-sub {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 1.25rem;
+  font-weight: 500;
+  display: none; /* shown at ≥640px */
+}
+
+
+/* ---- Actions (right side) --------------------------------- */
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.header-actions #server-status {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  display: none; /* shown at ≥640px */
+}
+
+
+/* ---- Buttons ---------------------------------------------- */
+
+/* Base shared by all button variants */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5625rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: all var(--t-fast);
+}
+
+.btn svg {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+/* Ghost button — white on brand red (used in header) */
+.btn-header {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-header:hover {
+  background-color: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+.btn-header:active {
+  background-color: rgba(255, 255, 255, 0.10);
+  scale: 0.96;
+}
+
+/* Icon-only button — used for theme toggle */
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  color: rgba(255, 255, 255, 0.85);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  user-select: none;
+  transition: all var(--t-fast);
+}
+
+.btn-icon svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.btn-icon:hover {
+  background-color: rgba(255, 255, 255, 0.10);
+  color: #fff;
+}
+
+.btn-icon:active {
+  background-color: rgba(255, 255, 255, 0.20);
+  scale: 0.93;
+}
+
+
+/* ---- Responsive ------------------------------------------- */
+
+@media (min-width: 40rem) {
+  .header-brand .brand-sub        { display: inline; }
+  .header-actions #server-status  { display: inline-block; }
+}
+
+/* ============================================================
+   main.css
+   Everything inside <main>: sections, partner cards, buttons,
+   forms, sessions table, payload panel, and notifications.
+   ============================================================ */
+
+
+/* ---- Main layout ------------------------------------------ */
+
+.main {
+  flex: 1;
+  padding: var(--space-10) 0;
+}
+
+.main .page-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+
+
+/* ---- Section headers -------------------------------------- */
+
+/* Flex row: title block on the left, optional button on the right */
+.section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+}
+
+/* Standalone title (no button alongside) */
+.section-title {
+  margin-bottom: var(--space-6);
+}
+
+/* When nested inside section-header, the parent handles spacing */
+.section-header .section-title {
+  margin-bottom: 0;
+}
+
+.section-title h2,
+.section-header h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-ink);
+  letter-spacing: -0.025em;
+}
+
+.section-title p,
+.section-header p {
+  font-size: 0.875rem;
+  color: var(--color-muted);
+  margin-top: 0.25rem;
+}
+
+
+/* ---- Toast notifications ---------------------------------- */
+
+#toast-container {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1.25rem;
+  border-radius: var(--radius-lg);
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: 1px solid;
+  box-shadow: var(--shadow-md);
+  max-width: 22rem;
+  pointer-events: auto;
+  animation: toast-in 0.2s ease-out;
+}
+
+.toast.toast--out {
+  animation: toast-out 0.2s ease-in forwards;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(1rem); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes toast-out {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(1rem); }
+}
+
+.toast svg {
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+}
+
+.toast--success {
+  background-color: var(--color-success-bg);
+  color: var(--color-success-text);
+  border-color: var(--color-success-border);
+}
+
+.toast--error {
+  background-color: var(--color-error-bg);
+  color: var(--color-error-text);
+  border-color: var(--color-error-border);
+}
+
+
+/* ---- Partner cards ---------------------------------------- */
+
+.partners-grid {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: 1fr;
+}
+
+.card {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  transition: box-shadow var(--t-normal), transform var(--t-normal);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-lg);
+  /*transform: translateY(-2px); */
+}
+
+.card .card-stripe {
+  height: 3px;
+  background-color: var(--color-brand);
+}
+
+.card .card-body {
+  padding: 1.25rem;
+}
+
+.card .card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Animated green "online" indicator dot */
+.card .card-status {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+  background-color: var(--color-success);
+  flex-shrink: 0;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+}
+
+.card .card-name {
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--color-ink);
+  letter-spacing: -0.025em;
+}
+
+.card .card-desc {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  margin-bottom: 1rem;
+  line-height: 1.625;
+}
+
+.card .card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+/* Pill-shaped datapoint label */
+.datapoint-tag {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  background-color: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  color: var(--color-muted);
+  cursor: default;
+  transition: border-color var(--t-fast), color var(--t-fast);
+}
+
+.datapoint-tag:hover {
+  border-color: var(--color-brand);
+  color: var(--color-brand);
+}
+
+/* Skeleton loading placeholders */
+.skeleton {
+  display: none;
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  height: 9rem;
+  box-shadow: var(--shadow-sm);
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.partners-grid .skeleton:first-child {
+  display: block;
+}
+
+/* Empty state shown when no partners are loaded */
+.empty-state {
+  grid-column: 1 / -1;
+  padding: var(--space-12) 0;
+  text-align: center;
+}
+
+.empty-state p {
+  font-size: 0.875rem;
+  color: var(--color-muted);
+}
+
+.empty-state p + p {
+  font-size: 0.75rem;
+  margin-top: 0.375rem;
+}
+
+.empty-state code {
+  font-family: var(--font-mono);
+  background-color: var(--color-surface);
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+}
+
+
+/* ---- Buttons ---------------------------------------------- */
+
+/* Primary — brand red, filled */
+.btn-primary {
+  background-color: var(--color-brand);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-primary:hover {
+  background-color: var(--color-brand-hover);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-primary:active {
+  background-color: var(--color-brand-active);
+  scale: 0.97;
+}
+
+/* Secondary — outlined, subtle */
+.btn-secondary {
+  background: transparent;
+  color: var(--color-muted);
+  border-color: var(--color-border);
+  font-weight: 500;
+}
+
+.btn-secondary:hover {
+  color: var(--color-brand);
+  border-color: var(--color-brand);
+}
+
+.btn-secondary:active {
+  scale: 0.96;
+}
+
+
+/* ---- Forms ------------------------------------------------ */
+
+/* Horizontal row of fields and a button (aligned to bottom) */
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+}
+
+/* Vertical stack of form groups */
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Label + input pair */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.form-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.form-input {
+  width: 10rem;
+  padding: 0.625rem 0.875rem;
+  font-size: 0.875rem;
+  background-color: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-ink);
+  outline: none;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+
+.form-input:focus {
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.15);
+}
+
+.form-textarea {
+  width: 100%;
+  padding: 0.75rem 0.875rem;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.625;
+  background-color: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-ink);
+  resize: vertical;
+  outline: none;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+
+.form-textarea:focus {
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.15);
+}
+
+/* Payload display: <pre> styled to look like a read-only textarea */
+#payload-display {
+  margin-top: 1rem;
+  min-height: 4rem;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  overflow-x: auto;
+  font-size: 0.75rem;
+  cursor: default;
+}
+
+
+/* ---- Sessions table --------------------------------------- */
+
+.table-wrapper {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+}
+
+.table-wrapper .table-scroll {
+  overflow-x: auto;
+}
+
+.sessions-table {
+  width: 100%;
+  font-size: 0.875rem;
+  border-collapse: collapse;
+}
+
+.sessions-table thead tr {
+  background-color: var(--color-surface-alt);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sessions-table th {
+  text-align: left;
+  padding: 0.875rem 1.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.sessions-table td {
+  padding: 0.75rem 1.25rem;
+}
+
+.sessions-table tbody tr {
+  border-bottom: 1px solid var(--color-rule);
+  transition: background-color 100ms ease;
+}
+
+.sessions-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.sessions-table tbody tr:hover {
+  background-color: var(--color-brand-subtle);
+}
+
+.sessions-table tbody tr.stripe {
+  background-color: var(--color-surface-alt);
+}
+
+.sessions-table tbody tr.stripe:hover {
+  background-color: var(--color-brand-subtle);
+}
+
+.sessions-table .td-session-id { font-family: var(--font-mono); font-size: 0.75rem; color: var(--color-muted); }
+.sessions-table .td-partner    { font-weight: 500; color: var(--color-ink); }
+.sessions-table .td-datapoint  { color: var(--color-ink); }
+.sessions-table .td-created    { font-family: var(--font-mono); font-size: 0.75rem; color: var(--color-muted); }
+
+.sessions-table .td-empty {
+  padding: 2.5rem 1.25rem;
+  text-align: center;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+
+/* ---- Payload panel ---------------------------------------- */
+
+.panel {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.panel .panel-section {
+  padding: var(--space-6);
+}
+
+.panel .panel-section + .panel-section {
+  border-top: 1px solid var(--color-border);
+}
+
+.panel .panel-section h3 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink);
+  margin-bottom: 1rem;
+}
+
+
+/* ---- Responsive ------------------------------------------- */
+
+@media (min-width: 40rem) {
+  .partners-grid { grid-template-columns: repeat(2, 1fr); }
+  .partners-grid .skeleton:nth-child(2) { display: block; }
+}
+
+@media (min-width: 80rem) {
+  .partners-grid { grid-template-columns: repeat(3, 1fr); }
+  .partners-grid .skeleton:nth-child(3) { display: block; }
+}
+
+/* ============================================================
+   footer.css
+   Bottom bar with app name and navigation links.
+   ============================================================ */
+
+.footer {
+  border-top: 1px solid var(--color-rule);
+  padding: var(--space-5) 0;
+}
+
+.footer .page-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.footer .footer-info {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+}
+
+.footer .footer-links {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.footer .footer-links a {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  transition: color var(--t-fast);
+}
+
+.footer .footer-links a:hover {
+  color: var(--color-brand);
+}
+
+  </style>
   <!-- IMNOT:CSS:END — do not edit this line -->
 </head>
 
@@ -72,10 +906,6 @@
   <!-- ======= MAIN ======= -->
   <main class="main">
     <div class="page-container">
-
-      <!-- Notification banner (hidden until notify() is called) -->
-      <div id="notification" class="notification" hidden></div>
-
 
       <!-- ---- Partners ---- -->
       <section>
@@ -257,19 +1087,21 @@
       }
     }
 
-    // ---- Notifications ----
-    var _notifTimeout;
+    // ---- Notifications (toast) ----
     function notify(msg, type) {
-      var el = document.getElementById('notification');
       var isErr = type === 'error';
-      el.removeAttribute('hidden');
-      el.className = 'notification ' + (isErr ? 'notification--error' : 'notification--success');
-      el.innerHTML = (isErr
+      var container = document.getElementById('toast-container');
+      var t = document.createElement('div');
+      t.className = 'toast ' + (isErr ? 'toast--error' : 'toast--success');
+      t.innerHTML = (isErr
         ? '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
         : '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
       ) + escHtml(msg);
-      clearTimeout(_notifTimeout);
-      _notifTimeout = setTimeout(function () { el.setAttribute('hidden', ''); }, 4500);
+      container.appendChild(t);
+      setTimeout(function () {
+        t.classList.add('toast--out');
+        t.addEventListener('animationend', function () { t.remove(); }, { once: true });
+      }, 4000);
     }
 
     // ---- Partners ----
@@ -391,6 +1223,8 @@
       loadSessions();
     })();
   </script>
+
+  <div id="toast-container"></div>
 
 </body>
 </html>
