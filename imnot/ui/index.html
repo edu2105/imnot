@@ -1291,6 +1291,12 @@ img, svg {
       }
     }
 
+    function toggleBodyField(selectEl, bodyGroupId) {
+      var method = selectEl.value.split(' ')[0].toUpperCase();
+      var el = document.getElementById(bodyGroupId);
+      if (el) el.style.display = (method === 'GET' || method === 'HEAD') ? 'none' : '';
+    }
+
     function buildAccordionHtml(partner, dp, pattern, endpoints, callbackDelay) {
       var html = '';
 
@@ -1309,7 +1315,7 @@ img, svg {
           + '<textarea id="acc-upload-json-' + pid + '" rows="4" placeholder=\'{"key": "value"}\' spellcheck="false" class="form-textarea"></textarea>'
           + '</div>'
           + '<div>'
-          + '<button onclick="uploadAccordionPayload(' + '\'' + escHtml(partner) + '\',\'' + escHtml(dp) + '\',' + 'document.getElementById(\'acc-upload-json-' + pid + '\'),document.getElementById(\'acc-payload-display-' + pid + '\')" class="btn btn-primary">'
+          + '<button onclick="uploadAccordionPayload(' + '\'' + escHtml(partner) + '\',\'' + escHtml(dp) + '\',' + 'document.getElementById(\'acc-upload-json-' + pid + '\'),document.getElementById(\'acc-payload-display-' + pid + '\'))" class="btn btn-primary">'
           + '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>'
           + 'Upload Payload'
           + '</button>'
@@ -1326,14 +1332,17 @@ img, svg {
       }).join('');
 
       var tid = escHtml(partner + '-' + dp);
+      var firstMethod = endpoints.length ? endpoints[0].method.toUpperCase() : 'POST';
+      var bodyVisible = firstMethod !== 'GET' && firstMethod !== 'HEAD';
+      var bodyGroupId = 'acc-body-group-' + tid;
       html += '<div class="acc-section">'
         + '<h3>Endpoint Tester</h3>'
         + '<div class="form-stack">'
         + '<div class="form-group">'
         + '<label class="form-label" for="acc-ep-select-' + tid + '">Endpoint</label>'
-        + '<select id="acc-ep-select-' + tid + '" class="endpoint-select">' + epOptions + '</select>'
+        + '<select id="acc-ep-select-' + tid + '" class="endpoint-select" onchange="toggleBodyField(this,\'' + bodyGroupId + '\')">' + epOptions + '</select>'
         + '</div>'
-        + '<div class="form-group">'
+        + '<div class="form-group" id="' + bodyGroupId + '"' + (bodyVisible ? '' : ' style="display:none"') + '>'
         + '<label class="form-label" for="acc-body-' + tid + '">Request body (JSON, optional)</label>'
         + '<textarea id="acc-body-' + tid + '" rows="3" placeholder=\'{"key": "value"}\' spellcheck="false" class="form-textarea"></textarea>'
         + '</div>'
