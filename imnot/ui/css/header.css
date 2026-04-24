@@ -1,0 +1,148 @@
+/* ============================================================
+   header.css
+   Sticky top navigation bar: logo, server status, theme toggle,
+   and reload button.
+   ============================================================ */
+
+.header {
+  background-color: var(--color-brand);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  box-shadow: var(--shadow-header);
+}
+
+.header .page-container {
+  height: 4rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+
+/* ---- Logo (left side) ------------------------------------- */
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  user-select: none;
+}
+
+.header-brand .brand-name {
+  color: #fff;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.header-brand .brand-sep {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 1.25rem;
+  font-weight: 300;
+}
+
+.header-brand .brand-sub {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.875rem;
+  font-weight: 500;
+  display: none; /* shown at ≥640px */
+}
+
+
+/* ---- Actions (right side) --------------------------------- */
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.header-actions #server-status {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  display: none; /* shown at ≥640px */
+}
+
+
+/* ---- Buttons ---------------------------------------------- */
+
+/* Base shared by all button variants */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5625rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: all var(--t-fast);
+}
+
+.btn svg {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+/* Ghost button — white on brand red (used in header) */
+.btn-header {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-header:hover {
+  background-color: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+.btn-header:active {
+  background-color: rgba(255, 255, 255, 0.10);
+  scale: 0.96;
+}
+
+/* Icon-only button — used for theme toggle */
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  color: rgba(255, 255, 255, 0.7);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  user-select: none;
+  transition: all var(--t-fast);
+}
+
+.btn-icon svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.btn-icon:hover {
+  background-color: rgba(255, 255, 255, 0.10);
+  color: #fff;
+}
+
+.btn-icon:active {
+  background-color: rgba(255, 255, 255, 0.20);
+  scale: 0.93;
+}
+
+
+/* ---- Responsive ------------------------------------------- */
+
+@media (min-width: 40rem) {
+  .header-brand .brand-sub        { display: inline; }
+  .header-actions #server-status  { display: inline-block; }
+}

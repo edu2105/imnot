@@ -1,9 +1,13 @@
-.PHONY: ui
+.PHONY: ui dev
+
+# ui: inline all CSS files into index.html for production (before packaging the wheel).
+#     Replaces everything between the IMNOT:CSS sentinel markers. Safe to run multiple times.
+#
+# dev: restore <link> tags so Live Server picks up css/*.css edits instantly.
+#     Run this after 'make ui' when you want to go back to editing CSS files.
 
 ui:
-	@npx @tailwindcss/cli -i imnot/ui/input.css --minify | python3 -c "\
-import sys, pathlib; \
-css = sys.stdin.read(); \
-p = pathlib.Path('imnot/ui/index.html'); \
-p.write_text(p.read_text().replace('<!-- TAILWIND_CSS_PLACEHOLDER -->', '<style>' + css + '</style>'))"
-	@echo "Tailwind CSS inlined into imnot/ui/index.html"
+	python3 scripts/css_build.py ui
+
+dev:
+	python3 scripts/css_build.py dev
