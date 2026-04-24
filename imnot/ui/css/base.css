@@ -11,13 +11,13 @@
 :root {
   /* Brand */
   --color-brand:          #E63946;
-  --color-brand-hover:    #d02f3b;
+  --color-brand-hover:    #b43a42;
   --color-brand-active:   #bd2832;
   --color-brand-subtle:   rgba(230, 57, 70, 0.08);
 
   /* Text */
-  --color-ink:            #1A1A1A;
-  --color-muted:          #8A8A8A;
+  --color-ink:            #000000;
+  --color-muted:          #1A1A1A;
 
   /* Page & surface backgrounds */
   --color-page-bg:        #F5F5F5;
@@ -25,7 +25,7 @@
   --color-surface-alt:    #F5F5F5;
 
   /* Borders & dividers */
-  --color-border:         #C8C8C8;
+  --color-border:         #272424;
   --color-rule:           #D5D5D5;
 
   /* Status: success */
