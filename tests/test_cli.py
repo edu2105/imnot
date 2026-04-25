@@ -1024,8 +1024,10 @@ def test_start_reload_with_admin_key_sets_env(runner, tmp_path):
             cli,
             [
                 "start",
-                "--partners-dir", str(PARTNERS_DIR),
-                "--db", str(tmp_path / "test.db"),
+                "--partners-dir",
+                str(PARTNERS_DIR),
+                "--db",
+                str(tmp_path / "test.db"),
                 "--reload",
             ],
             env={"IMNOT_ADMIN_KEY": "reloadkey"},
@@ -1138,9 +1140,7 @@ def test_payload_set_invalid_json_exits_1(runner, tmp_path):
     bad_file = tmp_path / "bad.json"
     bad_file.write_text("not json")
 
-    result = runner.invoke(
-        cli, ["payload", "set", "staylink", "report", str(bad_file), "--db", str(db)]
-    )
+    result = runner.invoke(cli, ["payload", "set", "staylink", "report", str(bad_file), "--db", str(db)])
     assert result.exit_code == 1
     assert "Invalid JSON" in result.output
 
@@ -1155,9 +1155,7 @@ def test_payload_set_success(runner, tmp_path):
     payload_file = tmp_path / "payload.json"
     payload_file.write_text('{"reportId": "RPT-SET"}')
 
-    result = runner.invoke(
-        cli, ["payload", "set", "staylink", "report", str(payload_file), "--db", str(db)]
-    )
+    result = runner.invoke(cli, ["payload", "set", "staylink", "report", str(payload_file), "--db", str(db)])
     assert result.exit_code == 0, result.output
     assert "Global payload set" in result.output
 
@@ -1171,9 +1169,7 @@ def test_sessions_clear(runner, tmp_path):
     store.store_session_payload("staylink", "report", {"x": 2})
     store.close()
 
-    result = runner.invoke(
-        cli, ["sessions", "clear", "--db", str(db)], input="y\n"
-    )
+    result = runner.invoke(cli, ["sessions", "clear", "--db", str(db)], input="y\n")
     assert result.exit_code == 0, result.output
     assert "Cleared 2" in result.output
 
