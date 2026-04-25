@@ -61,8 +61,9 @@ _IMNOT_TOML_TEMPLATE = """\
 # [pagination]
 # default_limit = 50                      # default page size for paginated pattern endpoints
 
-# [ui]
-# Reserved for the future admin UI configuration.
+[ui]
+# enabled = true                          # set to false to disable the admin UI entirely
+# default_theme = "light"                 # "light", "dark", or "system"
 """
 
 
@@ -252,6 +253,7 @@ def start(
                 admin_key=effective_admin_key,
                 base_url=config.server.base_url,
                 default_limit=config.pagination.default_limit,
+                ui_config=config.ui,
             )
             uvicorn.run(app, host=effective_host, port=effective_port)
     finally:
@@ -458,6 +460,7 @@ def routes(partners_dir: str) -> None:
     click.echo(f"    {'POST':<7} /imnot/admin/partners")
     click.echo(f"    {'GET':<7} /imnot/admin/sessions")
     click.echo(f"    {'POST':<7} /imnot/admin/reload")
+    click.echo(f"    {'GET':<7} /imnot/admin/ui")
 
 
 # ---------------------------------------------------------------------------

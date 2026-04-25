@@ -16,11 +16,11 @@ mock server — no code changes required to add new APIs or endpoints.
 
 ## Why imnot?
 
-- **YAML in, mock server out.** One file defines an external API's endpoints, patterns, and responses. No code, no JVM, no GUI.
+- **YAML in, mock server out.** One file defines an external API's endpoints, patterns, and responses. No code, no JVM.
 - **Stateful flows, not just fixed responses.** OAuth, polling submit/poll/fetch, callback webhooks, and per-test session isolation — all modeled in YAML, not scripted.
 - **Lives next to your code.** The mock definition is version-controlled alongside the integration it tests and runs anywhere Docker runs.
 
-Reach for other tools when you need conditional responses based on request body content, or prefer a GUI-first workflow.
+Reach for other tools when you need conditional responses based on request body content.
 
 ## AI-ready
 
@@ -409,6 +409,7 @@ Fixed infra endpoints (always available regardless of which partners are loaded)
 | `GET`  | `/imnot/admin/sessions` | List all active sessions |
 | `POST` | `/imnot/admin/reload`   | Hot-reload partner YAMLs without restarting the server |
 | `GET`  | `/imnot/admin/postman`  | Download a Postman collection v2.1 JSON for all loaded partners |
+| `GET`  | `/imnot/admin/ui`       | Admin web UI — browse loaded partners and their datapoints, inspect/upload payloads, test consumer endpoints (including full polling flow), manage active sessions, hot-reload YAML. Auth-gated by the same Bearer token as all other admin routes. Enabled by default; configure under `[ui]` in `imnot.toml`. |
 
 `POST /imnot/admin/partners` accepts a raw YAML body (same format as `partner.yaml` files).
 Use `?force=true` to overwrite an existing partner. Returns `201` on create, `200` on overwrite,
@@ -493,6 +494,10 @@ Set `IMNOT_ADMIN_KEY` in `docker-compose.yml` for Docker deployments.
 
 [pagination]
 # default_limit = 50                      # default page size for paginated pattern endpoints
+
+[ui]
+# enabled = true                          # set to false to disable the admin UI entirely (→ 404)
+# default_theme = "dark"                  # "light", "dark", or "system" (follows OS preference)
 ```
 
 imnot writes two log files alongside `imnot.db`:
@@ -632,7 +637,7 @@ imnot/
 
 - `callback` pattern callbacks have no retry logic — if the callback URL is unreachable, the failure is logged and the retrigger endpoint can be used to re-fire.
 - No native HTTPS support — use a reverse proxy (Nginx, Caddy) to terminate TLS.
-- No web UI — all admin interactions are via the REST API or CLI.
+- Admin UI is desktop-only — no mobile layout. Session-scoped payload upload and partner registration via UI are not yet supported (API only).
 - XML response bodies are not supported — responses are always JSON.
 - No built-in mTLS support.
 - Single-node only — the SQLite session store is not shared across instances.

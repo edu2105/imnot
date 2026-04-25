@@ -1,0 +1,1586 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="__IMNOT_THEME__">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>imnot — admin</title>
+
+  <!-- Theme init: runs before paint to prevent flash-of-wrong-theme -->
+  <script>
+    (function () {
+      var stored = localStorage.getItem('imnot-theme');
+      var html = document.documentElement;
+      if (stored === 'dark' || stored === 'light') {
+        html.setAttribute('data-theme', stored);
+      } else if (stored === 'system' || html.getAttribute('data-theme') === 'system') {
+        html.setAttribute('data-theme',
+          window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      }
+    })();
+  </script>
+
+  <!-- IMNOT:CSS:START — do not edit this line -->
+  <!-- Stylesheets inlined by make ui — run 'make dev' to restore link tags -->
+  <style>
+/* ============================================================
+   base.css
+   Design tokens, reset, and layout primitives.
+   Everything else inherits from here.
+   ============================================================ */
+
+
+/* ---- Design tokens ---------------------------------------- */
+/* To retheme the whole app: only edit values here.            */
+
+:root {
+  /* Brand */
+  --color-brand:          #E63946;
+  --color-brand-hover:    #b43a42;
+  --color-brand-active:   #bd2832;
+  --color-brand-subtle:   rgba(230, 57, 70, 0.08);
+
+  /* Text */
+  --color-ink:            #000000;
+  --color-muted:          #1A1A1A;
+
+  /* Page & surface backgrounds */
+  --color-page-bg:        #F5F5F5;
+  --color-surface:        #FFFFFF;
+  --color-surface-alt:    #F5F5F5;
+
+  /* Borders & dividers */
+  --color-border:         #272424;
+  --color-rule:           #D5D5D5;
+
+  /* Status: success */
+  --color-success:        #22C55E;
+  --color-success-bg:     #F0FDF4;
+  --color-success-border: #BBF7D0;
+  --color-success-text:   #166534;
+
+  /* Status: error */
+  --color-error-bg:       #FEF2F2;
+  --color-error-border:   #FECACA;
+  --color-error-text:     #991B1B;
+
+  /* Typography */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'Fira Code', Consolas, monospace;
+
+  /* Spacing scale */
+  --space-1:  0.25rem;
+  --space-2:  0.5rem;
+  --space-3:  0.75rem;
+  --space-4:  1rem;
+  --space-5:  1.25rem;
+  --space-6:  1.5rem;
+  --space-8:  2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  /* Border radii */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  /* Shadows */
+  --shadow-sm:     0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md:     0 1px 3px rgba(0, 0, 0, 0.10), 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-lg:     0 10px 15px rgba(0, 0, 0, 0.10), 0 4px 6px rgba(0, 0, 0, 0.05);
+  --shadow-header: 0 4px 12px rgba(0, 0, 0, 0.15);
+
+  /* Transitions */
+  --t-fast:   150ms ease;
+  --t-normal: 200ms ease;
+}
+
+/* Dark theme: just swap the tokens, components update automatically */
+[data-theme="dark"] {
+  --color-page-bg:        #111111;
+  --color-ink:            #F0F0F0;
+  --color-muted:          #9A9A9A;
+  --color-surface:        #1A1A1A;
+  --color-surface-alt:    #242424;
+  --color-border:         #3A3A3A;
+  --color-rule:           #333333;
+
+  --color-success-bg:     rgba(21, 128, 61, 0.20);
+  --color-success-border: #166534;
+  --color-success-text:   #86EFAC;
+
+  --color-error-bg:       rgba(153, 27, 27, 0.20);
+  --color-error-border:   #991B1B;
+  --color-error-text:     #FCA5A5;
+}
+
+
+/* ---- Reset ------------------------------------------------- */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--color-ink);
+  background-color: var(--color-page-bg);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+}
+
+input, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+
+img, svg {
+  display: block;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+
+/* ---- Layout ----------------------------------------------- */
+
+/* Centering wrapper used inside header, main, and footer */
+.page-container {
+  width: 100%;
+  padding-left: var(--space-6);
+  padding-right: var(--space-6);
+}
+
+
+/* ---- Animations ------------------------------------------- */
+
+@keyframes pulse {
+  50% { opacity: 0.5; }
+}
+
+
+/* ---- Responsive ------------------------------------------- */
+
+@media (min-width: 40rem) {
+  .page-container {
+    padding-left: var(--space-10);
+    padding-right: var(--space-10);
+  }
+}
+
+/* ============================================================
+   header.css
+   Sticky top navigation bar, sub-nav strip, and shared buttons.
+   ============================================================ */
+
+.header {
+  background-color: var(--color-brand);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  box-shadow: var(--shadow-header);
+}
+
+
+/* ---- Sub-nav strip ---------------------------------------- */
+
+.subnav {
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--color-rule);
+  position: sticky;
+  top: 4rem; /* sits just below the 4rem header */
+  z-index: 40;
+}
+
+.subnav .page-container {
+  display: flex;
+  align-items: stretch;
+  height: 2.75rem;
+  gap: 0;
+}
+
+.subnav-tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+  transition: color var(--t-fast), border-color var(--t-fast);
+  white-space: nowrap;
+}
+
+.subnav-tab:hover {
+  color: var(--color-ink);
+}
+
+.subnav-tab--active {
+  color: var(--color-brand);
+  border-bottom-color: var(--color-brand);
+  font-weight: 600;
+}
+
+.header .page-container {
+  height: 4rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+
+/* ---- Logo (left side) ------------------------------------- */
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  user-select: none;
+}
+
+.header-brand .brand-name {
+  color: #fff;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+.header-brand .brand-sep {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 1.5rem;
+  font-weight: 300;
+}
+
+.header-brand .brand-sub {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 1.25rem;
+  font-weight: 500;
+  display: none; /* shown at ≥640px */
+}
+
+
+/* ---- Actions (right side) --------------------------------- */
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.header-actions #server-status {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  display: none; /* shown at ≥640px */
+}
+
+
+/* ---- Buttons ---------------------------------------------- */
+
+/* Base shared by all button variants */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5625rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: all var(--t-fast);
+}
+
+.btn svg {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+/* Ghost button — white on brand red (used in header) */
+.btn-header {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-header:hover {
+  background-color: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+.btn-header:active {
+  background-color: rgba(255, 255, 255, 0.10);
+  scale: 0.96;
+}
+
+/* Icon-only button — used for theme toggle */
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem;
+  color: rgba(255, 255, 255, 0.85);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  user-select: none;
+  transition: all var(--t-fast);
+}
+
+.btn-icon svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.btn-icon:hover {
+  background-color: rgba(255, 255, 255, 0.10);
+  color: #fff;
+}
+
+.btn-icon:active {
+  background-color: rgba(255, 255, 255, 0.20);
+  scale: 0.93;
+}
+
+
+/* ---- Responsive ------------------------------------------- */
+
+@media (min-width: 40rem) {
+  .header-brand .brand-sub        { display: inline; }
+  .header-actions #server-status  { display: inline-block; }
+}
+
+/* ============================================================
+   main.css
+   Everything inside <main>: sections, partner cards, buttons,
+   forms, sessions table, payload panel, and notifications.
+   ============================================================ */
+
+
+/* ---- Main layout ------------------------------------------ */
+
+.main {
+  flex: 1;
+  padding: var(--space-6) 0;
+}
+
+.main .page-container {
+  display: flex;
+  flex-direction: column;
+}
+
+
+/* ---- Section headers -------------------------------------- */
+
+/* Flex row: title block on the left, optional button on the right */
+.section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+}
+
+/* Standalone title (no button alongside) */
+.section-title {
+  margin-bottom: var(--space-4);
+}
+
+/* When nested inside section-header, the parent handles spacing */
+.section-header .section-title {
+  margin-bottom: 0;
+}
+
+.section-title h2,
+.section-header h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-ink);
+  letter-spacing: -0.025em;
+}
+
+.section-title p,
+.section-header p {
+  font-size: 0.875rem;
+  color: var(--color-muted);
+  margin-top: 0.25rem;
+}
+
+
+/* ---- Toast notifications ---------------------------------- */
+
+#toast-container {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1.25rem;
+  border-radius: var(--radius-lg);
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: 1px solid;
+  box-shadow: var(--shadow-md);
+  max-width: 22rem;
+  pointer-events: auto;
+  animation: toast-in 0.2s ease-out;
+}
+
+.toast.toast--out {
+  animation: toast-out 0.2s ease-in forwards;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(1rem); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes toast-out {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(1rem); }
+}
+
+.toast svg {
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+}
+
+.toast--success {
+  background-color: var(--color-success-bg);
+  color: var(--color-success-text);
+  border-color: var(--color-success-border);
+}
+
+.toast--error {
+  background-color: var(--color-error-bg);
+  color: var(--color-error-text);
+  border-color: var(--color-error-border);
+}
+
+
+/* ---- Partner cards ---------------------------------------- */
+
+.partners-grid {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: 1fr;
+}
+
+.card {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  transition: box-shadow var(--t-normal), transform var(--t-normal);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-lg);
+  /*transform: translateY(-2px); */
+}
+
+.card .card-stripe {
+  height: 3px;
+  background-color: var(--color-brand);
+}
+
+.card .card-body {
+  padding: 1.25rem;
+}
+
+.card .card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Animated green "online" indicator dot */
+.card .card-status {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+  background-color: var(--color-success);
+  flex-shrink: 0;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+}
+
+.card .card-name {
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--color-ink);
+  letter-spacing: -0.025em;
+}
+
+.card .card-desc {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  margin-bottom: 1rem;
+  line-height: 1.625;
+}
+
+.card .card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+/* Pill-shaped datapoint label */
+.datapoint-tag {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  background-color: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  color: var(--color-muted);
+  cursor: default;
+  transition: border-color var(--t-fast), color var(--t-fast);
+}
+
+.datapoint-tag:hover {
+  border-color: var(--color-brand);
+  color: var(--color-brand);
+}
+
+.datapoint-tag-pattern {
+  margin-left: 0.375rem;
+  padding-left: 0.375rem;
+  border-left: 1px solid var(--color-rule);
+  color: var(--color-brand);
+  opacity: 0.75;
+  font-size: 0.6875rem;
+  text-box: auto;
+}
+
+/* Skeleton loading placeholders */
+.skeleton {
+  display: none;
+  border-radius: var(--radius-lg);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  height: 9rem;
+  box-shadow: var(--shadow-sm);
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.partners-grid .skeleton:first-child {
+  display: block;
+}
+
+/* Empty state shown when no partners are loaded */
+.empty-state {
+  grid-column: 1 / -1;
+  padding: var(--space-12) 0;
+  text-align: center;
+}
+
+.empty-state p {
+  font-size: 0.875rem;
+  color: var(--color-muted);
+}
+
+.empty-state p + p {
+  font-size: 0.75rem;
+  margin-top: 0.375rem;
+}
+
+.empty-state code {
+  font-family: var(--font-mono);
+  background-color: var(--color-surface);
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+}
+
+
+/* ---- Buttons ---------------------------------------------- */
+
+/* Primary — brand red, filled */
+.btn-primary {
+  background-color: var(--color-brand);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-primary:hover {
+  background-color: var(--color-brand-hover);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-primary:active {
+  background-color: var(--color-brand-active);
+  scale: 0.97;
+}
+
+/* Secondary — outlined, subtle */
+.btn-secondary {
+  background: transparent;
+  color: var(--color-muted);
+  border-color: var(--color-border);
+  font-weight: 500;
+}
+
+.btn-secondary:hover {
+  color: var(--color-brand);
+  border-color: var(--color-brand);
+}
+
+.btn-secondary:active {
+  scale: 0.96;
+}
+
+
+/* ---- Forms ------------------------------------------------ */
+
+/* Horizontal row of fields and a button (aligned to bottom) */
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+}
+
+/* Vertical stack of form groups */
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Label + input pair */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.form-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.form-input {
+  width: 10rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  background-color: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-ink);
+  outline: none;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+
+.form-input:focus {
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.15);
+}
+
+.form-textarea {
+  width: 100%;
+  padding: 0.75rem 0.875rem;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.625;
+  background-color: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-ink);
+  resize: vertical;
+  outline: none;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+
+.form-textarea:focus {
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.15);
+}
+
+/* Payload display: <pre> styled to look like a read-only textarea */
+#payload-display {
+  margin-top: 0.625rem;
+  min-height: 4rem;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  overflow-x: auto;
+  font-size: 0.75rem;
+  cursor: default;
+}
+
+
+/* ---- Sessions table --------------------------------------- */
+
+.table-wrapper {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+}
+
+.table-wrapper .table-scroll {
+  overflow-x: auto;
+}
+
+.sessions-table {
+  width: 100%;
+  font-size: 0.875rem;
+  border-collapse: collapse;
+}
+
+.sessions-table thead tr {
+  background-color: var(--color-surface-alt);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sessions-table th {
+  text-align: left;
+  padding: 0.875rem 1.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.sessions-table td {
+  padding: 0.75rem 1.25rem;
+}
+
+.sessions-table tbody tr {
+  border-bottom: 1px solid var(--color-rule);
+  transition: background-color 100ms ease;
+}
+
+.sessions-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.sessions-table tbody tr:hover {
+  background-color: var(--color-brand-subtle);
+}
+
+.sessions-table tbody tr.stripe {
+  background-color: var(--color-surface-alt);
+}
+
+.sessions-table tbody tr.stripe:hover {
+  background-color: var(--color-brand-subtle);
+}
+
+.sessions-table .td-session-id { font-family: var(--font-mono); font-size: 0.75rem; color: var(--color-muted); }
+.sessions-table .td-partner    { font-weight: 500; color: var(--color-ink); }
+.sessions-table .td-datapoint  { color: var(--color-ink); }
+.sessions-table .td-created    { font-family: var(--font-mono); font-size: 0.75rem; color: var(--color-muted); }
+
+.sessions-table .td-empty {
+  padding: 2.5rem 1.25rem;
+  text-align: center;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+
+
+/* ---- Payload panel ---------------------------------------- */
+
+.panel {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.panel .panel-section {
+  padding: var(--space-4) var(--space-5);
+}
+
+.panel .panel-section + .panel-section {
+  border-top: 1px solid var(--color-border);
+}
+
+.panel .panel-section h3 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink);
+  margin-bottom: 0.625rem;
+}
+
+
+/* ---- Card wrapper (card + accordion stacked) -------------- */
+
+/* The actual grid child: stacks the card above its accordion panel. */
+.card-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Override: card inside a wrapper loses its own hover lift to avoid
+   the wrapper clipping the accordion shadow. */
+.card-wrapper .card {
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.card-wrapper .card:not(:has(+ .dp-accordion[style*="display: block"])) {
+  border-radius: var(--radius-lg);
+}
+
+
+/* ---- Datapoint pill active state -------------------------- */
+
+.datapoint-tag--active {
+  border-color: var(--color-brand);
+  color: var(--color-brand);
+  background-color: var(--color-brand-subtle);
+}
+
+
+/* ---- Accordion panel (below a card) ----------------------- */
+
+.dp-accordion {
+  display: none;
+  border: 1px solid var(--color-border);
+  border-top: 2px solid var(--color-brand);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  background-color: var(--color-surface-alt);
+  box-shadow: var(--shadow-md);
+}
+
+.dp-accordion .acc-section {
+  padding: var(--space-4) var(--space-5);
+}
+
+.dp-accordion .acc-section + .acc-section {
+  border-top: 1px solid var(--color-border);
+}
+
+.dp-accordion .acc-section h3 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-ink);
+  margin-bottom: 0.625rem;
+}
+
+.dp-accordion .acc-note {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  margin-top: 0.375rem;
+}
+
+/* Response display <pre> inside tester */
+.response-display {
+  margin-top: 0.625rem;
+  min-height: 4rem;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  overflow-x: auto;
+  font-size: 0.75rem;
+  cursor: default;
+  font-family: var(--font-mono);
+  padding: 0.75rem 0.875rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-ink);
+}
+
+/* Endpoint selector <select> */
+.endpoint-select {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  background-color: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-ink);
+  outline: none;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+  max-width: 100%;
+}
+
+.endpoint-select:focus {
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px rgba(230, 57, 70, 0.15);
+}
+
+
+/* ---- Responsive ------------------------------------------- */
+
+@media (min-width: 40rem) {
+  .partners-grid { grid-template-columns: repeat(2, 1fr); }
+  .partners-grid .skeleton:nth-child(2) { display: block; }
+}
+
+@media (min-width: 80rem) {
+  .partners-grid { grid-template-columns: repeat(3, 1fr); }
+  .partners-grid .skeleton:nth-child(3) { display: block; }
+}
+
+/* ============================================================
+   footer.css
+   Bottom bar with app name and navigation links.
+   ============================================================ */
+
+.footer {
+  border-top: 1px solid var(--color-rule);
+  padding: var(--space-5) 0;
+}
+
+.footer .page-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.footer .footer-info {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+}
+
+.footer .footer-links {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.footer .footer-links a {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  transition: color var(--t-fast);
+}
+
+.footer .footer-links a:hover {
+  color: var(--color-brand);
+}
+
+  </style>
+  <!-- IMNOT:CSS:END — do not edit this line -->
+</head>
+
+<body>
+
+  <!-- ======= HEADER ======= -->
+  <header class="header">
+    <div class="page-container">
+
+      <div class="header-brand">
+        <span class="brand-name">imnot</span>
+        <span class="brand-sep">/</span>
+        <span class="brand-sub">admin</span>
+      </div>
+
+      <div class="header-actions">
+        <span id="server-status"></span>
+        <button
+          id="theme-toggle"
+          onclick="toggleTheme()"
+          title="Toggle dark/light mode"
+          aria-label="Toggle theme"
+          class="btn-icon"
+        >
+          <svg id="icon-sun" hidden xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M17.657 17.657l-.707-.707M6.343 6.343l-.707-.707M12 8a4 4 0 100 8 4 4 0 000-8z"/>
+          </svg>
+          <svg id="icon-moon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+          </svg>
+        </button>
+        <button onclick="reloadAll()" class="btn btn-header">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          Reload
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+
+  <!-- ======= SUBNAV ======= -->
+  <nav class="subnav" aria-label="Sections">
+    <div class="page-container">
+      <button class="subnav-tab subnav-tab--active" data-tab="partners"  onclick="showSection('partners')">Partners</button>
+      <button class="subnav-tab"                    data-tab="sessions"  onclick="showSection('sessions')">Active Sessions</button>
+    </div>
+  </nav>
+
+
+  <!-- ======= MAIN ======= -->
+  <main class="main">
+    <div class="page-container">
+
+      <!-- ---- Partners ---- -->
+      <section data-section="partners">
+        <div class="section-header">
+          <div class="section-title">
+            <h2>Partners</h2>
+            <p>Loaded partner definitions and their datapoints. Click a datapoint pill to inspect and test it.</p>
+          </div>
+          <button onclick="loadPartners()" class="btn btn-secondary">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Refresh
+          </button>
+        </div>
+        <div id="partners-container" class="partners-grid">
+          <div class="skeleton"></div>
+          <div class="skeleton"></div>
+          <div class="skeleton"></div>
+        </div>
+      </section>
+
+
+      <!-- ---- Active Sessions ---- -->
+      <section data-section="sessions" hidden>
+        <div class="section-header">
+          <div class="section-title">
+            <h2>Active Sessions</h2>
+            <p>Session-scoped payload slots currently in use</p>
+          </div>
+          <button onclick="loadSessions()" class="btn btn-secondary">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Refresh
+          </button>
+        </div>
+        <div class="table-wrapper">
+          <div class="table-scroll">
+            <table class="sessions-table">
+              <thead>
+                <tr>
+                  <th>Session ID</th>
+                  <th>Partner</th>
+                  <th>Datapoint</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody id="sessions-tbody">
+                <tr><td colspan="4" class="td-empty">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+
+
+    </div>
+  </main>
+
+
+  <!-- ======= FOOTER ======= -->
+  <footer class="footer">
+    <div class="page-container">
+      <p class="footer-info">imnot &mdash; stateful API mock server</p>
+      <div class="footer-links">
+        <a href="/imnot/docs">docs</a>
+        <a href="/healthz">healthz</a>
+      </div>
+    </div>
+  </footer>
+
+
+  <script>
+    // ---- Utilities ----
+    function escHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    // ---- Auth ----
+    function getToken() { return localStorage.getItem('imnot-admin-key') || ''; }
+    function authHeaders() {
+      var h = { 'Content-Type': 'application/json' };
+      var t = getToken();
+      if (t) h['Authorization'] = 'Bearer ' + t;
+      return h;
+    }
+
+    // ---- Theme ----
+    function toggleTheme() {
+      var html = document.documentElement;
+      var next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', next);
+      localStorage.setItem('imnot-theme', next);
+      updateThemeIcon(next);
+    }
+    function updateThemeIcon(theme) {
+      var isDark = theme === 'dark';
+      var sun  = document.getElementById('icon-sun');
+      var moon = document.getElementById('icon-moon');
+      if (isDark) {
+        sun.removeAttribute('hidden');
+        moon.setAttribute('hidden', '');
+      } else {
+        sun.setAttribute('hidden', '');
+        moon.removeAttribute('hidden');
+      }
+    }
+
+    // ---- Notifications (toast) ----
+    function notify(msg, type) {
+      var isErr = type === 'error';
+      var container = document.getElementById('toast-container');
+      var t = document.createElement('div');
+      t.className = 'toast ' + (isErr ? 'toast--error' : 'toast--success');
+      t.innerHTML = (isErr
+        ? '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
+        : '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
+      ) + escHtml(msg);
+      container.appendChild(t);
+      setTimeout(function () {
+        t.classList.add('toast--out');
+        t.addEventListener('animationend', function () { t.remove(); }, { once: true });
+      }, 4000);
+    }
+
+    // ---- Payload patterns that get a payload manager section ----
+    var PAYLOAD_PATTERNS = { fetch: true, polling: true, callback: true, paginated: true };
+
+    // ---- Partners ----
+    function loadPartners() {
+      fetch('/imnot/admin/partners', { headers: authHeaders() })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(renderPartners)
+        .catch(function (e) { notify('Failed to load partners: ' + e.message, 'error'); });
+    }
+
+    function renderPartners(data) {
+      var c = document.getElementById('partners-container');
+      if (!data || !data.length) {
+        c.innerHTML = '<div class="empty-state">'
+          + '<p>No partners loaded.</p>'
+          + '<p>Run <code>imnot generate</code> or POST to /imnot/admin/partners.</p>'
+          + '</div>';
+        return;
+      }
+      c.innerHTML = data.map(function (p) {
+        var tags = (p.datapoints || []).map(function (dp) {
+          var endpointsJson = escHtml(JSON.stringify(dp.endpoints));
+          var delay = dp.callback_delay_seconds !== null && dp.callback_delay_seconds !== undefined
+            ? dp.callback_delay_seconds : 'null';
+          return '<button class="datapoint-tag" '
+            + 'onclick="openPanel('
+            + '\'' + escHtml(p.partner) + '\','
+            + '\'' + escHtml(dp.name) + '\','
+            + '\'' + escHtml(dp.pattern) + '\','
+            + 'JSON.parse(this.dataset.endpoints),'
+            + 'this.dataset.delay === \'null\' ? null : parseInt(this.dataset.delay, 10),'
+            + 'this'
+            + ')" '
+            + 'data-partner="' + escHtml(p.partner) + '" '
+            + 'data-dp="' + escHtml(dp.name) + '" '
+            + 'data-endpoints="' + endpointsJson + '" '
+            + 'data-delay="' + delay + '">'
+            + escHtml(dp.name)
+            + '<span class="datapoint-tag-pattern">' + escHtml(dp.pattern) + '</span>'
+            + '</button>';
+        }).join('');
+        var accordionId = 'acc-' + escHtml(p.partner);
+        return '<div class="card-wrapper">'
+          + '<div class="card">'
+          + '<div class="card-stripe"></div>'
+          + '<div class="card-body">'
+          + '<div class="card-header">'
+          + '<span class="card-status"></span>'
+          + '<span class="card-name">' + escHtml(p.partner) + '</span>'
+          + '</div>'
+          + '<p class="card-desc">' + escHtml(p.description || '—') + '</p>'
+          + '<div class="card-tags">' + tags + '</div>'
+          + '</div>'
+          + '</div>'
+          + '<div class="dp-accordion" id="' + accordionId + '" '
+          + 'data-partner="' + escHtml(p.partner) + '"></div>'
+          + '</div>';
+      }).join('');
+    }
+
+    // ---- Panel open/close ----
+
+    function closeAllPanels() {
+      document.querySelectorAll('.dp-accordion').forEach(function (acc) {
+        acc.style.display = 'none';
+        acc.innerHTML = '';
+      });
+      document.querySelectorAll('.datapoint-tag--active').forEach(function (el) {
+        el.classList.remove('datapoint-tag--active');
+      });
+    }
+
+    function openPanel(partnerName, dpName, pattern, endpoints, callbackDelay, pillEl) {
+      var accId = 'acc-' + partnerName;
+      var acc = document.getElementById(accId);
+      if (!acc) return;
+
+      var isOpen = acc.style.display === 'block';
+      var isSamePill = pillEl.classList.contains('datapoint-tag--active');
+
+      closeAllPanels();
+
+      if (isSamePill && isOpen) {
+        return;
+      }
+
+      pillEl.classList.add('datapoint-tag--active');
+      acc.innerHTML = buildAccordionHtml(partnerName, dpName, pattern, endpoints, callbackDelay);
+      acc.style.display = 'block';
+
+      if (PAYLOAD_PATTERNS[pattern]) {
+        var displayEl = document.getElementById('acc-payload-display-' + partnerName + '-' + dpName);
+        if (displayEl) loadAccordionPayload(partnerName, dpName, displayEl);
+      }
+    }
+
+    function toggleBodyField(selectEl, bodyGroupId) {
+      var method = selectEl.value.split(' ')[0].toUpperCase();
+      var el = document.getElementById(bodyGroupId);
+      if (el) el.style.display = (method === 'GET' || method === 'HEAD') ? 'none' : '';
+    }
+
+    function buildAccordionHtml(partner, dp, pattern, endpoints, callbackDelay) {
+      var html = '';
+
+      if (PAYLOAD_PATTERNS[pattern]) {
+        var pid = escHtml(partner + '-' + dp);
+        html += '<div class="acc-section">'
+          + '<h3>Payload Manager</h3>'
+          + '<div class="form-stack">'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="acc-session-' + pid + '">Session ID (optional — leave blank for global)</label>'
+          + '<input id="acc-session-' + pid + '" type="text" placeholder="leave blank for global" class="form-input" style="width:100%;max-width:28rem;" />'
+          + '</div>'
+          + '<pre id="acc-payload-display-' + pid + '" class="response-display">Loading…</pre>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="acc-upload-json-' + pid + '">New JSON payload</label>'
+          + '<textarea id="acc-upload-json-' + pid + '" rows="4" placeholder=\'{"key": "value"}\' spellcheck="false" class="form-textarea"></textarea>'
+          + '</div>'
+          + '<div>'
+          + '<button onclick="uploadAccordionPayload(' + '\'' + escHtml(partner) + '\',\'' + escHtml(dp) + '\',' + 'document.getElementById(\'acc-upload-json-' + pid + '\'),document.getElementById(\'acc-payload-display-' + pid + '\'))" class="btn btn-primary">'
+          + '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>'
+          + 'Upload Payload'
+          + '</button>'
+          + '</div>'
+          + '</div>'
+          + '</div>';
+      }
+
+      var epOptions = endpoints.map(function (ep) {
+        return '<option value="' + escHtml(ep.method + ' ' + ep.path) + '">'
+          + escHtml(ep.method + ' ' + ep.path)
+          + (ep.step !== null && ep.step !== undefined ? ' (step ' + ep.step + ')' : '')
+          + '</option>';
+      }).join('');
+
+      var tid = escHtml(partner + '-' + dp);
+      var firstMethod = endpoints.length ? endpoints[0].method.toUpperCase() : 'POST';
+      var bodyVisible = firstMethod !== 'GET' && firstMethod !== 'HEAD';
+      var bodyGroupId = 'acc-body-group-' + tid;
+      html += '<div class="acc-section">'
+        + '<h3>Endpoint Tester</h3>'
+        + '<div class="form-stack">'
+        + '<div class="form-group">'
+        + '<label class="form-label" for="acc-ep-select-' + tid + '">Endpoint</label>'
+        + '<select id="acc-ep-select-' + tid + '" class="endpoint-select" onchange="toggleBodyField(this,\'' + bodyGroupId + '\')">' + epOptions + '</select>'
+        + '</div>'
+        + '<div class="form-group" id="' + bodyGroupId + '"' + (bodyVisible ? '' : ' style="display:none"') + '>'
+        + '<label class="form-label" for="acc-body-' + tid + '">Request body (JSON, optional)</label>'
+        + '<textarea id="acc-body-' + tid + '" rows="3" placeholder=\'{"key": "value"}\' spellcheck="false" class="form-textarea"></textarea>'
+        + '</div>'
+        + '<div>'
+        + '<button onclick="runEndpointTest('
+        + '\'' + escHtml(partner) + '\','
+        + '\'' + escHtml(dp) + '\','
+        + '\'' + escHtml(pattern) + '\','
+        + 'document.getElementById(\'acc-ep-select-' + tid + '\'),'
+        + 'document.getElementById(\'acc-body-' + tid + '\'),'
+        + 'document.getElementById(\'acc-response-' + tid + '\'),'
+        + (callbackDelay !== null && callbackDelay !== undefined ? callbackDelay : 'null')
+        + ')" class="btn btn-primary">'
+        + '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>'
+        + 'Run'
+        + '</button>'
+        + '</div>'
+        + '<pre id="acc-response-' + tid + '" class="response-display">Response will appear here.</pre>'
+        + (callbackDelay !== null && callbackDelay !== undefined
+          ? '<p class="acc-note">Callback fires in ' + callbackDelay + ' second(s) after the request.</p>'
+          : '')
+        + '</div>'
+        + '</div>';
+
+      return html;
+    }
+
+    // ---- Accordion payload load/upload ----
+
+    function loadAccordionPayload(partner, dp, displayEl) {
+      fetch('/imnot/admin/' + encodeURIComponent(partner) + '/' + encodeURIComponent(dp) + '/payload', { headers: authHeaders() })
+        .then(function (r) {
+          if (r.status === 404) return null;
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function (data) {
+          displayEl.textContent = data === null
+            ? 'No global payload set.'
+            : JSON.stringify(data.payload !== undefined ? data.payload : data, null, 2);
+        })
+        .catch(function (e) { displayEl.textContent = 'Error: ' + e.message; });
+    }
+
+    function uploadAccordionPayload(partner, dp, textareaEl, displayEl) {
+      var raw = textareaEl.value.trim();
+      var body;
+      try { body = JSON.parse(raw); } catch (e) { notify('Invalid JSON: ' + e.message, 'error'); return; }
+      fetch('/imnot/admin/' + encodeURIComponent(partner) + '/' + encodeURIComponent(dp) + '/payload', {
+        method: 'POST', headers: authHeaders(), body: JSON.stringify(body),
+      })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function () {
+          notify('Payload uploaded for ' + partner + '/' + dp + '.', 'ok');
+          loadAccordionPayload(partner, dp, displayEl);
+        })
+        .catch(function (e) { notify('Upload failed: ' + e.message, 'error'); });
+    }
+
+    // ---- Endpoint tester ----
+
+    function runEndpointTest(partner, dp, pattern, epSelectEl, bodyInputEl, responseDisplayEl, callbackDelay) {
+      var selected = epSelectEl.value;
+      var spaceIdx = selected.indexOf(' ');
+      var method = selected.substring(0, spaceIdx);
+      var path = selected.substring(spaceIdx + 1);
+
+      var rawBody = bodyInputEl.value.trim();
+
+      if (pattern === 'polling') {
+        _runPollingTest(method, path, rawBody, responseDisplayEl);
+      } else {
+        _runSingleRequest(method, path, rawBody, responseDisplayEl);
+      }
+    }
+
+    function _runSingleRequest(method, path, rawBody, displayEl) {
+      displayEl.textContent = 'Running…';
+      var opts = { method: method, headers: { 'Content-Type': 'application/json' } };
+      if (rawBody && method !== 'GET' && method !== 'HEAD') {
+        try { JSON.parse(rawBody); opts.body = rawBody; } catch (e) {
+          notify('Invalid JSON body: ' + e.message, 'error'); return;
+        }
+      }
+      fetch(path, opts)
+        .then(function (r) {
+          var status = r.status + ' ' + r.statusText;
+          var locationHdr = r.headers.get('Location');
+          if (r.headers.get('Content-Type') && r.headers.get('Content-Type').indexOf('application/json') !== -1) {
+            return r.json().then(function (body) {
+              return { status: status, body: JSON.stringify(body, null, 2), location: locationHdr };
+            });
+          }
+          return r.text().then(function (text) {
+            return { status: status, body: text || '(no body)', location: locationHdr };
+          });
+        })
+        .then(function (result) {
+          var out = 'HTTP ' + result.status + '\n';
+          if (result.location) out += 'Location: ' + result.location + '\n';
+          out += '\n' + result.body;
+          displayEl.textContent = out;
+        })
+        .catch(function (e) { displayEl.textContent = 'Error: ' + e.message; });
+    }
+
+    function _runPollingTest(submitMethod, submitPath, rawBody, displayEl) {
+      displayEl.textContent = 'Step 1: submitting…';
+      var opts = { method: submitMethod, headers: { 'Content-Type': 'application/json' } };
+      if (rawBody) {
+        try { JSON.parse(rawBody); opts.body = rawBody; } catch (e) {
+          notify('Invalid JSON body: ' + e.message, 'error'); return;
+        }
+      }
+      var step1Status, step1Body, locationHdr;
+      fetch(submitPath, opts)
+        .then(function (r) {
+          step1Status = r.status + ' ' + r.statusText;
+          locationHdr = r.headers.get('Location');
+          if (r.headers.get('Content-Type') && r.headers.get('Content-Type').indexOf('application/json') !== -1) {
+            return r.json();
+          }
+          return r.text().then(function (t) { return t; });
+        })
+        .then(function (body) {
+          step1Body = typeof body === 'string' ? body : JSON.stringify(body, null, 2);
+
+          var jobId = null;
+          if (locationHdr) {
+            // Extract bare ID from the Location header path, e.g. "/jobs/abc-123" → "abc-123"
+            jobId = locationHdr.rsplit ? locationHdr.rsplit('/', 1)[1] : locationHdr.split('/').pop();
+          } else if (typeof body === 'object' && body !== null) {
+            var idKey = Object.keys(body).find(function (k) {
+              return k.toLowerCase().includes('id') || k.toLowerCase().includes('job');
+            });
+            if (idKey) jobId = body[idKey];
+          }
+
+          if (!jobId) {
+            displayEl.textContent = 'Step 1: HTTP ' + step1Status + '\n\n' + step1Body
+              + '\n\n[Could not extract job ID from step-1 response — cannot proceed to fetch step]';
+            return;
+          }
+
+          displayEl.textContent = 'Step 1: HTTP ' + step1Status + '\n\n' + step1Body
+            + '\n\nStep N: fetching result for id=' + jobId + '…';
+
+          var fetchPath = submitPath + '/' + jobId;
+          return fetch(fetchPath)
+            .then(function (r2) {
+              var s2 = r2.status + ' ' + r2.statusText;
+              if (r2.headers.get('Content-Type') && r2.headers.get('Content-Type').indexOf('application/json') !== -1) {
+                return r2.json().then(function (b2) {
+                  return { status: s2, body: JSON.stringify(b2, null, 2) };
+                });
+              }
+              return r2.text().then(function (t2) { return { status: s2, body: t2 || '(no body)' }; });
+            })
+            .then(function (r2result) {
+              displayEl.textContent = 'Step 1: HTTP ' + step1Status + '\n\n' + step1Body
+                + '\n\n---\nStep N: HTTP ' + r2result.status + '\n\n' + r2result.body;
+            });
+        })
+        .catch(function (e) { displayEl.textContent = 'Error: ' + e.message; });
+    }
+
+    // ---- Sessions ----
+    function loadSessions() {
+      fetch('/imnot/admin/sessions', { headers: authHeaders() })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(renderSessions)
+        .catch(function (e) { notify('Failed to load sessions: ' + e.message, 'error'); });
+    }
+    function renderSessions(data) {
+      var tbody = document.getElementById('sessions-tbody');
+      if (!data || !data.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="td-empty">No active sessions.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.map(function (s, i) {
+        var rowClass = i % 2 !== 0 ? 'stripe' : '';
+        return '<tr class="' + rowClass + '">'
+          + '<td class="td-session-id">' + escHtml(s.session_id) + '</td>'
+          + '<td class="td-partner">'    + escHtml(s.partner) + '</td>'
+          + '<td class="td-datapoint">'  + escHtml(s.datapoint) + '</td>'
+          + '<td class="td-created">'    + escHtml(s.created_at || '—') + '</td>'
+          + '</tr>';
+      }).join('');
+    }
+
+    // ---- Reload ----
+    function reloadAll() {
+      fetch('/imnot/admin/reload', { method: 'POST', headers: authHeaders() })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (d) {
+          var msg = 'Reload ' + d.status;
+          if (d.updated   && d.updated.length)   msg += ' — updated: '   + d.updated.join(', ');
+          if (d.added     && d.added.length)     msg += ' — added: '     + d.added.join(', ');
+          if (d.conflicts && d.conflicts.length) msg += ' — conflicts: ' + d.conflicts.join(', ');
+          notify(msg, d.status === 'ok' ? 'ok' : 'error');
+          closeAllPanels();
+          loadPartners();
+        })
+        .catch(function (e) { notify('Reload failed: ' + e.message, 'error'); });
+    }
+
+    // ---- Health ----
+    function checkHealth() {
+      fetch('/healthz')
+        .then(function (r) { return r.json(); })
+        .then(function (d) { document.getElementById('server-status').textContent = 'v' + (d.version || '?'); })
+        .catch(function () { document.getElementById('server-status').textContent = 'offline'; });
+    }
+
+    // ---- Navigation ----
+    function showSection(name) {
+      document.querySelectorAll('[data-section]').forEach(function (s) {
+        s.hidden = s.dataset.section !== name;
+      });
+      document.querySelectorAll('.subnav-tab').forEach(function (t) {
+        t.classList.toggle('subnav-tab--active', t.dataset.tab === name);
+      });
+      localStorage.setItem('imnot-section', name);
+      if (name === 'sessions') loadSessions();
+    }
+
+    // ---- Init ----
+    (function () {
+      updateThemeIcon(document.documentElement.getAttribute('data-theme') || 'light');
+      var section = localStorage.getItem('imnot-section') || 'partners';
+      if (section === 'payload') section = 'partners';
+      showSection(section);
+      checkHealth();
+      loadPartners();
+    })();
+  </script>
+
+  <div id="toast-container"></div>
+
+</body>
+</html>

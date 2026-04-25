@@ -24,7 +24,7 @@ from fastapi import FastAPI
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
-from imnot.config import load_config
+from imnot.config import UIConfig, load_config
 from imnot.engine.router import register_routes
 from imnot.engine.session_store import SessionStore
 from imnot.loader.yaml_loader import load_partners
@@ -73,6 +73,7 @@ def create_app(
     admin_key: str | None = None,
     base_url: str = "http://localhost:8000",
     default_limit: int = 50,
+    ui_config: UIConfig | None = None,
 ) -> FastAPI:
     """Build and return a fully configured FastAPI application.
 
@@ -111,6 +112,7 @@ def create_app(
         partners_dir=partners_dir,
         base_url=base_url,
         default_limit=default_limit,
+        ui_config=ui_config,
     )
     return app
 
@@ -144,4 +146,5 @@ def create_app_from_env() -> FastAPI:
         db_path=db_path,
         admin_key=admin_key,
         default_limit=default_limit,
+        ui_config=config.ui,
     )

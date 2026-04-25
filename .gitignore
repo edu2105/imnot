@@ -36,3 +36,9 @@ docs/
 
 # Superpowers plugin output
 superpowers/
+
+# Frontend AI agents (skills.sh)
+.agents/
+
+# Claude Code skills lock (local tool artifact)
+skills-lock.json

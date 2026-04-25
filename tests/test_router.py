@@ -82,6 +82,31 @@ def async_client(tmp_path, store):
     return TestClient(app, raise_server_exceptions=True)
 
 
+@pytest.fixture
+def callback_client(tmp_path, store):
+    partner_dir = tmp_path / "hookpartner"
+    partner_dir.mkdir()
+    (partner_dir / "partner.yaml").write_text(
+        "partner: hookpartner\n"
+        "description: Callback test partner\n"
+        "datapoints:\n"
+        "  - name: event\n"
+        "    description: Webhook event\n"
+        "    pattern: callback\n"
+        "    endpoints:\n"
+        "      - method: POST\n"
+        "        path: /hookpartner/events\n"
+        "        response:\n"
+        "          status: 202\n"
+        "          callback_url_field: callbackUrl\n"
+        "          callback_delay_seconds: 5\n"
+    )
+    app = FastAPI()
+    partners = load_partners(tmp_path)
+    register_routes(app, partners, store)
+    return TestClient(app, raise_server_exceptions=True)
+
+
 # ---------------------------------------------------------------------------
 # Infra routes
 # ---------------------------------------------------------------------------
@@ -114,8 +139,40 @@ def test_list_partners(client):
     body = r.json()
     staylink = next((p for p in body if p["partner"] == "staylink"), None)
     assert staylink is not None
-    assert "reservation" in staylink["datapoints"]
-    assert "token" in staylink["datapoints"]
+    dp_names = [dp["name"] for dp in staylink["datapoints"]]
+    assert "report" in dp_names
+    assert "token" in dp_names
+    assert all("pattern" in dp for dp in staylink["datapoints"])
+    assert all("endpoints" in dp for dp in staylink["datapoints"])
+    assert all("callback_delay_seconds" in dp for dp in staylink["datapoints"])
+    reservation = next(dp for dp in staylink["datapoints"] if dp["name"] == "report")
+    assert len(reservation["endpoints"]) > 0
+    for ep in reservation["endpoints"]:
+        assert "method" in ep
+        assert "path" in ep
+        assert "step" in ep
+    assert reservation["callback_delay_seconds"] is None
+
+
+def test_list_partners_callback_delay(callback_client):
+    r = callback_client.get("/imnot/admin/partners")
+    assert r.status_code == 200
+    body = r.json()
+    hookpartner = next(p for p in body if p["partner"] == "hookpartner")
+    event_dp = hookpartner["datapoints"][0]
+    assert event_dp["callback_delay_seconds"] == 5
+    assert event_dp["endpoints"][0]["step"] is None
+
+
+def test_list_partners_polling_steps(async_client):
+    r = async_client.get("/imnot/admin/partners")
+    assert r.status_code == 200
+    body = r.json()
+    asyncpartner = next(p for p in body if p["partner"] == "asyncpartner")
+    job_dp = asyncpartner["datapoints"][0]
+    assert job_dp["callback_delay_seconds"] is None
+    steps = [ep["step"] for ep in job_dp["endpoints"]]
+    assert steps == [1, 2, 3]
 
 
 def test_list_sessions_empty(client):
@@ -126,8 +183,8 @@ def test_list_sessions_empty(client):
 
 def test_list_sessions_after_upload(client):
     client.post(
-        "/imnot/admin/staylink/reservation/payload/session",
-        json={"reservationId": "X"},
+        "/imnot/admin/staylink/report/payload/session",
+        json={"reportId": "RPT-X"},
     )
     r = client.get("/imnot/admin/sessions")
     assert len(r.json()) == 1
@@ -140,8 +197,8 @@ def test_list_sessions_after_upload(client):
 
 def test_upload_global_payload(client):
     r = client.post(
-        "/imnot/admin/staylink/reservation/payload",
-        json={"reservationId": "RES001"},
+        "/imnot/admin/staylink/report/payload",
+        json={"reportId": "RPT001"},
     )
     assert r.status_code == 200
     assert r.json()["status"] == "ok"
@@ -149,7 +206,7 @@ def test_upload_global_payload(client):
 
 def test_upload_invalid_json_returns_400(client):
     r = client.post(
-        "/imnot/admin/staylink/reservation/payload",
+        "/imnot/admin/staylink/report/payload",
         content=b"not json",
         headers={"Content-Type": "application/json"},
     )
@@ -159,8 +216,8 @@ def test_upload_invalid_json_returns_400(client):
 
 def test_upload_session_payload_returns_session_id(client):
     r = client.post(
-        "/imnot/admin/staylink/reservation/payload/session",
-        json={"reservationId": "RES002"},
+        "/imnot/admin/staylink/report/payload/session",
+        json={"reportId": "RPT002"},
     )
     assert r.status_code == 200
     body = r.json()
@@ -174,35 +231,35 @@ def test_upload_session_payload_returns_session_id(client):
 
 
 def test_get_global_payload(client):
-    client.post("/imnot/admin/staylink/reservation/payload", json={"reservationId": "R1"})
-    r = client.get("/imnot/admin/staylink/reservation/payload")
+    client.post("/imnot/admin/staylink/report/payload", json={"reportId": "RPT001"})
+    r = client.get("/imnot/admin/staylink/report/payload")
     assert r.status_code == 200
     body = r.json()
-    assert body["payload"] == {"reservationId": "R1"}
+    assert body["payload"] == {"reportId": "RPT001"}
     assert "updated_at" in body
 
 
 def test_get_global_payload_not_set_returns_404(client):
-    r = client.get("/imnot/admin/staylink/reservation/payload")
+    r = client.get("/imnot/admin/staylink/report/payload")
     assert r.status_code == 404
 
 
 def test_get_session_payload(client):
     session_id = client.post(
-        "/imnot/admin/staylink/reservation/payload/session",
-        json={"reservationId": "S1"},
+        "/imnot/admin/staylink/report/payload/session",
+        json={"reportId": "RPT-S1"},
     ).json()["session_id"]
 
-    r = client.get(f"/imnot/admin/staylink/reservation/payload/session/{session_id}")
+    r = client.get(f"/imnot/admin/staylink/report/payload/session/{session_id}")
     assert r.status_code == 200
     body = r.json()
-    assert body["payload"] == {"reservationId": "S1"}
+    assert body["payload"] == {"reportId": "RPT-S1"}
     assert body["session_id"] == session_id
     assert "created_at" in body
 
 
 def test_get_session_payload_not_found_returns_404(client):
-    r = client.get("/imnot/admin/staylink/reservation/payload/session/nonexistent")
+    r = client.get("/imnot/admin/staylink/report/payload/session/nonexistent")
     assert r.status_code == 404
 
 
@@ -253,81 +310,81 @@ def test_oauth_token(client):
 
 
 def test_staylink_step1_returns_202_and_location(client):
-    r = client.post("/staylink/reservations")
+    r = client.post("/staylink/reports")
     assert r.status_code == 202
     assert "Location" in r.headers
-    assert "/staylink/reservations/" in r.headers["Location"]
+    assert "/staylink/reports/" in r.headers["Location"]
 
 
 def test_staylink_step2_returns_201_and_status(client):
-    r1 = client.post("/staylink/reservations")
+    r1 = client.post("/staylink/reports")
     uuid = r1.headers["Location"].split("/")[-1]
 
-    r2 = client.head(f"/staylink/reservations/{uuid}")
+    r2 = client.head(f"/staylink/reports/{uuid}")
     assert r2.status_code == 201
     assert r2.headers.get("Status") == "COMPLETED"
 
 
 def test_staylink_step3_returns_global_payload(client):
-    client.post("/imnot/admin/staylink/reservation/payload", json={"reservationId": "RES001"})
+    client.post("/imnot/admin/staylink/report/payload", json={"reportId": "RPT001"})
 
-    r1 = client.post("/staylink/reservations")
+    r1 = client.post("/staylink/reports")
     uuid = r1.headers["Location"].split("/")[-1]
 
-    r3 = client.get(f"/staylink/reservations/{uuid}")
+    r3 = client.get(f"/staylink/reports/{uuid}")
     assert r3.status_code == 200
-    assert r3.json() == {"reservationId": "RES001"}
+    assert r3.json() == {"reportId": "RPT001"}
 
 
 def test_staylink_step3_unknown_uuid_returns_404(client):
-    r = client.get("/staylink/reservations/nonexistent-uuid")
+    r = client.get("/staylink/reports/nonexistent-uuid")
     assert r.status_code == 404
 
 
 def test_staylink_step3_no_payload_returns_404(client):
-    r1 = client.post("/staylink/reservations")
+    r1 = client.post("/staylink/reports")
     uuid = r1.headers["Location"].split("/")[-1]
-    r3 = client.get(f"/staylink/reservations/{uuid}")
+    r3 = client.get(f"/staylink/reports/{uuid}")
     assert r3.status_code == 404
 
 
 def test_staylink_full_session_flow(client):
     r = client.post(
-        "/imnot/admin/staylink/reservation/payload/session",
-        json={"reservationId": "SES001"},
+        "/imnot/admin/staylink/report/payload/session",
+        json={"reportId": "RPT-SES001"},
     )
     session_id = r.json()["session_id"]
 
-    r1 = client.post("/staylink/reservations", headers={"X-Imnot-Session": session_id})
+    r1 = client.post("/staylink/reports", headers={"X-Imnot-Session": session_id})
     assert r1.status_code == 202
     uuid = r1.headers["Location"].split("/")[-1]
 
-    r3 = client.get(f"/staylink/reservations/{uuid}", headers={"X-Imnot-Session": session_id})
+    r3 = client.get(f"/staylink/reports/{uuid}", headers={"X-Imnot-Session": session_id})
     assert r3.status_code == 200
-    assert r3.json() == {"reservationId": "SES001"}
+    assert r3.json() == {"reportId": "RPT-SES001"}
 
 
 def test_staylink_session_does_not_leak_to_global(client):
     client.post(
-        "/imnot/admin/staylink/reservation/payload/session",
-        json={"reservationId": "SES001"},
+        "/imnot/admin/staylink/report/payload/session",
+        json={"reportId": "RPT-SES001"},
     )
-    r1 = client.post("/staylink/reservations")
+    r1 = client.post("/staylink/reports")
     uuid = r1.headers["Location"].split("/")[-1]
 
-    r3 = client.get(f"/staylink/reservations/{uuid}")
+    r3 = client.get(f"/staylink/reports/{uuid}")
     assert r3.status_code == 404
 
 
 def test_staylink_two_sessions_are_isolated(client):
-    s1 = client.post("/imnot/admin/staylink/reservation/payload/session", json={"user": "alice"}).json()["session_id"]
-    s2 = client.post("/imnot/admin/staylink/reservation/payload/session", json={"user": "bob"}).json()["session_id"]
+    s1 = client.post("/imnot/admin/staylink/report/payload/session", json={"user": "alice"}).json()["session_id"]
+    s2 = client.post("/imnot/admin/staylink/report/payload/session", json={"user": "bob"}).json()["session_id"]
 
-    uuid1 = client.post("/staylink/reservations", headers={"X-Imnot-Session": s1}).headers["Location"].split("/")[-1]
-    uuid2 = client.post("/staylink/reservations", headers={"X-Imnot-Session": s2}).headers["Location"].split("/")[-1]
+    uuid1 = client.post("/staylink/reports", headers={"X-Imnot-Session": s1}).headers["Location"].split("/")[-1]
+    uuid2 = client.post("/staylink/reports", headers={"X-Imnot-Session": s2}).headers["Location"].split("/")[-1]
 
-    assert client.get(f"/staylink/reservations/{uuid1}", headers={"X-Imnot-Session": s1}).json() == {"user": "alice"}
-    assert client.get(f"/staylink/reservations/{uuid2}", headers={"X-Imnot-Session": s2}).json() == {"user": "bob"}
+    assert client.get(f"/staylink/reports/{uuid1}", headers={"X-Imnot-Session": s1}).json() == {"user": "alice"}
+    assert client.get(f"/staylink/reports/{uuid2}", headers={"X-Imnot-Session": s2}).json() == {"user": "bob"}
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,36 @@
+/* ============================================================
+   footer.css
+   Bottom bar with app name and navigation links.
+   ============================================================ */
+
+.footer {
+  border-top: 1px solid var(--color-rule);
+  padding: var(--space-5) 0;
+}
+
+.footer .page-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.footer .footer-info {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+}
+
+.footer .footer-links {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.footer .footer-links a {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  transition: color var(--t-fast);
+}
+
+.footer .footer-links a:hover {
+  color: var(--color-brand);
+}

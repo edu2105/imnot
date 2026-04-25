@@ -19,13 +19,15 @@ from __future__ import annotations
 import hmac
 import logging
 from importlib.metadata import version as _pkg_version
+from importlib.resources import files as _res_files
 from pathlib import Path
 from typing import Any
 
 import yaml
 from fastapi import BackgroundTasks, FastAPI, Request
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
+from imnot.config import UIConfig
 from imnot.engine.patterns.async_ import make_async_handlers
 from imnot.engine.patterns.fetch import make_fetch_handler
 from imnot.engine.patterns.oauth import make_oauth_handler
@@ -57,6 +59,7 @@ def register_routes(
     partners_dir: Path | None = None,
     base_url: str = "http://localhost:8000",
     default_limit: int = 50,
+    ui_config: UIConfig | None = None,
 ) -> None:
     """Register all routes on *app* derived from *partners*, plus fixed infra routes.
 
@@ -76,6 +79,8 @@ def register_routes(
     registered_routes: dict[tuple[str, str], str] = {}
     registered_admin_dps: set[tuple[str, str]] = set()
 
+    effective_ui_config = ui_config if ui_config is not None else UIConfig()
+
     app.state.configs = configs
     app.state.store = store
     app.state.partners = partners
@@ -89,6 +94,8 @@ def register_routes(
         _register_admin_auth_middleware(app, admin_key)
     _register_docs_routes(app, partners_dir)
     _register_infra_routes(app, partners, store)
+    if effective_ui_config.enabled:
+        _register_ui_routes(app, effective_ui_config)
     for partner in partners:
         for datapoint in partner.datapoints:
             _register_consumer_routes(app, partner, datapoint, store, configs, registered_routes, default_limit)
@@ -360,6 +367,25 @@ def _register_docs_routes(app: FastAPI, partners_dir: Path | None) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Admin UI route
+# ---------------------------------------------------------------------------
+
+
+def _register_ui_routes(app: FastAPI, ui_config: UIConfig) -> None:
+    html_bytes = _res_files("imnot.ui").joinpath("index.html").read_bytes()
+    themed = html_bytes.replace(
+        b'data-theme="__IMNOT_THEME__"',
+        f'data-theme="{ui_config.default_theme}"'.encode(),
+    )
+
+    async def serve_ui() -> HTMLResponse:
+        return HTMLResponse(content=themed.decode("utf-8"))
+
+    app.add_api_route("/imnot/admin/ui", serve_ui, methods=["GET"], include_in_schema=False)
+    logger.debug("Registered admin UI route")
+
+
+# ---------------------------------------------------------------------------
 # Fixed infra routes
 # ---------------------------------------------------------------------------
 
@@ -376,12 +402,23 @@ def _register_infra_routes(
         return JSONResponse(store.list_sessions())
 
     async def list_partners() -> JSONResponse:
+        def _serialize_dp(dp: DatapointDef) -> dict:
+            callback_delay: int | None = None
+            if dp.pattern == "callback" and dp.endpoints:
+                callback_delay = int(dp.endpoints[0].response.get("callback_delay_seconds", 0))
+            return {
+                "name": dp.name,
+                "pattern": dp.pattern,
+                "endpoints": [{"method": ep.method, "path": ep.path, "step": ep.step} for ep in dp.endpoints],
+                "callback_delay_seconds": callback_delay,
+            }
+
         return JSONResponse(
             [
                 {
                     "partner": p.partner,
                     "description": p.description,
-                    "datapoints": [dp.name for dp in p.datapoints],
+                    "datapoints": [_serialize_dp(dp) for dp in p.datapoints],
                 }
                 for p in partners
             ]

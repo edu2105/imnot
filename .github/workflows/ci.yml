@@ -71,6 +71,9 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
+      - name: Inline CSS into admin UI
+        run: make ui
+
       - name: Build image
         run: docker build -t imnot-smoke .
 
