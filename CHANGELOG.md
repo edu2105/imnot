@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
+### Fixed
+
+- Allow browser access to admin UI when IMNOT_ADMIN_KEY is set ([c77c52d](https://github.com/edu2105/imnot/commit/c77c52d81122e3aef0c6bc920043e2a8f3a0cbd6))
+
+## [1.0.0] - 2026-04-25
+
 ### Added
 
 - Datapoint accordion panel — payload manager + endpoint tester ([c29e8c6](https://github.com/edu2105/imnot/commit/c29e8c63e25bd3512565cf05ce8187981423657a))
