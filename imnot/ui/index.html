@@ -394,6 +394,36 @@ img, svg {
    ============================================================ */
 
 
+/* ---- Admin key panel -------------------------------------- */
+
+.key-panel {
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--color-rule);
+}
+
+.key-panel .page-container {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: 3rem;
+}
+
+.key-panel-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.key-panel-input {
+  width: auto;
+  flex: 1;
+  max-width: 22rem;
+}
+
+
 /* ---- Main layout ------------------------------------------ */
 
 .main {
@@ -1039,6 +1069,17 @@ img, svg {
             <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
           </svg>
         </button>
+        <button
+          id="key-btn"
+          onclick="toggleKeyPanel()"
+          title="Admin key"
+          aria-label="Admin key"
+          class="btn-icon"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+          </svg>
+        </button>
         <button onclick="reloadAll()" class="btn btn-header">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
@@ -1049,6 +1090,17 @@ img, svg {
 
     </div>
   </header>
+
+
+  <!-- ======= KEY PANEL ======= -->
+  <div id="key-panel" class="key-panel" hidden>
+    <div class="page-container">
+      <span class="key-panel-label">Admin key</span>
+      <input id="key-input" type="password" placeholder="Enter admin key…" class="form-input key-panel-input" onkeydown="if(event.key==='Enter')saveKey()" />
+      <button onclick="saveKey()" class="btn btn-primary">Save</button>
+      <button onclick="clearKey()" class="btn btn-secondary">Clear</button>
+    </div>
+  </div>
 
 
   <!-- ======= SUBNAV ======= -->
@@ -1557,6 +1609,42 @@ img, svg {
         .catch(function () { document.getElementById('server-status').textContent = 'offline'; });
     }
 
+    // ---- Admin key panel ----
+    function toggleKeyPanel() {
+      var panel = document.getElementById('key-panel');
+      if (panel.hidden) {
+        panel.removeAttribute('hidden');
+        document.getElementById('key-input').focus();
+      } else {
+        panel.setAttribute('hidden', '');
+      }
+    }
+
+    function saveKey() {
+      var key = document.getElementById('key-input').value.trim();
+      if (key) {
+        localStorage.setItem('imnot-admin-key', key);
+      } else {
+        localStorage.removeItem('imnot-admin-key');
+      }
+      document.getElementById('key-input').value = '';
+      document.getElementById('key-panel').setAttribute('hidden', '');
+      updateKeyIcon();
+      loadPartners();
+    }
+
+    function clearKey() {
+      localStorage.removeItem('imnot-admin-key');
+      document.getElementById('key-input').value = '';
+      document.getElementById('key-panel').setAttribute('hidden', '');
+      updateKeyIcon();
+    }
+
+    function updateKeyIcon() {
+      var btn = document.getElementById('key-btn');
+      btn.style.opacity = localStorage.getItem('imnot-admin-key') ? '1' : '0.45';
+    }
+
     // ---- Navigation ----
     function showSection(name) {
       document.querySelectorAll('[data-section]').forEach(function (s) {
@@ -1572,6 +1660,10 @@ img, svg {
     // ---- Init ----
     (function () {
       updateThemeIcon(document.documentElement.getAttribute('data-theme') || 'light');
+      updateKeyIcon();
+      if (!localStorage.getItem('imnot-admin-key')) {
+        document.getElementById('key-panel').removeAttribute('hidden');
+      }
       var section = localStorage.getItem('imnot-section') || 'partners';
       if (section === 'payload') section = 'partners';
       showSection(section);

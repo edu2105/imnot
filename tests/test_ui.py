@@ -81,15 +81,17 @@ def test_ui_disabled_returns_404(ui_disabled_client):
     assert r.status_code == 404
 
 
-def test_ui_auth_gated_returns_401_without_token(auth_ui_client):
+def test_ui_page_accessible_without_token(auth_ui_client):
+    """HTML page must load without auth — browser can't send Bearer on navigation."""
     r = auth_ui_client.get("/imnot/admin/ui")
-    assert r.status_code == 401
-
-
-def test_ui_auth_gated_returns_200_with_token(auth_ui_client):
-    r = auth_ui_client.get("/imnot/admin/ui", headers={"Authorization": "Bearer secret"})
     assert r.status_code == 200
     assert "text/html" in r.headers["content-type"]
+
+
+def test_ui_api_still_gated_without_token(auth_ui_client):
+    """API endpoints remain auth-gated even though the UI page is open."""
+    r = auth_ui_client.get("/imnot/admin/partners")
+    assert r.status_code == 401
 
 
 def test_ui_default_config_when_none_passed(store):
