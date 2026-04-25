@@ -5,6 +5,36 @@
    ============================================================ */
 
 
+/* ---- Admin key panel -------------------------------------- */
+
+.key-panel {
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--color-rule);
+}
+
+.key-panel .page-container {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  height: 3rem;
+}
+
+.key-panel-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.key-panel-input {
+  width: auto;
+  flex: 1;
+  max-width: 22rem;
+}
+
+
 /* ---- Main layout ------------------------------------------ */
 
 .main {

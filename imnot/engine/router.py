@@ -122,7 +122,7 @@ def _register_admin_auth_middleware(app: FastAPI, admin_key: str) -> None:
 
     class AdminAuthMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request: Request, call_next):  # type: ignore[override]
-            if request.url.path.startswith("/imnot/admin/"):
+            if request.url.path.startswith("/imnot/admin/") and request.url.path != "/imnot/admin/ui":
                 auth = request.headers.get("Authorization", "")
                 if not hmac.compare_digest(auth, f"Bearer {admin_key}"):
                     _http_logger.warning(
