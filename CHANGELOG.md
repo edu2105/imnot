@@ -8,6 +8,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Datapoint accordion panel — payload manager + endpoint tester ([c29e8c6](https://github.com/edu2105/imnot/commit/c29e8c63e25bd3512565cf05ce8187981423657a))
+- Replace single-scroll layout with tabbed sub-nav ([c2470b2](https://github.com/edu2105/imnot/commit/c2470b21fdfa7111c5971fe2efe2770159285372))
+- Show pattern on partner card datapoint tags ([7817115](https://github.com/edu2105/imnot/commit/781711581c19d8a2cd6c42d45597ca6eea5bc810))
+- Dark mode default, toast notifications ([138a132](https://github.com/edu2105/imnot/commit/138a1328dfdd49b26152e2d5dc142ea2f24d0c4d))
+- Add admin web UI served at /imnot/admin/ui ([a9929e8](https://github.com/edu2105/imnot/commit/a9929e85f6447079036c538987b975b8a7cffe37))
+
+### Changed
+
+- Update example partners — bookingco reservation/static, staylink report/polling ([b1dcb16](https://github.com/edu2105/imnot/commit/b1dcb16998721dafd1bc8987462d8eafae3cc315))
+- Compact payload inspector to fit viewport without scrolling ([6c11cd5](https://github.com/edu2105/imnot/commit/6c11cd5482e85532f78941bcc9a40b3c71d8becd))
+- UI style tweaks — token values and header font sizes ([fbaff40](https://github.com/edu2105/imnot/commit/fbaff40269ec5915ba64cdddf0763a717cecc904))
+- Replace Tailwind build with plain CSS split across css/ files ([6f2d6b5](https://github.com/edu2105/imnot/commit/6f2d6b59f825f9c666ba4b65cdfb48e2d7055676))
+
+### Documentation
+
+- Update README for admin UI — config section, endpoint description, limitations ([2448a9b](https://github.com/edu2105/imnot/commit/2448a9bb9f0d5c302f6362816df9f426cd8524c7))
+
+### Fixed
+
+- Resolve log dir via data/ subdir in Docker deployments ([04e7236](https://github.com/edu2105/imnot/commit/04e7236329c395d1682d6e380c8efbf03c45b8bc))
+- Remove npm ci from docker-smoke CI step (Tailwind removed) ([0784427](https://github.com/edu2105/imnot/commit/0784427cbaf3f6c713388fff6730507c6f113b64))
+- Accordion panel — upload button onclick, GET body visibility ([1400706](https://github.com/edu2105/imnot/commit/1400706ae8980a74ce813d58823afd7bfaa410b8))
+
+### Maintenance
+
+- Merge main into feat/admin-ui — resolve test_cli.py conflict ([3db416d](https://github.com/edu2105/imnot/commit/3db416d5c9ec6bbae4614ed89fc8abd9ae5e482c))
+- Add PyPI version badge to README ([2a656c4](https://github.com/edu2105/imnot/commit/2a656c49307e052153bbc899052923962d12b467))
+
+## [0.6.0] - 2026-04-22
+
+### Added
+
 - Rename async→polling and push→callback patterns ([d6fbd2e](https://github.com/edu2105/imnot/commit/d6fbd2e023e1de428616e05d45286ee66e1c5ee6))
 - Register trailing-slash alias for all consumer routes ([5d9477e](https://github.com/edu2105/imnot/commit/5d9477ef70a0e125070beaca226404385191d2dc))
 
