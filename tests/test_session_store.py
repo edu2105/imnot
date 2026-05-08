@@ -165,3 +165,61 @@ def test_list_sessions(store):
     assert len(sessions) == 2
     assert all("session_id" in s for s in sessions)
     assert all("created_at" in s for s in sessions)
+
+
+# ---------------------------------------------------------------------------
+# delete_session
+# ---------------------------------------------------------------------------
+
+
+def test_delete_session_found(store):
+    session_id = store.store_session_payload("staylink", "report", {"x": 1})
+    result = store.delete_session(session_id)
+    assert result is True
+    assert store.get_session_payload(session_id) is None
+
+
+def test_delete_session_not_found(store):
+    result = store.delete_session("nonexistent-id")
+    assert result is False
+
+
+# ---------------------------------------------------------------------------
+# last_used tracking
+# ---------------------------------------------------------------------------
+
+
+def test_last_used_initially_null(store):
+    store.store_session_payload("staylink", "report", {"v": 1})
+    sessions = store.list_sessions()
+    assert sessions[0]["last_used"] is None
+
+
+def test_last_used_updated_after_resolve(store):
+    session_id = store.store_session_payload("staylink", "report", {"v": 1})
+    store.resolve_payload("staylink", "report", session_id=session_id)
+    sessions = store.list_sessions()
+    assert sessions[0]["last_used"] is not None
+    assert sessions[0]["last_used"].startswith("20")
+
+
+def test_last_used_not_updated_for_global(store):
+    store.store_global_payload("staylink", "report", {"global": True})
+    session_id = store.store_session_payload("staylink", "report", {"session": True})
+    store.resolve_payload("staylink", "report", session_id=None)
+    sessions = store.list_sessions()
+    assert sessions[0]["last_used"] is None
+    assert sessions[0]["session_id"] == session_id
+
+
+# ---------------------------------------------------------------------------
+# Migration guard
+# ---------------------------------------------------------------------------
+
+
+def test_init_migration_guard_idempotent(tmp_path):
+    s = SessionStore(db_path=tmp_path / "test.db")
+    s.init()
+    # Calling init() again must not raise even though last_used column already exists
+    s.init()
+    s.close()

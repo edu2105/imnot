@@ -468,6 +468,27 @@
 .sessions-table .td-partner    { font-weight: 500; color: var(--color-ink); }
 .sessions-table .td-datapoint  { color: var(--color-ink); }
 .sessions-table .td-created    { font-family: var(--font-mono); font-size: 0.75rem; color: var(--color-muted); }
+.sessions-table .td-last-used  { font-family: var(--font-mono); font-size: 0.75rem; color: var(--color-muted); }
+
+.btn-danger-sm {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background-color: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: background-color var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+}
+
+.btn-danger-sm:hover {
+  background-color: #fee2e2;
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
 
 .sessions-table .td-empty {
   padding: 2.5rem 1.25rem;

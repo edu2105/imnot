@@ -190,6 +190,37 @@ def test_list_sessions_after_upload(client):
     assert len(r.json()) == 1
 
 
+def test_list_sessions_includes_last_used(client):
+    client.post(
+        "/imnot/admin/staylink/report/payload/session",
+        json={"reportId": "RPT-Y"},
+    )
+    r = client.get("/imnot/admin/sessions")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body) == 1
+    assert "last_used" in body[0]
+
+
+def test_delete_session_ok(client):
+    r = client.post(
+        "/imnot/admin/staylink/report/payload/session",
+        json={"reportId": "RPT-Z"},
+    )
+    session_id = r.json()["session_id"]
+    r_del = client.delete(f"/imnot/admin/sessions/{session_id}")
+    assert r_del.status_code == 200
+    body = r_del.json()
+    assert body["status"] == "ok"
+    assert body["session_id"] == session_id
+
+
+def test_delete_session_not_found(client):
+    r = client.delete("/imnot/admin/sessions/nonexistent-id")
+    assert r.status_code == 404
+    assert "not found" in r.json()["detail"].lower()
+
+
 # ---------------------------------------------------------------------------
 # Admin payload routes — upload
 # ---------------------------------------------------------------------------
@@ -223,6 +254,16 @@ def test_upload_session_payload_returns_session_id(client):
     body = r.json()
     assert "session_id" in body
     assert len(body["session_id"]) == 36  # UUID
+
+
+def test_upload_session_invalid_json_returns_400(client):
+    r = client.post(
+        "/imnot/admin/staylink/report/payload/session",
+        content=b"not json",
+        headers={"Content-Type": "application/json"},
+    )
+    assert r.status_code == 400
+    assert "Invalid JSON" in r.json()["detail"]
 
 
 # ---------------------------------------------------------------------------

@@ -401,6 +401,12 @@ def _register_infra_routes(
     async def list_sessions() -> JSONResponse:
         return JSONResponse(store.list_sessions())
 
+    async def delete_session(session_id: str) -> JSONResponse:
+        deleted = store.delete_session(session_id)
+        if not deleted:
+            return JSONResponse(status_code=404, content={"detail": "Session not found"})
+        return JSONResponse({"status": "ok", "session_id": session_id})
+
     async def list_partners() -> JSONResponse:
         def _serialize_dp(dp: DatapointDef) -> dict:
             callback_delay: int | None = None
@@ -620,6 +626,7 @@ def _register_infra_routes(
 
     app.add_api_route("/healthz", healthz, methods=["GET"])
     app.add_api_route("/imnot/admin/sessions", list_sessions, methods=["GET"])
+    app.add_api_route("/imnot/admin/sessions/{session_id}", delete_session, methods=["DELETE"])
     app.add_api_route("/imnot/admin/partners", list_partners, methods=["GET"])
     app.add_api_route("/imnot/admin/partners", create_partner_handler, methods=["POST"])
     app.add_api_route("/imnot/admin/reload", reload_partners, methods=["POST"])
