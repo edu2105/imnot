@@ -223,3 +223,30 @@ def test_init_migration_guard_idempotent(tmp_path):
     # Calling init() again must not raise even though last_used column already exists
     s.init()
     s.close()
+
+
+def test_init_migrates_last_used_column(tmp_path):
+    """init() adds last_used to an existing sessions table that predates the column."""
+    import sqlite3 as _sqlite3
+
+    db_path = tmp_path / "legacy.db"
+    conn = _sqlite3.connect(db_path)
+    conn.executescript(
+        """
+        CREATE TABLE sessions (
+            session_id  TEXT PRIMARY KEY,
+            partner     TEXT NOT NULL,
+            datapoint   TEXT NOT NULL,
+            payload     TEXT NOT NULL,
+            created_at  TEXT NOT NULL
+        );
+        """
+    )
+    conn.close()
+
+    s = SessionStore(db_path=db_path)
+    s.init()
+    s.store_session_payload("staylink", "report", {"v": 1})
+    sessions = s.list_sessions()
+    assert sessions[0]["last_used"] is None
+    s.close()
