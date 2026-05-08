@@ -798,6 +798,7 @@ img, svg {
   background-color: var(--color-surface);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
+  border-top: 3px solid var(--color-brand);
   overflow: hidden;
   box-shadow: var(--shadow-md);
 }
@@ -857,6 +858,55 @@ img, svg {
 .sessions-table .td-partner    { font-weight: 500; color: var(--color-ink); }
 .sessions-table .td-datapoint  { color: var(--color-ink); }
 .sessions-table .td-created    { font-family: var(--font-mono); font-size: 0.75rem; color: var(--color-muted); }
+.sessions-table .td-last-used  { font-family: var(--font-mono); font-size: 0.75rem; color: var(--color-muted); }
+
+.session-id-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.btn-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.125rem;
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+  opacity: 0.5;
+  transition: opacity var(--t-fast), color var(--t-fast);
+  flex-shrink: 0;
+}
+
+.btn-copy:hover {
+  opacity: 1;
+  color: var(--color-brand);
+}
+
+.acc-upload-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.btn-danger-sm {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-brand);
+  background-color: var(--color-brand);
+  color: #fff;
+  cursor: pointer;
+  transition: background-color var(--t-fast), border-color var(--t-fast);
+}
+
+.btn-danger-sm:hover {
+  background-color: var(--color-brand-hover);
+  border-color: var(--color-brand-hover);
+}
 
 .sessions-table .td-empty {
   padding: 2.5rem 1.25rem;
@@ -1161,10 +1211,12 @@ img, svg {
                   <th>Partner</th>
                   <th>Datapoint</th>
                   <th>Created</th>
+                  <th>Last Used</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="sessions-tbody">
-                <tr><td colspan="4" class="td-empty">Loading…</td></tr>
+                <tr><td colspan="6" class="td-empty">Loading…</td></tr>
               </tbody>
             </table>
           </div>
@@ -1354,18 +1406,22 @@ img, svg {
           + '<h3>Payload Manager</h3>'
           + '<div class="form-stack">'
           + '<div class="form-group">'
-          + '<label class="form-label" for="acc-session-' + pid + '">Session ID (optional — leave blank for global)</label>'
-          + '<input id="acc-session-' + pid + '" type="text" placeholder="leave blank for global" class="form-input" style="width:100%;max-width:28rem;" />'
-          + '</div>'
-          + '<div class="form-group">'
-          + '<label class="form-label" for="acc-upload-json-' + pid + '">New JSON payload</label>'
+          + '<label class="form-label" for="acc-upload-json-' + pid + '">JSON payload</label>'
           + '<textarea id="acc-upload-json-' + pid + '" rows="4" placeholder=\'{"key": "value"}\' spellcheck="false" class="form-textarea"></textarea>'
           + '</div>'
-          + '<div>'
-          + '<button onclick="uploadAccordionPayload(' + '\'' + escHtml(partner) + '\',\'' + escHtml(dp) + '\',' + 'document.getElementById(\'acc-upload-json-' + pid + '\'))" class="btn btn-primary">'
+          + '<div class="acc-upload-actions">'
+          + '<button onclick="uploadGlobalPayload(' + '\'' + escHtml(partner) + '\',\'' + escHtml(dp) + '\',\'' + 'acc-upload-json-' + pid + '\')" class="btn btn-secondary">'
           + '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>'
-          + 'Upload Payload'
+          + 'Upload Global'
           + '</button>'
+          + '<button onclick="uploadAccordionPayload(' + '\'' + escHtml(partner) + '\',\'' + escHtml(dp) + '\',\'' + 'acc-upload-json-' + pid + '\',\'' + 'acc-session-' + pid + '\')" class="btn btn-primary">'
+          + '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>'
+          + 'Upload New Session'
+          + '</button>'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="acc-session-' + pid + '">Session ID (leave blank to use global)</label>'
+          + '<input id="acc-session-' + pid + '" type="text" placeholder="auto-filled after Upload New Session, or paste an existing ID" class="form-input" style="width:100%;max-width:32rem;" />'
           + '</div>'
           + '</div>'
           + '</div>';
@@ -1401,7 +1457,8 @@ img, svg {
         + 'document.getElementById(\'acc-ep-select-' + tid + '\'),'
         + 'document.getElementById(\'acc-body-' + tid + '\'),'
         + 'document.getElementById(\'acc-response-' + tid + '\'),'
-        + (callbackDelay !== null && callbackDelay !== undefined ? callbackDelay : 'null')
+        + (callbackDelay !== null && callbackDelay !== undefined ? callbackDelay : 'null') + ','
+        + (PAYLOAD_PATTERNS[pattern] ? '\'' + 'acc-session-' + tid + '\'' : 'null')
         + ')" class="btn btn-primary">'
         + '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>'
         + 'Run'
@@ -1434,38 +1491,57 @@ img, svg {
         .catch(function (e) { displayEl.textContent = 'Error: ' + e.message; });
     }
 
-    function uploadAccordionPayload(partner, dp, textareaEl) {
+    function uploadGlobalPayload(partner, dp, textareaId) {
+      var textareaEl = document.getElementById(textareaId);
       var raw = textareaEl.value.trim();
       var body;
       try { body = JSON.parse(raw); } catch (e) { notify('Invalid JSON: ' + e.message, 'error'); return; }
-      fetch('/imnot/admin/' + encodeURIComponent(partner) + '/' + encodeURIComponent(dp) + '/payload', {
-        method: 'POST', headers: authHeaders(), body: JSON.stringify(body),
-      })
+      var url = '/imnot/admin/' + encodeURIComponent(partner) + '/' + encodeURIComponent(dp) + '/payload';
+      fetch(url, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) })
         .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-        .then(function () { notify('Payload uploaded for ' + partner + '/' + dp + '.', 'ok'); })
+        .then(function () { notify('Global payload uploaded for ' + partner + '/' + dp + '.', 'ok'); })
+        .catch(function (e) { notify('Upload failed: ' + e.message, 'error'); });
+    }
+
+    function uploadAccordionPayload(partner, dp, textareaId, sessionFieldId) {
+      var textareaEl = document.getElementById(textareaId);
+      var sessionFieldEl = sessionFieldId ? document.getElementById(sessionFieldId) : null;
+      var raw = textareaEl.value.trim();
+      var body;
+      try { body = JSON.parse(raw); } catch (e) { notify('Invalid JSON: ' + e.message, 'error'); return; }
+      var url = '/imnot/admin/' + encodeURIComponent(partner) + '/' + encodeURIComponent(dp) + '/payload/session';
+      fetch(url, { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (d) {
+          if (sessionFieldEl && d.session_id) sessionFieldEl.value = d.session_id;
+          notify('Session payload uploaded for ' + partner + '/' + dp + '.', 'ok');
+        })
         .catch(function (e) { notify('Upload failed: ' + e.message, 'error'); });
     }
 
     // ---- Endpoint tester ----
 
-    function runEndpointTest(partner, dp, pattern, epSelectEl, bodyInputEl, responseDisplayEl, callbackDelay) {
+    function runEndpointTest(partner, dp, pattern, epSelectEl, bodyInputEl, responseDisplayEl, callbackDelay, sessionFieldId) {
       var selected = epSelectEl.value;
       var spaceIdx = selected.indexOf(' ');
       var method = selected.substring(0, spaceIdx);
       var path = selected.substring(spaceIdx + 1);
 
       var rawBody = bodyInputEl.value.trim();
+      var sessionId = sessionFieldId ? (document.getElementById(sessionFieldId) || {}).value || '' : '';
 
       if (pattern === 'polling') {
-        _runPollingTest(method, path, rawBody, responseDisplayEl);
+        _runPollingTest(method, path, rawBody, responseDisplayEl, sessionId);
       } else {
-        _runSingleRequest(method, path, rawBody, responseDisplayEl);
+        _runSingleRequest(method, path, rawBody, responseDisplayEl, sessionId);
       }
     }
 
-    function _runSingleRequest(method, path, rawBody, displayEl) {
+    function _runSingleRequest(method, path, rawBody, displayEl, sessionId) {
       displayEl.textContent = 'Running…';
-      var opts = { method: method, headers: { 'Content-Type': 'application/json' } };
+      var hdrs = { 'Content-Type': 'application/json' };
+      if (sessionId) hdrs['X-Imnot-Session'] = sessionId;
+      var opts = { method: method, headers: hdrs };
       if (rawBody && method !== 'GET' && method !== 'HEAD') {
         try { JSON.parse(rawBody); opts.body = rawBody; } catch (e) {
           notify('Invalid JSON body: ' + e.message, 'error'); return;
@@ -1493,9 +1569,11 @@ img, svg {
         .catch(function (e) { displayEl.textContent = 'Error: ' + e.message; });
     }
 
-    function _runPollingTest(submitMethod, submitPath, rawBody, displayEl) {
+    function _runPollingTest(submitMethod, submitPath, rawBody, displayEl, sessionId) {
       displayEl.textContent = 'Step 1: submitting…';
-      var opts = { method: submitMethod, headers: { 'Content-Type': 'application/json' } };
+      var hdrs = { 'Content-Type': 'application/json' };
+      if (sessionId) hdrs['X-Imnot-Session'] = sessionId;
+      var opts = { method: submitMethod, headers: hdrs };
       if (rawBody) {
         try { JSON.parse(rawBody); opts.body = rawBody; } catch (e) {
           notify('Invalid JSON body: ' + e.message, 'error'); return;
@@ -1535,7 +1613,9 @@ img, svg {
             + '\n\nStep N: fetching result for id=' + jobId + '…';
 
           var fetchPath = submitPath + '/' + jobId;
-          return fetch(fetchPath)
+          var fetchHdrs = {};
+          if (sessionId) fetchHdrs['X-Imnot-Session'] = sessionId;
+          return fetch(fetchPath, { headers: fetchHdrs })
             .then(function (r2) {
               var s2 = r2.status + ' ' + r2.statusText;
               if (r2.headers.get('Content-Type') && r2.headers.get('Content-Type').indexOf('application/json') !== -1) {
@@ -1563,18 +1643,44 @@ img, svg {
     function renderSessions(data) {
       var tbody = document.getElementById('sessions-tbody');
       if (!data || !data.length) {
-        tbody.innerHTML = '<tr><td colspan="4" class="td-empty">No active sessions.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="td-empty">No active sessions.</td></tr>';
         return;
       }
       tbody.innerHTML = data.map(function (s, i) {
         var rowClass = i % 2 !== 0 ? 'stripe' : '';
         return '<tr class="' + rowClass + '">'
-          + '<td class="td-session-id">' + escHtml(s.session_id) + '</td>'
+          + '<td class="td-session-id"><div class="session-id-cell"><span>' + escHtml(s.session_id) + '</span><button class="btn-copy" onclick="copyToClipboard(\'' + escHtml(s.session_id) + '\',this)" title="Copy session ID"><svg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'currentColor\' stroke-width=\'2\' width=\'12\' height=\'12\' aria-hidden=\'true\'><rect x=\'9\' y=\'9\' width=\'13\' height=\'13\' rx=\'2\'/><path stroke-linecap=\'round\' stroke-linejoin=\'round\' d=\'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\'/></svg></button></div></td>'
           + '<td class="td-partner">'    + escHtml(s.partner) + '</td>'
           + '<td class="td-datapoint">'  + escHtml(s.datapoint) + '</td>'
           + '<td class="td-created">'    + escHtml(s.created_at || '—') + '</td>'
+          + '<td class="td-last-used">'  + escHtml(s.last_used || '—') + '</td>'
+          + '<td><button class="btn-danger-sm" onclick="deleteSession(\'' + escHtml(s.session_id) + '\')">Delete</button></td>'
           + '</tr>';
       }).join('');
+    }
+
+    function copyToClipboard(text, btn) {
+      navigator.clipboard.writeText(text).then(function () {
+        var orig = btn.innerHTML;
+        btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" width="12" height="12" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+        setTimeout(function () { btn.innerHTML = orig; }, 1200);
+      }).catch(function () { notify('Copy failed', 'error'); });
+    }
+
+    function deleteSession(sessionId) {
+      fetch('/imnot/admin/sessions/' + encodeURIComponent(sessionId), {
+        method: 'DELETE', headers: authHeaders(),
+      })
+        .then(function (r) {
+          if (r.status === 404) throw new Error('Session not found');
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function () {
+          notify('Session ' + sessionId + ' deleted.', 'ok');
+          loadSessions();
+        })
+        .catch(function (e) { notify('Delete failed: ' + e.message, 'error'); });
     }
 
     // ---- Reload ----

@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     partner     TEXT NOT NULL,
     datapoint   TEXT NOT NULL,
     payload     TEXT NOT NULL,           -- JSON blob
-    created_at  TEXT NOT NULL
+    created_at  TEXT NOT NULL,
+    last_used   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS async_requests (
@@ -102,6 +103,12 @@ class SessionStore:
                 logger.info("Migrated poll_requests table to async_requests")
         except sqlite3.OperationalError as exc:
             logger.warning("Could not migrate poll_requests table: %s", exc)
+        try:
+            self._conn.execute("ALTER TABLE sessions ADD COLUMN last_used TEXT")
+            self._conn.commit()
+            logger.info("Migrated sessions table: added last_used column")
+        except sqlite3.OperationalError:
+            pass
         self._conn.executescript(_DDL)
         self._conn.commit()
         logger.info("Session store initialised at %s", self.db_path)
@@ -244,12 +251,18 @@ class SessionStore:
                     "SELECT payload FROM sessions WHERE session_id = ? AND partner = ? AND datapoint = ?",
                     (session_id, partner, datapoint),
                 )
+                row = cur.fetchone()
+                if row is not None:
+                    cur.execute(
+                        "UPDATE sessions SET last_used = ? WHERE session_id = ?",
+                        (_now(), session_id),
+                    )
             else:
                 cur.execute(
                     "SELECT payload FROM global_payloads WHERE partner = ? AND datapoint = ?",
                     (partner, datapoint),
                 )
-            row = cur.fetchone()
+                row = cur.fetchone()
 
         if row is None:
             return None
@@ -292,8 +305,16 @@ class SessionStore:
     def list_sessions(self) -> list[dict[str, Any]]:
         """Return all sessions ordered by creation time descending."""
         with self._cursor() as cur:
-            cur.execute("SELECT session_id, partner, datapoint, created_at FROM sessions ORDER BY created_at DESC")
+            cur.execute(
+                "SELECT session_id, partner, datapoint, created_at, last_used FROM sessions ORDER BY created_at DESC"
+            )
             return [dict(row) for row in cur.fetchall()]
+
+    def delete_session(self, session_id: str) -> bool:
+        """Delete a single session by ID. Returns True if deleted, False if not found."""
+        with self._cursor() as cur:
+            cur.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
+            return cur.rowcount > 0
 
     def clear_sessions(self) -> int:
         """Delete all sessions. Returns the number of rows deleted."""

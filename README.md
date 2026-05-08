@@ -406,7 +406,8 @@ Fixed infra endpoints (always available regardless of which partners are loaded)
 | `GET`  | `/healthz` | Health check — always returns `{"status":"ok","version":"…"}`, no auth required |
 | `GET`  | `/imnot/admin/partners` | List all loaded partners and their datapoints |
 | `POST` | `/imnot/admin/partners` | Validate and register a new partner from a raw YAML body — routes go live immediately |
-| `GET`  | `/imnot/admin/sessions` | List all active sessions |
+| `GET`    | `/imnot/admin/sessions` | List all active sessions — each entry includes `session_id`, `partner`, `datapoint`, `created_at`, and `last_used` (null until first payload resolution) |
+| `DELETE` | `/imnot/admin/sessions/{session_id}` | Delete a single session by ID — returns `200 {"status":"ok","session_id":"…"}` on success, `404` if not found |
 | `POST` | `/imnot/admin/reload`   | Hot-reload partner YAMLs without restarting the server |
 | `GET`  | `/imnot/admin/postman`  | Download a Postman collection v2.1 JSON for all loaded partners |
 | `GET`  | `/imnot/admin/ui`       | Admin web UI — browse loaded partners and their datapoints, inspect/upload payloads, test consumer endpoints (including full polling flow), manage active sessions, hot-reload YAML. Auth-gated by the same Bearer token as all other admin routes. Enabled by default; configure under `[ui]` in `imnot.toml`. |

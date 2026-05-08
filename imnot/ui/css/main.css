@@ -409,6 +409,7 @@
   background-color: var(--color-surface);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
+  border-top: 3px solid var(--color-brand);
   overflow: hidden;
   box-shadow: var(--shadow-md);
 }
@@ -468,6 +469,55 @@
 .sessions-table .td-partner    { font-weight: 500; color: var(--color-ink); }
 .sessions-table .td-datapoint  { color: var(--color-ink); }
 .sessions-table .td-created    { font-family: var(--font-mono); font-size: 0.75rem; color: var(--color-muted); }
+.sessions-table .td-last-used  { font-family: var(--font-mono); font-size: 0.75rem; color: var(--color-muted); }
+
+.session-id-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.btn-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.125rem;
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+  opacity: 0.5;
+  transition: opacity var(--t-fast), color var(--t-fast);
+  flex-shrink: 0;
+}
+
+.btn-copy:hover {
+  opacity: 1;
+  color: var(--color-brand);
+}
+
+.acc-upload-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.btn-danger-sm {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-brand);
+  background-color: var(--color-brand);
+  color: #fff;
+  cursor: pointer;
+  transition: background-color var(--t-fast), border-color var(--t-fast);
+}
+
+.btn-danger-sm:hover {
+  background-color: var(--color-brand-hover);
+  border-color: var(--color-brand-hover);
+}
 
 .sessions-table .td-empty {
   padding: 2.5rem 1.25rem;
