@@ -859,6 +859,29 @@ img, svg {
 .sessions-table .td-created    { font-family: var(--font-mono); font-size: 0.75rem; color: var(--color-muted); }
 .sessions-table .td-last-used  { font-family: var(--font-mono); font-size: 0.75rem; color: var(--color-muted); }
 
+.session-id-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.btn-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.125rem;
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+  opacity: 0.5;
+  transition: opacity var(--t-fast), color var(--t-fast);
+  flex-shrink: 0;
+}
+
+.btn-copy:hover {
+  opacity: 1;
+  color: var(--color-brand);
+}
+
 .acc-upload-actions {
   display: flex;
   gap: 0.5rem;
@@ -1397,7 +1420,7 @@ img, svg {
           + '</button>'
           + '</div>'
           + '<div class="form-group">'
-          + '<label class="form-label" for="acc-session-' + pid + '">Session ID</label>'
+          + '<label class="form-label" for="acc-session-' + pid + '">Session ID (leave blank to use global)</label>'
           + '<input id="acc-session-' + pid + '" type="text" placeholder="auto-filled after Upload New Session, or paste an existing ID" class="form-input" style="width:100%;max-width:32rem;" />'
           + '</div>'
           + '</div>'
@@ -1626,7 +1649,7 @@ img, svg {
       tbody.innerHTML = data.map(function (s, i) {
         var rowClass = i % 2 !== 0 ? 'stripe' : '';
         return '<tr class="' + rowClass + '">'
-          + '<td class="td-session-id">' + escHtml(s.session_id) + '</td>'
+          + '<td class="td-session-id"><div class="session-id-cell"><span>' + escHtml(s.session_id) + '</span><button class="btn-copy" onclick="copyToClipboard(\'' + escHtml(s.session_id) + '\',this)" title="Copy session ID"><svg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'currentColor\' stroke-width=\'2\' width=\'12\' height=\'12\' aria-hidden=\'true\'><rect x=\'9\' y=\'9\' width=\'13\' height=\'13\' rx=\'2\'/><path stroke-linecap=\'round\' stroke-linejoin=\'round\' d=\'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\'/></svg></button></div></td>'
           + '<td class="td-partner">'    + escHtml(s.partner) + '</td>'
           + '<td class="td-datapoint">'  + escHtml(s.datapoint) + '</td>'
           + '<td class="td-created">'    + escHtml(s.created_at || '—') + '</td>'
@@ -1634,6 +1657,14 @@ img, svg {
           + '<td><button class="btn-danger-sm" onclick="deleteSession(\'' + escHtml(s.session_id) + '\')">Delete</button></td>'
           + '</tr>';
       }).join('');
+    }
+
+    function copyToClipboard(text, btn) {
+      navigator.clipboard.writeText(text).then(function () {
+        var orig = btn.innerHTML;
+        btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" width="12" height="12" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+        setTimeout(function () { btn.innerHTML = orig; }, 1200);
+      }).catch(function () { notify('Copy failed', 'error'); });
     }
 
     function deleteSession(sessionId) {
