@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [1.1.0] - 2026-05-08
+
+### Added
+
+- Session-aware endpoint testing and session management ([b1a4f14](https://github.com/edu2105/imnot/commit/b1a4f14a5399018d745bb2f7ae4b47da193a0f9e))
+
+### Fixed
+
+- Red Delete button and table accent stripe; cover last_used migration ([e470983](https://github.com/edu2105/imnot/commit/e470983ff1a45456c6a92d3b5f69165c121fbcf8))
+- Restore session ID label hint and add clipboard copy in sessions table ([d644407](https://github.com/edu2105/imnot/commit/d644407e4b93fb56e3f82d14ca1c7683bb53516f))
+- Split upload button into Upload Global and Upload New Session ([dc7a6c1](https://github.com/edu2105/imnot/commit/dc7a6c1a971cc36bbca6647a9c179a35b876f7e7))
+
 ## [1.0.2] - 2026-05-07
 
 ### Fixed
