@@ -470,6 +470,12 @@
 .sessions-table .td-created    { font-family: var(--font-mono); font-size: 0.75rem; color: var(--color-muted); }
 .sessions-table .td-last-used  { font-family: var(--font-mono); font-size: 0.75rem; color: var(--color-muted); }
 
+.acc-upload-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .btn-danger-sm {
   display: inline-flex;
   align-items: center;
