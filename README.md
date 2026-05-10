@@ -8,19 +8,66 @@
 [![codecov](https://codecov.io/gh/edu2105/imnot/branch/main/graph/badge.svg)](https://codecov.io/gh/edu2105/imnot)
 [![PyPI version](https://badge.fury.io/py/imnot.svg)](https://badge.fury.io/py/imnot)
 
-imnot is a stateful API mock server for integration testing.
-A **partner** is any external API your service depends on — a booking platform, a payment gateway, a data feed. You describe it in YAML, and imnot turns it into a local mock server your tests can hit.
+**YAML in. Mock server out.** Define external APIs in a single file, run `imnot start`, and get a fully functional local mock server — stateful flows, session isolation, and an Admin UI included. No code required.
 
-Define an external API as a YAML file, run `imnot start`, and you get a fully functional
-mock server — no code changes required to add new APIs or endpoints.
+<!-- Screenshot: add assets/admin-ui.png once available -->
+
+---
 
 ## Why imnot?
 
-- **YAML in, mock server out.** One file defines an external API's endpoints, patterns, and responses. No code, no JVM.
-- **Stateful flows, not just fixed responses.** OAuth, polling submit/poll/fetch, callback webhooks, and per-test session isolation — all modeled in YAML, not scripted.
-- **Lives next to your code.** The mock definition is version-controlled alongside the integration it tests and runs anywhere Docker runs.
+- **Zero code.** One YAML file per external API. No JVM, no framework, no boilerplate.
+- **Stateful, not just stubbed.** OAuth, polling, callbacks, paginated lists, and per-test session isolation — all modeled in YAML.
+- **Ships with your tests.** Partner definitions are version-controlled alongside the integration they test and run anywhere Docker runs.
 
-Reach for other tools when you need conditional responses based on request body content.
+---
+
+## Quick start
+
+Requires Python 3.11+.
+
+```bash
+pipx install imnot
+imnot init
+imnot start
+```
+
+> `pipx` installs CLI tools into isolated environments. Alternatively: `pip install imnot` inside an existing virtual environment.
+
+`imnot init` creates a `partners/` directory with two working example partners (`staylink` and `bookingco`) that cover all six patterns. Edit or replace them whenever you're ready.
+
+---
+
+## Patterns
+
+| Pattern | What it mocks |
+|---------|--------------|
+| `oauth` | Client-credentials token endpoint — returns a standard JWT |
+| `static` | Any fixed-response endpoint — health checks, custom auth, lookup tables |
+| `fetch` | Synchronous GET that returns an uploaded payload |
+| `polling` | N-step async flow: submit → status check(s) → fetch result |
+| `callback` | Webhook simulation — imnot fires the outbound call after receiving a submit |
+| `paginated` | Offset/limit list endpoints sliced from an uploaded array at request time |
+
+All `fetch`, `polling`, and `paginated` endpoints support `X-Imnot-Session` for per-test isolation — parallel test runs stay independent.
+
+→ [Full pattern reference with YAML examples](docs/patterns.md)
+
+---
+
+## Admin UI
+
+imnot ships an embedded Admin UI at `GET /imnot/admin/ui`. No setup required — it's enabled by default and auth-gated by the same Bearer token as the rest of the admin API.
+
+From the browser you can:
+
+- Browse loaded partners and their datapoints
+- Upload and inspect payloads (global or session-scoped)
+- Run end-to-end endpoint tests — including full polling flows
+- Manage active sessions
+- Hot-reload YAML without restarting the server
+
+---
 
 ## AI-ready
 
@@ -44,638 +91,25 @@ Output only the YAML — no code, no explanation.
 [paste your spec here]
 ```
 
-## Quick start
-
-Requires Python 3.11 or later.
-
-```bash
-pipx install imnot
-imnot init
-imnot start
-```
-
-> `pipx` installs CLI tools into isolated environments — no venv setup needed.
-> Alternatively: `pip install imnot` inside an existing virtual environment.
-
-`imnot init` creates a `partners/` directory in the current folder with two working
-example partners (`staylink` and `bookingco`) that cover all the main patterns. Edit
-or replace them with your own YAML definitions whenever you're ready.
-
-Expected output from `imnot start`:
-```
-Starting imnot on http://127.0.0.1:8000
-INFO:     Started server process [12345]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-```
-
-See what endpoints are available (no server needed):
-```bash
-imnot routes
-```
-
-## How it works
-
-- **Partner definitions** live in `partners/<name>/partner.yaml`. Each file declares the
-  partner's endpoints, the interaction pattern each endpoint follows, and the expected
-  response shape.
-- **Patterns** capture common API interaction models:
-  - `oauth` — client-credentials token endpoint that returns a static JWT.
-  - `static` — endpoint that always returns a fixed JSON body defined in the YAML.
-  - `fetch` — synchronous GET that returns the stored payload for a datapoint, with optional session isolation.
-  - `polling` — flexible N-step async flow defined in YAML: submit → optional status check(s) → fetch result.
-  - `callback` — imnot proactively delivers a payload to a callback URL after receiving a submit request.
-  - `paginated` — offset/limit list endpoint that slices a stored array payload at request time.
-- **Payload storage** supports two modes:
-  - *Global* — one payload per datapoint, last write wins.
-  - *Session* — isolated payload per test run, selected via `X-Imnot-Session` header.
-- **Admin API** is always available at `/imnot/admin/` for uploading payloads and
-  inspecting sessions.
-
-### Interaction sequence (polling pattern)
-
-```
-Test Harness                       imnot
-     |                               |
-     |  POST /admin/.../payload      |   (upload the response payload)
-     |------------------------------>|
-     |  200 OK                       |
-     |<------------------------------|
-     |                               |
-     |  POST /partner/resource       |   step 1 — submit
-     |------------------------------>|
-     |  202 Accepted                 |
-     |  Location: .../resource/{id}  |
-     |<------------------------------|
-     |                               |
-     |  HEAD /partner/resource/{id}  |   step 2 — status check (optional)
-     |------------------------------>|
-     |  201  Status: COMPLETED       |
-     |<------------------------------|
-     |                               |
-     |  GET  /partner/resource/{id}  |   step 3 — fetch result
-     |------------------------------>|
-     |  200  { ...payload }          |
-     |<------------------------------|
-```
-
-The number and shape of steps is configurable per partner — 2-step, 3-step, and
-body-delivered IDs are all supported. See the `polling` pattern documentation below.
-
-## Patterns
-
-### `oauth`
-
-Returns a static JWT-shaped response. Use for standard OAuth 2.0 client-credentials token endpoints.
-
-```yaml
-- name: token
-  pattern: oauth
-  endpoints:
-    - method: POST
-      path: /oauth/token
-      response:
-        status: 200
-        token_type: Bearer
-        expires_in: 3600
-```
-
-Response body:
-```json
-{ "access_token": "<static-jwt>", "token_type": "Bearer", "expires_in": 3600 }
-```
-
-### `static`
-
-Returns whatever JSON body is defined under `response.body` in the YAML. Use for
-non-standard auth endpoints, health checks, or any fixed response.
-
-Use `static` instead of `oauth` when the partner token endpoint returns **custom fields**
-that don't match the standard `access_token / token_type / expires_in` shape:
-
-```yaml
-- name: token
-  pattern: static
-  endpoints:
-    - method: POST
-      path: /bookingco/auth/token
-      response:
-        status: 200
-        body:
-          token: "static-token-replace-in-real-use"
-          my_custom_field: "some-value"
-```
-
-Static responses can be updated without restarting the server: edit the YAML, then call
-`POST /imnot/admin/reload`.
-
-### `fetch`
-
-Single GET endpoint that returns the stored payload for the datapoint. Supports
-`X-Imnot-Session` for test isolation. Use for synchronous read endpoints.
-
-```yaml
-- name: charges
-  pattern: fetch
-  endpoints:
-    - method: GET
-      path: /bookingco/v1/charges
-      response:
-        status: 200
-```
-
-Upload a payload first, then GET returns it:
-```bash
-curl -X POST http://localhost:8000/imnot/admin/bookingco/charges/payload \
-     -H "Content-Type: application/json" \
-     -d '{"charges": [{"id": "C1", "amount": 150}]}'
-
-curl http://localhost:8000/bookingco/v1/charges
-```
-
-### `polling`
-
-Flexible N-step async flow. Use for external APIs that submit work asynchronously and
-return the result via a separate endpoint. Step count and HTTP methods are fully
-configurable. Behavior is opt-in via two response flags:
-
-- `generates_id: true` — generate a UUID and deliver it via header or body field
-- `returns_payload: true` — return the stored payload for this datapoint
-
-**Header delivery (3 steps):**
-
-```yaml
-- name: reservation
-  pattern: polling
-  endpoints:
-    - step: 1
-      method: POST
-      path: /staylink/reservations
-      response:
-        status: 202
-        generates_id: true
-        id_header: Location
-        id_header_value: /staylink/reservations/{id}
-    - step: 2
-      method: HEAD
-      path: /staylink/reservations/{id}
-      response:
-        status: 201
-        headers:
-          Status: COMPLETED
-    - step: 3
-      method: GET
-      path: /staylink/reservations/{id}
-      response:
-        status: 200
-        returns_payload: true
-```
-
-**Body delivery (separate status and results endpoints):**
-
-```yaml
-- name: rate-push
-  pattern: polling
-  endpoints:
-    - step: 1
-      method: POST
-      path: /ratesync/rates
-      response:
-        status: 200
-        generates_id: true
-        id_body_field: JobReferenceID
-    - step: 2
-      method: GET
-      path: /ratesync/jobs/{id}/status
-      response:
-        status: 200
-        body:
-          status: COMPLETED
-    - step: 3
-      method: GET
-      path: /ratesync/jobs/{id}/results
-      response:
-        status: 200
-        returns_payload: true
-```
-
-### `callback`
-
-imnot receives a submit request, returns immediately, then fires an outbound HTTP call
-to a callback URL with the stored payload — simulating the external service calling back your
-webhook endpoint.
-
-**Callback URL from request body field:**
-
-```yaml
-- name: rate-push
-  pattern: callback
-  endpoints:
-    - method: POST
-      path: /partner/rates
-      response:
-        status: 202
-        callback_url_field: callbackUrl     # body JSON field containing the callback URL
-        callback_method: POST               # default: POST
-        callback_delay_seconds: 0           # default: 0 (immediate)
-```
-
-**Callback URL from request header:**
-
-```yaml
-- name: rate-push
-  pattern: callback
-  endpoints:
-    - method: POST
-      path: /partner/rates
-      response:
-        status: 202
-        callback_url_header: X-Callback-URL
-```
-
-Exactly one of `callback_url_field` or `callback_url_header` is required. The submit
-response body always includes a `request_id` (UUID) that can be used with the retrigger
-admin endpoint.
-
-**Interaction sequence:**
-
-```
-Test Harness                    imnot                     Test Harness Webhook
-     |                             |                               |
-     |  POST /admin/.../payload    |                               |
-     |---------------------------->|                               |
-     |  POST /partner/rates        |                               |
-     |  { "callbackUrl": "..." }   |                               |
-     |---------------------------->|                               |
-     |  202 { "request_id": "..." }|                               |
-     |<----------------------------|                               |
-     |                             |  POST http://.../webhook      |
-     |                             |  { ...payload... }            |
-     |                             |------------------------------>|
-```
-
-To re-fire the callback without restarting the flow:
-```bash
-curl -X POST http://localhost:8000/imnot/admin/{partner}/{datapoint}/callback/{request_id}/retrigger
-```
-
-The retrigger always uses the **current** stored payload, so you can update the payload
-between attempts.
-
-### `paginated`
-
-Upload a full array of items once; imnot slices the array at request time based on `offset`
-and `limit` query parameters. Use for list endpoints that consumers page through.
-
-```yaml
-- name: listing
-  pattern: paginated
-  endpoints:
-    - method: GET
-      path: /ratesync/listings
-      response:
-        status: 200
-  pagination:
-    style: offset_limit      # v1 only value
-    items_field: results     # required: key that holds the page in the response
-    total_field: total       # optional: total dataset count
-    has_more_field: hasMore  # optional: boolean — more pages exist
-    next_offset_field: nextOffset  # optional: offset for the next page (null on last page)
-```
-
-Upload the dataset:
-```bash
-curl -X POST http://localhost:8000/imnot/admin/ratesync/listing/payload \
-  -H "Content-Type: application/json" \
-  -d '[{"id":1},{"id":2},{"id":3},{"id":4},{"id":5}]'
-```
-
-Fetch the first page:
-```bash
-curl "http://localhost:8000/ratesync/listings?offset=0&limit=2"
-# → {"results":[{"id":1},{"id":2}],"total":5,"hasMore":true,"nextOffset":2}
-```
-
-The default page size (when `limit` is not sent) is configured via `imnot.toml`:
-```toml
-[pagination]
-default_limit = 50
-```
-
-Session isolation (`X-Imnot-Session`) is supported — two sessions can hold different datasets
-and page through them independently.
-
-For full schema documentation see [partners/README.md](partners/README.md#pattern-paginated).
-
-## Session-isolated testing
-
-Any `fetch`, `polling`, or `paginated` endpoint supports session isolation via `X-Imnot-Session`.
-
-```bash
-# Upload a session-scoped payload — returns a session_id
-SESSION=$(curl -s -X POST http://localhost:8000/imnot/admin/bookingco/charges/payload/session \
-               -H "Content-Type: application/json" \
-               -d '{"charges": [{"id": "S1"}]}' | jq -r .session_id)
-
-# Use the session in your request
-curl http://localhost:8000/bookingco/v1/charges -H "X-Imnot-Session: $SESSION"
-```
-
-Multiple test users can run in parallel with isolated payloads — each gets their own `session_id`.
-
-## Admin endpoints
-
-For every `fetch`, `polling`, `callback`, or `paginated` datapoint, imnot auto-generates payload endpoints:
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/imnot/admin/{partner}/{datapoint}/payload` | Upload global payload |
-| `GET`  | `/imnot/admin/{partner}/{datapoint}/payload` | Inspect current global payload |
-| `POST` | `/imnot/admin/{partner}/{datapoint}/payload/session` | Upload session payload → returns `session_id` |
-| `GET`  | `/imnot/admin/{partner}/{datapoint}/payload/session/{session_id}` | Inspect a session payload |
-| `POST` | `/imnot/admin/{partner}/{datapoint}/callback/{request_id}/retrigger` | Re-fire callback for a prior submit (`callback` pattern only) |
-
-`oauth` and `static` datapoints do **not** get payload endpoints — their responses are
-fully defined by the YAML and never use the payload store.
-
-Fixed infra endpoints (always available regardless of which partners are loaded):
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET`  | `/healthz` | Health check — always returns `{"status":"ok","version":"…"}`, no auth required |
-| `GET`  | `/imnot/admin/partners` | List all loaded partners and their datapoints |
-| `POST` | `/imnot/admin/partners` | Validate and register a new partner from a raw YAML body — routes go live immediately |
-| `GET`    | `/imnot/admin/sessions` | List all active sessions — each entry includes `session_id`, `partner`, `datapoint`, `created_at`, and `last_used` (null until first payload resolution) |
-| `DELETE` | `/imnot/admin/sessions/{session_id}` | Delete a single session by ID — returns `200 {"status":"ok","session_id":"…"}` on success, `404` if not found |
-| `POST` | `/imnot/admin/reload`   | Hot-reload partner YAMLs without restarting the server |
-| `GET`  | `/imnot/admin/postman`  | Download a Postman collection v2.1 JSON for all loaded partners |
-| `GET`  | `/imnot/admin/ui`       | Admin web UI — browse loaded partners and their datapoints, inspect/upload payloads, test consumer endpoints (including full polling flow), manage active sessions, hot-reload YAML. Auth-gated by the same Bearer token as all other admin routes. Enabled by default; configure under `[ui]` in `imnot.toml`. |
-
-`POST /imnot/admin/partners` accepts a raw YAML body (same format as `partner.yaml` files).
-Use `?force=true` to overwrite an existing partner. Returns `201` on create, `200` on overwrite,
-`409` if the partner already exists without `force`, and `422` for invalid YAML.
-
-> **Note — ephemeral storage:** partners written at runtime are stored on the server's local
-> filesystem. In a containerised deployment (Docker, Kubernetes), they will be lost if the pod
-> restarts unless the partners directory is backed by a persistent volume. This is an
-> infrastructure concern — imnot does not manage persistence.
-
-Docs endpoints (public, no auth required):
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET`  | `/imnot/docs` | Serve `README.md` as plain text |
-| `GET`  | `/imnot/docs/partners` | Serve `partners/README.md` as plain text |
-
-### Securing admin endpoints
-
-By default admin endpoints are open — suitable for local development only.
-When deploying on a shared network, protect them with a Bearer token:
-
-```bash
-# via environment variable (recommended)
-IMNOT_ADMIN_KEY=your-secret-key imnot start
-
-# or as a CLI flag
-imnot start --admin-key your-secret-key
-```
-
-All `/imnot/admin/*` requests then require:
-```
-Authorization: Bearer your-secret-key
-```
-
-Consumer endpoints (`/oauth/token`, partner routes, etc.) are never affected.
-Set `IMNOT_ADMIN_KEY` in `docker-compose.yml` for Docker deployments.
-
-## CLI
-
-| Command | Description |
-|---------|-------------|
-| `imnot init` | Scaffold a new project with example partner definitions and `imnot.toml` (optional — server works without it) |
-| `imnot init --dir <path>` | Scaffold into a specific directory (created if it does not exist) |
-| `imnot start` | Load partner YAMLs and start the server. Starts with zero partners if no `partners/` dir exists. Auto-creates `imnot.toml` on first run. |
-| `imnot start --reload` | Start with auto-restart on any YAML change (recommended for development) |
-| `imnot stop` | Stop the running server by sending SIGTERM to the PID in `imnot.pid` |
-| `imnot stop --pid-file <path>` | Stop using an explicit PID file path |
-| `imnot generate --file <path>` | Validate and scaffold a partner YAML into `partners/` |
-| `imnot generate --file <path> --dry-run --json` | Validate only — print structured result, write nothing |
-| `imnot export postman` | Generate a Postman collection v2.1 JSON from all loaded partners |
-| `imnot export postman --out <file>` | Write the collection to a specific file (default: `imnot-collection.json`) |
-| `imnot export postman --partner <name>` | Include only the named partner (repeatable: `--partner a --partner b`) |
-| `imnot status` | Show active sessions in the store |
-| `imnot routes` | List all consumer and admin endpoints per partner (works from any subdirectory) |
-| `imnot payload get <partner> <datapoint>` | Print the current global payload |
-| `imnot payload set <partner> <datapoint> <file>` | Upload a global payload from a JSON file |
-| `imnot sessions clear` | Delete all sessions from the store |
-
-`imnot start` accepts `--admin-key` / `IMNOT_ADMIN_KEY` to protect all `/imnot/admin/*` endpoints with a Bearer token. CLI flags always override `imnot.toml` values.
-
-## Configuration
-
-`imnot.toml` is created automatically by `imnot start` on first run. Edit it to persist settings without needing CLI flags every time.
-
-```toml
-[server]
-# host = "127.0.0.1"                   # bind host
-# port = 8000                          # bind port
-# partners_dir = "partners"            # path to partner YAML directory
-# db = "imnot.db"                      # path to SQLite database file
-# base_url = "http://localhost:8000"   # used in generated Postman collections
-# stop_timeout_seconds = 5             # seconds to wait for graceful shutdown
-
-[logging]
-# log_dir = "."                           # directory for log files
-# max_bytes = 10485760                    # rotate when log file reaches this size (10 MB)
-# backup_name_format = "date"             # "date" (2026-04-20) or "epoch" (1745789123)
-# archived_logs_dir = "./archived-logs"   # rotated backups, relative to log_dir
-# debug = false                           # enable DEBUG-level logs
-# stdout = false                          # also emit to stdout (useful for Docker/ECS)
-
-[pagination]
-# default_limit = 50                      # default page size for paginated pattern endpoints
-
-[ui]
-# enabled = true                          # set to false to disable the admin UI entirely (→ 404)
-# default_theme = "dark"                  # "light", "dark", or "system" (follows OS preference)
-```
-
-imnot writes two log files alongside `imnot.db`:
-- `imnot.cli.log` — CLI operations (start, stop, generate, etc.)
-- `imnot.http.log` — all HTTP traffic except `/healthz`
-
-When a log file reaches `max_bytes`, it is moved to `archived-logs/` with a timestamp in the filename and a new file starts. `IMNOT_ADMIN_KEY` is never written to logs.
-
-## Docker
-
-Use Docker when you want to run imnot as a persistent background service — for example,
-on a shared dev server, in CI, or alongside other containers. For local development,
-the local install above is simpler.
-
-A pre-built image is published at `ghcr.io/edu2105/imnot:latest`. To use it without
-building locally, set the image in `docker-compose.yml`:
-
-```yaml
-image: ghcr.io/edu2105/imnot:latest
-```
-
-The `partners/` directory and `data/` (SQLite db) are volume-mounted — partners
-can be added without rebuilding the image, and state persists across restarts.
-
-```bash
-docker compose up                   # start
-docker compose restart              # reload after adding a partner YAML
-docker compose down                 # stop (data persists in ./data/)
-docker compose down -v              # stop and wipe all state
-```
-
-The container binds to `127.0.0.1` by default. To expose it on the network,
-update `docker-compose.yml` and set an admin key:
-
-```yaml
-ports:
-  - "0.0.0.0:8000:8000"
-environment:
-  IMNOT_ADMIN_KEY: "your-secret-key"
-```
-
-## Deploy to the cloud
-
-The published Docker image (`ghcr.io/edu2105/imnot`) runs on any container platform.
-How you get that container running in your cloud is your domain — the specifics depend
-on your provider, infrastructure, and team setup. What imnot does require, regardless
-of where it runs:
-
-- **Persistent storage** — mount a volume at `/app/data` so the SQLite database
-  survives container restarts. Without it, all session state is lost on redeploy.
-- **Admin key** — set `IMNOT_ADMIN_KEY` via environment variable. Required for
-  any deployment reachable outside localhost.
-- **Host binding** — pass `--host 0.0.0.0` as the start command so the container
-  port is reachable from outside. The default `127.0.0.1` binding blocks external traffic.
-- **Partner YAMLs** — either commit them to the repo (included in the image build)
-  or mount a volume at `/app/partners` to manage them independently.
-- **Health checks** — use `GET /healthz` for liveness and readiness probes. It always
-  returns `200 {"status":"ok","version":"…"}` with no auth and no I/O.
-
-## Adding a new partner
-
-### From the CLI (local / development)
-
-Use `imnot generate` to validate and scaffold a partner YAML in one step — no need to know
-the directory layout or manually create files.
-
-```bash
-# Write your partner.yaml (see partners/README.md for the schema), then:
-imnot generate --file /path/to/partner.yaml
-
-# Dry-run first to validate without writing anything:
-imnot generate --dry-run --file /path/to/partner.yaml --json
-```
-
-`imnot generate` validates the YAML, creates `partners/<name>/` if needed, writes the file,
-and prints a summary of all consumer and admin endpoints.
-
-**With `--reload` (recommended for development):** the server picks up the new file and restarts automatically.
-
-**Without `--reload`:** call `POST /imnot/admin/reload` or restart `imnot start`.
-
-### Over HTTP (containerised deployment)
-
-When imnot runs as a pod or container, use `POST /imnot/admin/partners` to register a new
-partner without exec-ing into the container. The endpoint validates the YAML, writes it to
-the partners directory, and registers its routes immediately — no restart required.
-
-```bash
-curl -X POST http://localhost:8000/imnot/admin/partners \
-     -H "Authorization: Bearer $IMNOT_ADMIN_KEY" \
-     --data-binary @/path/to/partner.yaml
-
-# Overwrite an existing partner definition:
-curl -X POST "http://localhost:8000/imnot/admin/partners?force=true" \
-     -H "Authorization: Bearer $IMNOT_ADMIN_KEY" \
-     --data-binary @/path/to/partner.yaml
-```
-
-`imnot generate` and `POST /imnot/admin/partners` use identical validation — both write the
-same `partners/<name>/partner.yaml` file and produce the same JSON result shape.
-
-> **Persistence reminder:** partners written at runtime live on the container's local filesystem.
-> Mount a persistent volume at `/app/partners` if you need them to survive restarts.
-
-You can also write the YAML manually. Either way, the directory structure is:
-
-```
-partners/
-└── mypartner/
-    ├── partner.yaml
-    └── payloads/       # optional example payload files
-```
-
-## Project structure
-
-```
-imnot/
-├── imnot/
-│   ├── api/           # FastAPI app factory
-│   ├── engine/
-│   │   ├── patterns/  # oauth / static / fetch / polling / callback / paginated handlers
-│   │   ├── router.py  # dynamic route registration
-│   │   └── session_store.py  # SQLite persistence
-│   ├── loader/        # YAML partner definition parser
-│   ├── partners.py    # register_partner() — shared by CLI and HTTP admin endpoint
-│   └── cli.py         # imnot CLI
-├── partners/
-│   ├── staylink/      # StayLink example (oauth + polling)
-│   │   ├── partner.yaml
-│   │   └── payloads/
-│   └── bookingco/     # BookingCo example (static token + fetch charges)
-│       └── partner.yaml
-└── tests/
-```
-
-## Limitations & Roadmap
-
-- `callback` pattern callbacks have no retry logic — if the callback URL is unreachable, the failure is logged and the retrigger endpoint can be used to re-fire.
-- No native HTTPS support — use a reverse proxy (Nginx, Caddy) to terminate TLS.
-- Admin UI is desktop-only — no mobile layout. Session-scoped payload upload and partner registration via UI are not yet supported (API only).
-- XML response bodies are not supported — responses are always JSON.
-- No built-in mTLS support.
-- Single-node only — the SQLite session store is not shared across instances.
-
-## Contributing
-
-**Run the unit + integration test suite:**
-```bash
-git clone https://github.com/edu2105/imnot.git
-cd imnot
-pip install -e ".[dev]"
-pytest
-```
-
-**Run the end-to-end QA suite** (requires a local `imnot` install):
-```bash
-./scripts/qa/run.sh
-```
-
-The QA suite spins up a real server in a fresh temp directory and runs five phases:
-1. CLI commands (`imnot init`, `routes`, `export postman`, `generate`)
-2. Full pattern flows for the default partners (staylink + bookingco)
-3. `imnot generate testingpartner` covering all six patterns + hot reload
-4. Endpoint flows for the generated partner (oauth, polling, static, fetch, callback, paginated)
-5. Stop / restart / DB persistence check
-
-Run this after any change that could affect the public contract: YAML schema, CLI interface, pattern behaviour, or the session store.
-
-**Add a new pattern:**
-Patterns live in `imnot/engine/patterns/`. Each pattern is a module that registers one or
-more FastAPI route handlers given an `EndpointDef`. Look at `fetch.py` or `async_.py` (polling pattern) for the
-interface — the router calls the pattern's handler factory for each datapoint whose pattern
-matches. Add your module there and wire it into `router.py`.
-
-**Add a new partner:**
-No code required — write a `partner.yaml` under `partners/<name>/`. The full schema and
-field reference is in `partners/README.md`.
-
-**Looking for where to start?**
-Open issues are tracked at [github.com/edu2105/imnot/issues](https://github.com/edu2105/imnot/issues).
+---
+
+## Learn more
+
+| Topic | Doc |
+|-------|-----|
+| Pattern reference | [docs/patterns.md](docs/patterns.md) |
+| Admin API reference | [docs/admin-api.md](docs/admin-api.md) |
+| CLI & configuration | [docs/cli.md](docs/cli.md) |
+| Docker & deployment | [docs/deployment.md](docs/deployment.md) |
+| Partner YAML schema | [partners/README.md](partners/README.md) |
+| Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
+
+---
+
+## Limitations
+
+- **Callback retries** — no built-in retry logic; use the retrigger endpoint to re-fire.
+- **JSON only** — response bodies are always JSON, no XML support.
+- **Single-node** — SQLite session store is not shared across instances.
+- **Admin UI** — desktop layout only; no mobile breakpoints.
+- **No native TLS** — use a reverse proxy (Nginx, Caddy) to terminate HTTPS.
