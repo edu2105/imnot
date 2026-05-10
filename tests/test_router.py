@@ -1039,3 +1039,41 @@ def test_paginated_default_limit_on_app_state(tmp_path, store):
     app = FastAPI()
     register_routes(app, [], store, partners_dir=partners_dir, default_limit=25)
     assert app.state.default_limit == 25
+
+
+# ---------------------------------------------------------------------------
+# DELETE /imnot/admin/partners/{partner_name}
+# ---------------------------------------------------------------------------
+
+
+def test_delete_partner_removes_file_and_list(tmp_path, store):
+    c, partners_dir = _make_client(tmp_path, store)
+    c.post("/imnot/admin/partners", content=_NEW_PARTNER_YAML)
+
+    r = c.delete("/imnot/admin/partners/bookingco")
+    assert r.status_code == 200
+    assert r.json() == {"status": "ok", "partner": "bookingco"}
+
+    assert not (partners_dir / "bookingco").exists()
+    names = [p["partner"] for p in c.get("/imnot/admin/partners").json()]
+    assert "bookingco" not in names
+
+
+def test_delete_partner_not_found_returns_404(tmp_path, store):
+    c, _ = _make_client(tmp_path, store)
+    r = c.delete("/imnot/admin/partners/nonexistent")
+    assert r.status_code == 404
+
+
+def test_delete_partner_without_partners_dir_returns_400(store):
+    app = FastAPI()
+    register_routes(app, [], store)
+    c = TestClient(app, raise_server_exceptions=True)
+    r = c.delete("/imnot/admin/partners/bookingco")
+    assert r.status_code == 400
+
+
+def test_delete_partner_invalid_name_returns_400(tmp_path, store):
+    c, _ = _make_client(tmp_path, store)
+    r = c.delete("/imnot/admin/partners/../../etc")
+    assert r.status_code in (400, 404)  # FastAPI may 404 before our handler on path separators

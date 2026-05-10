@@ -670,6 +670,12 @@
   gap: var(--space-5);
 }
 
+/* Align builder rows at the top so labels + inputs line up regardless of
+   whether a sibling group has a field-error span below it. */
+.builder-form .form-row {
+  align-items: flex-start;
+}
+
 /* Top-level partner fields box */
 .builder-card {
   background-color: var(--color-surface);
@@ -685,6 +691,7 @@
   background-color: var(--color-surface);
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
+  border-top: 3px solid var(--color-brand);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
@@ -819,15 +826,17 @@
   display: block;
 }
 
-/* Post-registration card highlight flash */
-@keyframes card-highlight {
-  0%   { box-shadow: 0 0 0 3px var(--color-brand); }
-  70%  { box-shadow: 0 0 0 3px var(--color-brand); }
-  100% { box-shadow: var(--shadow-md); }
+/* Post-registration card highlight: background flickers twice then returns. */
+@keyframes card-bg-pulse {
+  0%   { background-color: var(--color-surface); }
+  25%  { background-color: var(--color-surface-alt); }
+  50%  { background-color: var(--color-surface); }
+  75%  { background-color: var(--color-surface-alt); }
+  100% { background-color: var(--color-surface); }
 }
 
 .card--highlight {
-  animation: card-highlight 2s ease-out forwards;
+  animation: card-bg-pulse 2.4s ease-in-out;
 }
 
 /* Checkbox + label row (generates_id, returns_payload) */
@@ -866,4 +875,20 @@
 
 .card-header-edit {
   margin-left: auto;
+}
+
+/* Patterns reference hint link below the Pattern select */
+.builder-pattern-hint {
+  font-size: 0.6875rem;
+  color: var(--color-brand);
+  text-decoration: none;
+  margin-top: 0.125rem;
+  display: inline-block;
+  opacity: 0.8;
+  transition: opacity var(--t-fast);
+}
+
+.builder-pattern-hint:hover {
+  opacity: 1;
+  text-decoration: underline;
 }
