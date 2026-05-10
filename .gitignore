@@ -31,8 +31,8 @@ CLAUDE.md
 # Generated artifacts
 imnot-collection.json
 
-# Design docs — kept local only
-docs/
+# Internal design docs — kept local only
+docs/design-*.md
 
 # Superpowers plugin output
 superpowers/
