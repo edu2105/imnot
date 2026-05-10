@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import hmac
 import logging
+import re
+import shutil
 from importlib.metadata import version as _pkg_version
 from importlib.resources import files as _res_files
 from pathlib import Path
@@ -407,6 +409,29 @@ def _register_infra_routes(
             return JSONResponse(status_code=404, content={"detail": "Session not found"})
         return JSONResponse({"status": "ok", "session_id": session_id})
 
+    async def delete_partner(partner_name: str, request: Request) -> JSONResponse:
+        partners_dir: Path | None = request.app.state.partners_dir
+        if partners_dir is None:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "No partners_dir configured — server was not started via `imnot start`."},
+            )
+        if not re.match(r"^[a-zA-Z0-9_-]{1,64}$", partner_name):
+            return JSONResponse(status_code=400, content={"detail": "Invalid partner name."})
+        partner_dir = partners_dir / partner_name
+        try:
+            partner_dir.resolve().relative_to(partners_dir.resolve())
+        except ValueError:
+            return JSONResponse(status_code=400, content={"detail": "Invalid partner name."})
+        if not partner_dir.exists():
+            return JSONResponse(status_code=404, content={"detail": f"Partner '{partner_name}' not found."})
+        shutil.rmtree(partner_dir)
+        for i, p in enumerate(partners):
+            if p.partner == partner_name:
+                partners.pop(i)
+                break
+        return JSONResponse({"status": "ok", "partner": partner_name})
+
     async def list_partners() -> JSONResponse:
         def _serialize_dp(dp: DatapointDef) -> dict:
             callback_delay: int | None = None
@@ -629,6 +654,7 @@ def _register_infra_routes(
     app.add_api_route("/imnot/admin/sessions/{session_id}", delete_session, methods=["DELETE"])
     app.add_api_route("/imnot/admin/partners", list_partners, methods=["GET"])
     app.add_api_route("/imnot/admin/partners", create_partner_handler, methods=["POST"])
+    app.add_api_route("/imnot/admin/partners/{partner_name}", delete_partner, methods=["DELETE"])
     app.add_api_route("/imnot/admin/reload", reload_partners, methods=["POST"])
     app.add_api_route("/imnot/admin/postman", postman_collection, methods=["GET"])
     logger.debug("Registered infra routes")

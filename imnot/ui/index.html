@@ -1050,6 +1050,244 @@ img, svg {
   .partners-grid .skeleton:nth-child(3) { display: block; }
 }
 
+
+/* ---- Partner Builder ---------------------------------------- */
+
+.builder-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* Align builder rows at the top so labels + inputs line up regardless of
+   whether a sibling group has a field-error span below it. */
+.builder-form .form-row {
+  align-items: flex-start;
+}
+
+/* Top-level partner fields box */
+.builder-card {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  border-top: 3px solid var(--color-brand);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-5);
+}
+
+/* Individual datapoint block */
+.dp-block {
+  background-color: var(--color-surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  border-top: 3px solid var(--color-brand);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.dp-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-5);
+  background-color: var(--color-surface-alt);
+  border-bottom: 1px solid var(--color-rule);
+}
+
+.dp-block-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.dp-block-body {
+  padding: var(--space-4) var(--space-5);
+}
+
+.dp-block-body .form-stack {
+  gap: var(--space-4);
+}
+
+/* Step row inside polling datapoint */
+.step-block {
+  background-color: var(--color-surface-alt);
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.step-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.step-block-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-muted);
+}
+
+/* Inline icon-only small button (edit pencil on card, remove step) */
+.btn-icon-sm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  color: var(--color-muted);
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity var(--t-fast), color var(--t-fast), background-color var(--t-fast);
+}
+
+.btn-icon-sm svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.btn-icon-sm:hover {
+  opacity: 1;
+  color: var(--color-brand);
+  background-color: var(--color-brand-subtle);
+}
+
+/* "Add Datapoint" / "Add Step" button */
+.builder-add-btn {
+  align-self: flex-start;
+  font-size: 0.8125rem;
+}
+
+/* YAML preview collapsible */
+.builder-preview-details {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.builder-preview-summary {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  background-color: var(--color-surface-alt);
+  user-select: none;
+  list-style: none;
+}
+
+.builder-preview-summary:hover {
+  color: var(--color-ink);
+}
+
+.builder-yaml-pre {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.625;
+  white-space: pre;
+  overflow-x: auto;
+  padding: var(--space-4);
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  margin: 0;
+}
+
+/* Builder form footer — sticky so Cancel/Save are always reachable */
+.builder-footer {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: flex-end;
+  position: sticky;
+  bottom: 0;
+  background-color: var(--color-page-bg);
+  border-top: 1px solid var(--color-rule);
+  padding: var(--space-3) 0;
+  margin-top: var(--space-2);
+  z-index: 10;
+}
+
+/* Inline field validation error */
+.field-error {
+  font-size: 0.75rem;
+  color: var(--color-error-text);
+  min-height: 1rem;
+  display: block;
+}
+
+/* Post-registration card highlight: background flickers twice then returns. */
+@keyframes card-bg-pulse {
+  0%   { background-color: var(--color-surface); }
+  25%  { background-color: var(--color-surface-alt); }
+  50%  { background-color: var(--color-surface); }
+  75%  { background-color: var(--color-surface-alt); }
+  100% { background-color: var(--color-surface); }
+}
+
+.card--highlight {
+  animation: card-bg-pulse 2.4s ease-in-out;
+}
+
+/* Checkbox + label row (generates_id, returns_payload) */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.875rem;
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.toggle-row input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--color-brand);
+  cursor: pointer;
+}
+
+/* Conditional sub-group that appears when a toggle is on */
+.conditional-group {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--color-surface-alt);
+  border-left: 2px solid var(--color-brand);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* card-header right-align helper for Edit button */
+.card .card-header {
+  flex: 1;
+}
+
+.card-header-edit {
+  margin-left: auto;
+}
+
+/* Patterns reference hint link below the Pattern select */
+.builder-pattern-hint {
+  font-size: 0.6875rem;
+  color: var(--color-brand);
+  text-decoration: none;
+  margin-top: 0.125rem;
+  display: inline-block;
+  opacity: 0.8;
+  transition: opacity var(--t-fast);
+}
+
+.builder-pattern-hint:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
 /* ============================================================
    footer.css
    Bottom bar with app name and navigation links.
@@ -1158,6 +1396,7 @@ img, svg {
     <div class="page-container">
       <button class="subnav-tab subnav-tab--active" data-tab="partners"  onclick="showSection('partners')">Partners</button>
       <button class="subnav-tab"                    data-tab="sessions"  onclick="showSection('sessions')">Active Sessions</button>
+      <button class="subnav-tab"                    data-tab="builder"   onclick="showSection('builder')">Builder</button>
     </div>
   </nav>
 
@@ -1173,12 +1412,20 @@ img, svg {
             <h2>Partners</h2>
             <p>Loaded partner definitions and their datapoints. Click a datapoint pill to inspect and test it.</p>
           </div>
-          <button onclick="loadPartners()" class="btn btn-secondary">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-            </svg>
-            Refresh
-          </button>
+          <div style="display:flex;gap:0.5rem;align-items:center;">
+            <button onclick="showBuilder('create')" class="btn btn-primary">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+              </svg>
+              New Partner
+            </button>
+            <button onclick="loadPartners()" class="btn btn-secondary">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+              Refresh
+            </button>
+          </div>
         </div>
         <div id="partners-container" class="partners-grid">
           <div class="skeleton"></div>
@@ -1224,6 +1471,74 @@ img, svg {
       </section>
 
 
+      <!-- ---- Partner Builder ---- -->
+      <section data-section="builder" hidden>
+
+        <div class="section-header">
+          <div class="section-title">
+            <h2 id="builder-title">New Partner</h2>
+            <p id="builder-subtitle">Fill in the fields below. YAML preview updates live.</p>
+          </div>
+          <button onclick="showSection('partners')" class="btn btn-secondary">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+            </svg>
+            Back to Partners
+          </button>
+        </div>
+
+        <div class="builder-form">
+
+          <!-- Partner-level fields -->
+          <div class="builder-card">
+            <div class="form-stack">
+              <div class="form-row">
+                <div class="form-group" style="flex:1;max-width:20rem;">
+                  <label class="form-label" for="b-partner-name">Partner name *</label>
+                  <input id="b-partner-name" type="text" class="form-input"
+                         style="width:100%;"
+                         placeholder="e.g. staylink"
+                         oninput="_builderMarkDirty();builderUpdatePreview()"
+                         pattern="[a-zA-Z0-9_\-]{1,64}" />
+                  <span class="field-error" id="b-partner-name-err"></span>
+                </div>
+                <div class="form-group" style="flex:2;">
+                  <label class="form-label" for="b-description">Description</label>
+                  <input id="b-description" type="text" class="form-input"
+                         style="width:100%;"
+                         placeholder="Short description (optional)"
+                         oninput="_builderMarkDirty();builderUpdatePreview()" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Datapoints container -->
+          <div id="builder-datapoints"></div>
+
+          <!-- Add Datapoint button -->
+          <button onclick="builderAddDatapoint()" class="btn btn-secondary builder-add-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+            </svg>
+            Add Datapoint
+          </button>
+
+          <!-- YAML preview (collapsible) -->
+          <details class="builder-preview-details">
+            <summary class="builder-preview-summary">YAML Preview</summary>
+            <pre id="builder-yaml-preview" class="builder-yaml-pre"></pre>
+          </details>
+
+          <!-- Footer actions -->
+          <div class="builder-footer">
+            <button onclick="showSection('partners')" class="btn btn-secondary">Cancel</button>
+            <button onclick="builderSubmit()" class="btn btn-primary" id="builder-submit-btn">Register Partner</button>
+          </div>
+
+        </div>
+      </section>
+
 
     </div>
   </main>
@@ -1234,7 +1549,7 @@ img, svg {
     <div class="page-container">
       <p class="footer-info">imnot &mdash; stateful API mock server</p>
       <div class="footer-links">
-        <a href="/imnot/docs">docs</a>
+        <a href="https://github.com/edu2105/imnot" target="_blank" rel="noopener">docs</a>
         <a href="/healthz">healthz</a>
       </div>
     </div>
@@ -1242,6 +1557,13 @@ img, svg {
 
 
   <script>
+    // ---- Builder module-level state ----
+    var _builderMode = 'create';
+    var _builderOriginalName = '';
+    var _builderDpCount = 0;
+    var _builderPreviewTimer = null;
+    var _builderDirty = false;
+
     // ---- Utilities ----
     function escHtml(s) {
       return String(s)
@@ -1303,7 +1625,7 @@ img, svg {
 
     // ---- Partners ----
     function loadPartners() {
-      fetch('/imnot/admin/partners', { headers: authHeaders() })
+      return fetch('/imnot/admin/partners', { headers: authHeaders() })
         .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(renderPartners)
         .catch(function (e) { notify('Failed to load partners: ' + e.message, 'error'); });
@@ -1311,6 +1633,7 @@ img, svg {
 
     function renderPartners(data) {
       var c = document.getElementById('partners-container');
+      if (data && data.length) data.sort(function (a, b) { return a.partner.localeCompare(b.partner); });
       if (!data || !data.length) {
         c.innerHTML = '<div class="empty-state">'
           + '<p>No partners loaded.</p>'
@@ -1341,20 +1664,27 @@ img, svg {
             + '</button>';
         }).join('');
         var accordionId = 'acc-' + escHtml(p.partner);
+        var pName = escHtml(p.partner);
         return '<div class="card-wrapper">'
           + '<div class="card">'
           + '<div class="card-stripe"></div>'
           + '<div class="card-body">'
           + '<div class="card-header">'
           + '<span class="card-status"></span>'
-          + '<span class="card-name">' + escHtml(p.partner) + '</span>'
+          + '<span class="card-name">' + pName + '</span>'
+          + '<button class="btn-icon-sm card-header-edit" onclick="showBuilder(\'edit\',\'' + pName + '\')" title="Edit partner" aria-label="Edit partner">'
+          + '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z"/></svg>'
+          + '</button>'
+          + '<button class="btn-icon-sm" onclick="deletePartner(\'' + pName + '\')" title="Delete partner" aria-label="Delete partner">'
+          + '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>'
+          + '</button>'
           + '</div>'
           + '<p class="card-desc">' + escHtml(p.description || '—') + '</p>'
           + '<div class="card-tags">' + tags + '</div>'
           + '</div>'
           + '</div>'
           + '<div class="dp-accordion" id="' + accordionId + '" '
-          + 'data-partner="' + escHtml(p.partner) + '"></div>'
+          + 'data-partner="' + pName + '"></div>'
           + '</div>';
       }).join('');
     }
@@ -1484,9 +1814,12 @@ img, svg {
           return r.json();
         })
         .then(function (data) {
-          displayEl.textContent = data === null
-            ? 'No global payload set.'
-            : JSON.stringify(data.payload !== undefined ? data.payload : data, null, 2);
+          if (data === null) { displayEl.textContent = 'No global payload set.'; return; }
+          var payload = data.payload !== undefined ? data.payload : data;
+          if (typeof payload === 'string') {
+            try { payload = JSON.parse(payload); } catch (e) {}
+          }
+          displayEl.textContent = JSON.stringify(payload, null, 2);
         })
         .catch(function (e) { displayEl.textContent = 'Error: ' + e.message; });
     }
@@ -1633,6 +1966,936 @@ img, svg {
         .catch(function (e) { displayEl.textContent = 'Error: ' + e.message; });
     }
 
+    // ---- Builder ----
+
+    function _builderMarkDirty() {
+      _builderDirty = true;
+    }
+
+    function showBuilder(mode, partnerName) {
+      // Unsaved-changes guard: only prompt when already on the builder tab
+      if (_builderDirty && document.querySelector('[data-section="builder"]') &&
+          !document.querySelector('[data-section="builder"]').hidden) {
+        if (!confirm('You have unsaved changes. Discard and edit this partner?')) {
+          return;
+        }
+      }
+
+      showSection('builder');
+      var titleEl = document.getElementById('builder-title');
+      var subtitleEl = document.getElementById('builder-subtitle');
+      var submitBtn = document.getElementById('builder-submit-btn');
+
+      if (mode === 'create') {
+        titleEl.textContent = 'New Partner';
+        subtitleEl.innerHTML = 'Fill in the fields below. YAML preview updates live. Not sure about patterns? <a href="https://github.com/edu2105/imnot/blob/main/partners/README.md" target="_blank" rel="noopener">Read the patterns reference →</a>';
+        submitBtn.textContent = 'Register Partner';
+        builderReset();
+        return;
+      }
+
+      // Edit mode
+      titleEl.textContent = 'Edit Partner: ' + partnerName;
+      subtitleEl.innerHTML = 'Fields pre-filled from current registration. Pattern-specific config fields show defaults — re-enter as needed.';
+      submitBtn.textContent = 'Save Changes';
+      builderReset();
+      _builderMode = 'edit';
+      _builderOriginalName = partnerName;
+
+      fetch('/imnot/admin/partners', { headers: authHeaders() })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (data) {
+          var found = null;
+          for (var i = 0; i < data.length; i++) {
+            if (data[i].partner === partnerName) { found = data[i]; break; }
+          }
+          if (!found) {
+            notify('Partner \'' + partnerName + '\' not found', 'error');
+            showSection('partners');
+            return;
+          }
+          builderPreFill(found);
+        })
+        .catch(function (e) {
+          notify('Failed to load partner data: ' + e.message, 'error');
+          showSection('partners');
+        });
+    }
+
+    function builderReset() {
+      _builderMode = 'create';
+      _builderOriginalName = '';
+      _builderDpCount = 0;
+      _builderDirty = false;
+      document.getElementById('b-partner-name').value = '';
+      document.getElementById('b-description').value = '';
+      document.getElementById('builder-datapoints').innerHTML = '';
+      document.getElementById('builder-yaml-preview').textContent = '';
+      document.querySelectorAll('.field-error').forEach(function (el) { el.textContent = ''; });
+      builderAddDatapoint();
+    }
+
+    function builderPreFill(partnerData) {
+      document.getElementById('b-partner-name').value = partnerData.partner || '';
+      document.getElementById('b-description').value = partnerData.description || '';
+
+      var dps = partnerData.datapoints || [];
+      // Remove the default blank datapoint added by builderReset()
+      document.getElementById('builder-datapoints').innerHTML = '';
+      _builderDpCount = 0;
+
+      dps.forEach(function (dp) {
+        builderAddDatapoint();
+        var idx = _builderDpCount;
+        var nameInput = document.getElementById('b-dp-' + idx + '-name');
+        if (nameInput) nameInput.value = dp.name || '';
+        var patSel = document.getElementById('b-dp-' + idx + '-pattern');
+        if (patSel) {
+          patSel.value = dp.pattern || 'fetch';
+          builderChangePattern(idx);
+        }
+
+        // Pre-fill endpoint paths based on pattern
+        var eps = dp.endpoints || [];
+        if (dp.pattern === 'polling') {
+          // Clear the default step and add steps to match endpoints count
+          var stepsContainer = document.getElementById('b-dp-' + idx + '-steps');
+          if (stepsContainer) {
+            stepsContainer.innerHTML = '';
+            // Re-render steps to match
+            for (var s = 0; s < eps.length; s++) {
+              _builderAppendStep(idx, s, eps.length);
+            }
+            // Now fill in the values
+            for (var si = 0; si < eps.length; si++) {
+              var ep = eps[si];
+              var methodSel = document.getElementById('b-dp-' + idx + '-step-' + si + '-method');
+              if (methodSel) methodSel.value = ep.method || 'POST';
+              var pathInput = document.getElementById('b-dp-' + idx + '-step-' + si + '-path');
+              if (pathInput) pathInput.value = ep.path || '';
+            }
+          }
+        } else if (dp.pattern === 'callback') {
+          if (eps.length > 0) {
+            var pathInp = document.getElementById('b-dp-' + idx + '-path');
+            if (pathInp) pathInp.value = eps[0].path || '';
+          }
+          if (dp.callback_delay_seconds !== null && dp.callback_delay_seconds !== undefined) {
+            var delayInp = document.getElementById('b-dp-' + idx + '-callback-delay');
+            if (delayInp) delayInp.value = dp.callback_delay_seconds;
+          }
+        } else {
+          // oauth, static, fetch, paginated — single endpoint path
+          if (eps.length > 0) {
+            var singlePath = document.getElementById('b-dp-' + idx + '-path');
+            if (singlePath) singlePath.value = eps[0].path || '';
+            var singleMethod = document.getElementById('b-dp-' + idx + '-method');
+            if (singleMethod && eps[0].method) singleMethod.value = eps[0].method;
+          }
+        }
+      });
+
+      // Ensure at least one datapoint block
+      if (dps.length === 0) builderAddDatapoint();
+      builderUpdatePreview();
+    }
+
+    function builderAddDatapoint() {
+      _builderDpCount++;
+      var idx = _builderDpCount;
+      var container = document.getElementById('builder-datapoints');
+      var block = document.createElement('div');
+      block.className = 'dp-block';
+      block.setAttribute('data-dp-idx', idx);
+      block.innerHTML = _builderDatapointBlockHtml(idx, 'fetch');
+      container.appendChild(block);
+      builderUpdatePreview();
+    }
+
+    function _builderDatapointBlockHtml(idx, pattern) {
+      var patternOptions = ['oauth','static','fetch','polling','callback','paginated'].map(function (p) {
+        return '<option value="' + p + '"' + (p === pattern ? ' selected' : '') + '>' + p + '</option>';
+      }).join('');
+      return '<div class="dp-block-header">'
+        + '<span class="dp-block-title">Datapoint</span>'
+        + '<button type="button" class="btn-icon-sm" onclick="builderRemoveDatapoint(' + idx + ')" title="Remove datapoint" aria-label="Remove datapoint">'
+        + '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>'
+        + '</button>'
+        + '</div>'
+        + '<div class="dp-block-body">'
+        + '<div class="form-stack">'
+        + '<div class="form-row">'
+        + '<div class="form-group" style="flex:1;max-width:16rem;">'
+        + '<label class="form-label" for="b-dp-' + idx + '-name">Name *</label>'
+        + '<input id="b-dp-' + idx + '-name" type="text" class="form-input" style="width:100%;" placeholder="e.g. reservation" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+        + '<span class="field-error" id="b-dp-' + idx + '-name-err"></span>'
+        + '</div>'
+        + '<div class="form-group">'
+        + '<label class="form-label" for="b-dp-' + idx + '-pattern">Pattern</label>'
+        + '<select id="b-dp-' + idx + '-pattern" class="endpoint-select" onchange="_builderMarkDirty();builderChangePattern(' + idx + ')">' + patternOptions + '</select>'
+        + '<a id="b-dp-' + idx + '-pattern-link" href="https://github.com/edu2105/imnot/blob/main/partners/README.md#pattern-' + pattern + '" target="_blank" rel="noopener" class="builder-pattern-hint">patterns reference →</a>'
+        + '</div>'
+        + '</div>'
+        + '<div class="dp-pattern-fields" data-dp-idx="' + idx + '">'
+        + _builderRenderDatapointFields(idx, pattern)
+        + '</div>'
+        + '</div>'
+        + '</div>';
+    }
+
+    function builderRemoveDatapoint(idx) {
+      var block = document.querySelector('.dp-block[data-dp-idx="' + idx + '"]');
+      if (block) block.remove();
+      var remaining = document.querySelectorAll('.dp-block');
+      if (remaining.length === 0) builderAddDatapoint();
+      builderUpdatePreview();
+    }
+
+    function builderChangePattern(idx) {
+      var sel = document.getElementById('b-dp-' + idx + '-pattern');
+      if (!sel) return;
+      var pattern = sel.value;
+      var fieldsContainer = document.querySelector('.dp-pattern-fields[data-dp-idx="' + idx + '"]');
+      if (fieldsContainer) {
+        fieldsContainer.innerHTML = _builderRenderDatapointFields(idx, pattern);
+      }
+      var link = document.getElementById('b-dp-' + idx + '-pattern-link');
+      if (link) link.href = 'https://github.com/edu2105/imnot/blob/main/partners/README.md#pattern-' + pattern;
+      _builderMarkDirty();
+      builderUpdatePreview();
+    }
+
+    function _builderRenderDatapointFields(idx, pattern) {
+      var i = idx;
+      if (pattern === 'oauth') {
+        return '<div class="form-stack">'
+          + '<div class="form-row">'
+          + '<div class="form-group" style="flex:2;">'
+          + '<label class="form-label" for="b-dp-' + i + '-path">POST path *</label>'
+          + '<input id="b-dp-' + i + '-path" type="text" class="form-input" style="width:100%;" placeholder="/oauth/token" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '<span class="field-error" id="b-dp-' + i + '-path-err"></span>'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-expires-in">expires_in (s)</label>'
+          + '<input id="b-dp-' + i + '-expires-in" type="number" class="form-input" value="3600" min="1" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-token-type">token_type</label>'
+          + '<input id="b-dp-' + i + '-token-type" type="text" class="form-input" value="Bearer" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '</div>'
+          + '</div>'
+          + '</div>';
+      }
+      if (pattern === 'static') {
+        var methodOpts = ['GET','POST','PUT','PATCH','DELETE','HEAD'].map(function (m) {
+          return '<option value="' + m + '"' + (m === 'GET' ? ' selected' : '') + '>' + m + '</option>';
+        }).join('');
+        return '<div class="form-stack">'
+          + '<div class="form-row">'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-method">Method</label>'
+          + '<select id="b-dp-' + i + '-method" class="endpoint-select" onchange="_builderMarkDirty();builderUpdatePreview()">' + methodOpts + '</select>'
+          + '</div>'
+          + '<div class="form-group" style="flex:2;">'
+          + '<label class="form-label" for="b-dp-' + i + '-path">Path *</label>'
+          + '<input id="b-dp-' + i + '-path" type="text" class="form-input" style="width:100%;" placeholder="/partner/resource" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '<span class="field-error" id="b-dp-' + i + '-path-err"></span>'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-status">Status</label>'
+          + '<input id="b-dp-' + i + '-status" type="number" class="form-input" value="200" min="100" max="599" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '</div>'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-body">Response body (JSON) *</label>'
+          + '<textarea id="b-dp-' + i + '-body" rows="4" spellcheck="false" class="form-textarea" placeholder=\'{"key": "value"}\' oninput="_builderMarkDirty();builderUpdatePreview()"></textarea>'
+          + '<span class="field-error" id="b-dp-' + i + '-body-err"></span>'
+          + '</div>'
+          + '</div>';
+      }
+      if (pattern === 'fetch') {
+        return '<div class="form-stack">'
+          + '<div class="form-row">'
+          + '<div class="form-group" style="flex:2;">'
+          + '<label class="form-label" for="b-dp-' + i + '-path">GET path *</label>'
+          + '<input id="b-dp-' + i + '-path" type="text" class="form-input" style="width:100%;" placeholder="/partner/resource" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '<span class="field-error" id="b-dp-' + i + '-path-err"></span>'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-status">Status</label>'
+          + '<input id="b-dp-' + i + '-status" type="number" class="form-input" value="200" min="100" max="599" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '</div>'
+          + '</div>'
+          + '</div>';
+      }
+      if (pattern === 'polling') {
+        return '<div class="form-stack">'
+          + '<div id="b-dp-' + i + '-steps"></div>'
+          + '<button type="button" class="btn btn-secondary builder-add-btn" onclick="_builderMarkDirty();builderAddStep(' + i + ')">'
+          + '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>'
+          + 'Add Step'
+          + '</button>'
+          + '<p class="acc-note">Step 1 generates the ID; the last step returns the payload.</p>'
+          + '</div>'
+          + _builderFirstTwoStepsHtml(i);
+      }
+      if (pattern === 'callback') {
+        return '<div class="form-stack">'
+          + '<div class="form-row">'
+          + '<div class="form-group" style="flex:2;">'
+          + '<label class="form-label" for="b-dp-' + i + '-path">POST path *</label>'
+          + '<input id="b-dp-' + i + '-path" type="text" class="form-input" style="width:100%;" placeholder="/partner/submit" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '<span class="field-error" id="b-dp-' + i + '-path-err"></span>'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-status">Status</label>'
+          + '<input id="b-dp-' + i + '-status" type="number" class="form-input" value="202" min="100" max="599" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-callback-delay">Delay (s)</label>'
+          + '<input id="b-dp-' + i + '-callback-delay" type="number" class="form-input" value="0" min="0" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '</div>'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label">Callback URL source</label>'
+          + '<div style="display:flex;flex-direction:column;gap:0.5rem;margin-top:0.25rem;">'
+          + '<label class="toggle-row"><input type="radio" name="b-dp-' + i + '-cb-src" value="field" checked onchange="_builderMarkDirty();builderUpdatePreview()" /> Body field</label>'
+          + '<label class="toggle-row"><input type="radio" name="b-dp-' + i + '-cb-src" value="header" onchange="_builderMarkDirty();builderUpdatePreview()" /> Request header</label>'
+          + '</div>'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-cb-field">Body field name / Header name *</label>'
+          + '<input id="b-dp-' + i + '-cb-field" type="text" class="form-input" style="width:100%;max-width:20rem;" placeholder="callbackUrl or X-Callback-URL" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '<span class="field-error" id="b-dp-' + i + '-cb-field-err"></span>'
+          + '</div>'
+          + '</div>';
+      }
+      if (pattern === 'paginated') {
+        return '<div class="form-stack">'
+          + '<div class="form-row">'
+          + '<div class="form-group" style="flex:2;">'
+          + '<label class="form-label" for="b-dp-' + i + '-path">GET path *</label>'
+          + '<input id="b-dp-' + i + '-path" type="text" class="form-input" style="width:100%;" placeholder="/partner/listings" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '<span class="field-error" id="b-dp-' + i + '-path-err"></span>'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-status">Status</label>'
+          + '<input id="b-dp-' + i + '-status" type="number" class="form-input" value="200" min="100" max="599" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '</div>'
+          + '</div>'
+          + '<div class="form-row">'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-items-field">items_field *</label>'
+          + '<input id="b-dp-' + i + '-items-field" type="text" class="form-input" placeholder="e.g. results" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '<span class="field-error" id="b-dp-' + i + '-items-field-err"></span>'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-total-field">total_field</label>'
+          + '<input id="b-dp-' + i + '-total-field" type="text" class="form-input" placeholder="e.g. total (optional)" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-has-more-field">has_more_field</label>'
+          + '<input id="b-dp-' + i + '-has-more-field" type="text" class="form-input" placeholder="e.g. hasMore (optional)" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-next-offset-field">next_offset_field</label>'
+          + '<input id="b-dp-' + i + '-next-offset-field" type="text" class="form-input" placeholder="e.g. nextOffset (optional)" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '</div>'
+          + '</div>'
+          + '</div>';
+      }
+      return '';
+    }
+
+    function _builderFirstTwoStepsHtml(dpIdx) {
+      // Returns HTML for the initial two steps for a new polling datapoint.
+      // Caller inserts this after the steps container and Add Step button markup.
+      // We inject directly into the steps container via a trick: return JS to execute.
+      // Actually we just seed the steps container from here by returning empty and
+      // using a deferred init approach. Instead, call _builderAppendStep twice after rendering.
+      return '';
+    }
+
+    function _builderStepBlockHtml(dpIdx, stepIdx, totalSteps) {
+      var i = dpIdx;
+      var s = stepIdx;
+      var methodOpts = ['POST','GET','HEAD','PUT','PATCH','DELETE'].map(function (m) {
+        return '<option value="' + m + '"' + (m === 'POST' ? ' selected' : '') + '>' + m + '</option>';
+      }).join('');
+      var isFirst = s === 0;
+      var isLast = s === totalSteps - 1;
+      var showRemove = totalSteps > 1;
+
+      var html = '<div class="step-block" data-step-idx="' + s + '">'
+        + '<div class="step-block-header">'
+        + '<span class="step-block-label">Step ' + (s + 1) + '</span>'
+        + '<button type="button" class="btn-icon-sm" '
+        + (showRemove ? '' : 'hidden ')
+        + 'onclick="_builderMarkDirty();builderRemoveStep(' + i + ',' + s + ')" title="Remove step" aria-label="Remove step">'
+        + '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>'
+        + '</button>'
+        + '</div>'
+        + '<div class="form-row">'
+        + '<div class="form-group">'
+        + '<label class="form-label" for="b-dp-' + i + '-step-' + s + '-method">Method</label>'
+        + '<select id="b-dp-' + i + '-step-' + s + '-method" class="endpoint-select" onchange="_builderMarkDirty();builderUpdatePreview()">' + methodOpts + '</select>'
+        + '</div>'
+        + '<div class="form-group" style="flex:2;">'
+        + '<label class="form-label" for="b-dp-' + i + '-step-' + s + '-path">Path *</label>'
+        + '<input id="b-dp-' + i + '-step-' + s + '-path" type="text" class="form-input" style="width:100%;" placeholder="/partner/resource" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+        + '<span class="field-error" id="b-dp-' + i + '-step-' + s + '-path-err"></span>'
+        + '</div>'
+        + '<div class="form-group">'
+        + '<label class="form-label" for="b-dp-' + i + '-step-' + s + '-status">Status</label>'
+        + '<input id="b-dp-' + i + '-step-' + s + '-status" type="number" class="form-input" value="' + (s === 0 ? '202' : '200') + '" min="100" max="599" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+        + '</div>'
+        + '</div>';
+
+      // First step: generates_id toggle
+      if (isFirst) {
+        html += '<div id="b-dp-' + i + '-step-' + s + '-gen-group">'
+          + '<label class="toggle-row">'
+          + '<input type="checkbox" id="b-dp-' + i + '-step-' + s + '-gen-id" onchange="_builderMarkDirty();_builderToggleGenId(' + i + ',' + s + ')" />'
+          + ' generates_id'
+          + '</label>'
+          + '<div id="b-dp-' + i + '-step-' + s + '-gen-id-fields" style="display:none;" class="conditional-group">'
+          + '<div style="display:flex;flex-direction:column;gap:0.5rem;">'
+          + '<label class="toggle-row"><input type="radio" name="b-dp-' + i + '-step-' + s + '-delivery" value="header" checked onchange="_builderMarkDirty();_builderToggleDelivery(' + i + ',' + s + ')" /> Header delivery</label>'
+          + '<label class="toggle-row"><input type="radio" name="b-dp-' + i + '-step-' + s + '-delivery" value="body" onchange="_builderMarkDirty();_builderToggleDelivery(' + i + ',' + s + ')" /> Body field</label>'
+          + '</div>'
+          + '<div id="b-dp-' + i + '-step-' + s + '-delivery-header">'
+          + '<div class="form-row">'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-step-' + s + '-id-header">id_header *</label>'
+          + '<input id="b-dp-' + i + '-step-' + s + '-id-header" type="text" class="form-input" placeholder="Location" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '</div>'
+          + '<div class="form-group" style="flex:2;">'
+          + '<label class="form-label" for="b-dp-' + i + '-step-' + s + '-id-header-val">id_header_value *</label>'
+          + '<input id="b-dp-' + i + '-step-' + s + '-id-header-val" type="text" class="form-input" style="width:100%;" placeholder="/partner/resources/{id}" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '</div>'
+          + '</div>'
+          + '</div>'
+          + '<div id="b-dp-' + i + '-step-' + s + '-delivery-body" style="display:none;">'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-step-' + s + '-id-body-field">id_body_field *</label>'
+          + '<input id="b-dp-' + i + '-step-' + s + '-id-body-field" type="text" class="form-input" placeholder="JobReferenceID" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '</div>'
+          + '</div>'
+          + '</div>'
+          + '</div>';
+      }
+
+      // Last step: returns_payload toggle
+      if (isLast) {
+        html += '<div id="b-dp-' + i + '-last-step-group">'
+          + '<label class="toggle-row">'
+          + '<input type="checkbox" id="b-dp-' + i + '-returns-payload" onchange="_builderMarkDirty();builderUpdatePreview()" />'
+          + ' returns_payload'
+          + '</label>'
+          + '</div>';
+      }
+
+      html += '</div>'; // .step-block
+      return html;
+    }
+
+    function _builderAppendStep(dpIdx, stepIdx, totalSteps) {
+      var container = document.getElementById('b-dp-' + dpIdx + '-steps');
+      if (!container) return;
+      var div = document.createElement('div');
+      div.innerHTML = _builderStepBlockHtml(dpIdx, stepIdx, totalSteps);
+      while (div.firstChild) container.appendChild(div.firstChild);
+    }
+
+    function builderAddStep(dpIdx) {
+      var container = document.getElementById('b-dp-' + dpIdx + '-steps');
+      if (!container) return;
+      var existing = container.querySelectorAll('.step-block');
+      var newStepIdx = existing.length;
+      var newTotal = newStepIdx + 1;
+
+      // Remove "last step" group from the current last step
+      var prevLast = container.querySelector('.step-block[data-step-idx="' + (newStepIdx - 1) + '"]');
+      if (prevLast) {
+        var lastGrp = prevLast.querySelector('#b-dp-' + dpIdx + '-last-step-group');
+        if (lastGrp) lastGrp.remove();
+      }
+
+      // Append new step
+      _builderAppendStep(dpIdx, newStepIdx, newTotal);
+
+      // Show all remove buttons (now ≥ 2 steps)
+      container.querySelectorAll('.step-block').forEach(function (sb) {
+        var removeBtn = sb.querySelector('button');
+        if (removeBtn) removeBtn.removeAttribute('hidden');
+      });
+
+      builderUpdatePreview();
+    }
+
+    function builderRemoveStep(dpIdx, stepIdx) {
+      var container = document.getElementById('b-dp-' + dpIdx + '-steps');
+      if (!container) return;
+      var block = container.querySelector('.step-block[data-step-idx="' + stepIdx + '"]');
+      if (block) block.remove();
+
+      // Re-number remaining step blocks
+      var remaining = container.querySelectorAll('.step-block');
+      var total = remaining.length;
+      remaining.forEach(function (sb, newIdx) {
+        sb.setAttribute('data-step-idx', newIdx);
+        var label = sb.querySelector('.step-block-label');
+        if (label) label.textContent = 'Step ' + (newIdx + 1);
+
+        // Update remove button onclick to use new index
+        var removeBtn = sb.querySelector('button');
+        if (removeBtn) {
+          removeBtn.setAttribute('onclick', '_builderMarkDirty();builderRemoveStep(' + dpIdx + ',' + newIdx + ')');
+          if (total <= 1) removeBtn.setAttribute('hidden', '');
+          else removeBtn.removeAttribute('hidden');
+        }
+      });
+
+      // Ensure "last step" group is on the actual last step only
+      // Remove all existing last-step groups, then add to new last
+      container.querySelectorAll('#b-dp-' + dpIdx + '-last-step-group').forEach(function (el) { el.remove(); });
+      if (remaining.length > 0) {
+        var lastBlock = remaining[remaining.length - 1];
+        var lastStepIdx = remaining.length - 1;
+        var lgDiv = document.createElement('div');
+        lgDiv.id = 'b-dp-' + dpIdx + '-last-step-group';
+        lgDiv.innerHTML = '<label class="toggle-row">'
+          + '<input type="checkbox" id="b-dp-' + dpIdx + '-returns-payload" onchange="_builderMarkDirty();builderUpdatePreview()" />'
+          + ' returns_payload'
+          + '</label>';
+        lastBlock.appendChild(lgDiv);
+      }
+
+      // Ensure first step generates_id group (stepIdx 0) is unchanged — we just don't touch it
+
+      builderUpdatePreview();
+    }
+
+    function _builderToggleGenId(dpIdx, stepIdx) {
+      var cb = document.getElementById('b-dp-' + dpIdx + '-step-' + stepIdx + '-gen-id');
+      var fields = document.getElementById('b-dp-' + dpIdx + '-step-' + stepIdx + '-gen-id-fields');
+      if (fields) fields.style.display = cb && cb.checked ? '' : 'none';
+      builderUpdatePreview();
+    }
+
+    function _builderToggleDelivery(dpIdx, stepIdx) {
+      var radios = document.querySelectorAll('input[name="b-dp-' + dpIdx + '-step-' + stepIdx + '-delivery"]');
+      var mode = 'header';
+      radios.forEach(function (r) { if (r.checked) mode = r.value; });
+      var headerDiv = document.getElementById('b-dp-' + dpIdx + '-step-' + stepIdx + '-delivery-header');
+      var bodyDiv   = document.getElementById('b-dp-' + dpIdx + '-step-' + stepIdx + '-delivery-body');
+      if (headerDiv) headerDiv.style.display = mode === 'header' ? '' : 'none';
+      if (bodyDiv)   bodyDiv.style.display   = mode === 'body'   ? '' : 'none';
+      builderUpdatePreview();
+    }
+
+    // ---- YAML serialiser helpers ----
+
+    function _yamlStr(s) {
+      // Quote if string contains :, #, leading/trailing whitespace
+      s = String(s);
+      if (/[:#]/.test(s) || s !== s.trim() || s === '' || s === 'true' || s === 'false' || !isNaN(Number(s))) {
+        return '"' + s.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+      }
+      return s;
+    }
+
+    function _builderYamlFromState(data) {
+      var lines = [];
+      lines.push('partner: ' + _yamlStr(data.partner));
+      if (data.description) lines.push('description: ' + _yamlStr(data.description));
+      lines.push('datapoints:');
+
+      data.datapoints.forEach(function (dp) {
+        lines.push('  - name: ' + _yamlStr(dp.name));
+        lines.push('    pattern: ' + dp.pattern);
+
+        if (dp.pattern === 'paginated') {
+          // endpoints first, then pagination block
+          lines.push('    endpoints:');
+          lines.push('      - method: GET');
+          lines.push('        path: ' + _yamlStr(dp.path));
+          lines.push('        response:');
+          lines.push('          status: ' + dp.status);
+          lines.push('    pagination:');
+          lines.push('      style: offset_limit');
+          lines.push('      items_field: ' + _yamlStr(dp.items_field));
+          if (dp.total_field)       lines.push('      total_field: '       + _yamlStr(dp.total_field));
+          if (dp.has_more_field)    lines.push('      has_more_field: '    + _yamlStr(dp.has_more_field));
+          if (dp.next_offset_field) lines.push('      next_offset_field: ' + _yamlStr(dp.next_offset_field));
+          return;
+        }
+
+        lines.push('    endpoints:');
+
+        if (dp.pattern === 'oauth') {
+          lines.push('      - method: POST');
+          lines.push('        path: ' + _yamlStr(dp.path));
+          lines.push('        response:');
+          lines.push('          status: 200');
+          lines.push('          token_type: ' + _yamlStr(dp.token_type || 'Bearer'));
+          lines.push('          expires_in: ' + (parseInt(dp.expires_in, 10) || 3600));
+        } else if (dp.pattern === 'static') {
+          lines.push('      - method: ' + dp.method);
+          lines.push('        path: ' + _yamlStr(dp.path));
+          lines.push('        response:');
+          lines.push('          status: ' + dp.status);
+          lines.push('          body: ' + JSON.stringify(dp.body));
+        } else if (dp.pattern === 'fetch') {
+          lines.push('      - method: GET');
+          lines.push('        path: ' + _yamlStr(dp.path));
+          lines.push('        response:');
+          lines.push('          status: ' + dp.status);
+        } else if (dp.pattern === 'polling') {
+          dp.steps.forEach(function (step, si) {
+            lines.push('      - step: ' + (si + 1));
+            lines.push('        method: ' + step.method);
+            lines.push('        path: ' + _yamlStr(step.path));
+            lines.push('        response:');
+            lines.push('          status: ' + step.status);
+            if (si === 0 && step.generates_id) {
+              lines.push('          generates_id: true');
+              if (step.delivery === 'header') {
+                lines.push('          id_header: ' + _yamlStr(step.id_header));
+                lines.push('          id_header_value: ' + _yamlStr(step.id_header_value));
+              } else {
+                lines.push('          id_body_field: ' + _yamlStr(step.id_body_field));
+              }
+            }
+            if (si === dp.steps.length - 1 && step.returns_payload) {
+              lines.push('          returns_payload: true');
+            }
+          });
+        } else if (dp.pattern === 'callback') {
+          lines.push('      - method: POST');
+          lines.push('        path: ' + _yamlStr(dp.path));
+          lines.push('        response:');
+          lines.push('          status: ' + dp.status);
+          // Emit only the active key
+          if (dp.cb_src === 'header') {
+            lines.push('          callback_url_header: ' + _yamlStr(dp.cb_field));
+          } else {
+            lines.push('          callback_url_field: ' + _yamlStr(dp.cb_field));
+          }
+          lines.push('          callback_delay_seconds: ' + (parseInt(dp.callback_delay, 10) || 0));
+        }
+      });
+
+      return lines.join('\n');
+    }
+
+    function builderCollectFormData() {
+      var errors = [];
+      var data = { partner: '', description: '', datapoints: [] };
+
+      var partnerName = document.getElementById('b-partner-name').value.trim();
+      var partnerErr = document.getElementById('b-partner-name-err');
+      if (!partnerName) {
+        if (partnerErr) partnerErr.textContent = 'Partner name is required';
+        errors.push('Partner name is required');
+      } else if (!/^[a-zA-Z0-9_-]{1,64}$/.test(partnerName)) {
+        if (partnerErr) partnerErr.textContent = 'Only letters, digits, hyphens, underscores, max 64 chars';
+        errors.push('Partner name: only letters, digits, hyphens, underscores, max 64 chars');
+      } else {
+        if (partnerErr) partnerErr.textContent = '';
+        data.partner = partnerName;
+      }
+      data.description = document.getElementById('b-description').value.trim();
+
+      var dpBlocks = document.querySelectorAll('.dp-block');
+      var dpNames = [];
+
+      dpBlocks.forEach(function (block) {
+        var idx = block.getAttribute('data-dp-idx');
+        var pattern = (document.getElementById('b-dp-' + idx + '-pattern') || {}).value || 'fetch';
+        var dpName = ((document.getElementById('b-dp-' + idx + '-name') || {}).value || '').trim();
+        var dpNameErr = document.getElementById('b-dp-' + idx + '-name-err');
+
+        if (!dpName) {
+          if (dpNameErr) dpNameErr.textContent = 'Datapoint name is required';
+          errors.push('Datapoint ' + idx + ': name is required');
+        } else if (/\s/.test(dpName)) {
+          if (dpNameErr) dpNameErr.textContent = 'No spaces allowed';
+          errors.push('Datapoint ' + idx + ': name must not contain spaces');
+        } else {
+          if (dpNameErr) dpNameErr.textContent = '';
+          dpNames.push(dpName);
+        }
+
+        var dp = { name: dpName, pattern: pattern };
+
+        if (pattern === 'oauth') {
+          var pathVal = ((document.getElementById('b-dp-' + idx + '-path') || {}).value || '').trim();
+          var pathErr = document.getElementById('b-dp-' + idx + '-path-err');
+          if (!pathVal || !pathVal.startsWith('/')) {
+            if (pathErr) pathErr.textContent = 'Path must start with /';
+            errors.push('Datapoint ' + dpName + ': path must start with /');
+          } else { if (pathErr) pathErr.textContent = ''; }
+          dp.path = pathVal;
+          dp.expires_in = ((document.getElementById('b-dp-' + idx + '-expires-in') || {}).value || '3600');
+          dp.token_type = ((document.getElementById('b-dp-' + idx + '-token-type') || {}).value || 'Bearer').trim() || 'Bearer';
+        } else if (pattern === 'static') {
+          var pathVal2 = ((document.getElementById('b-dp-' + idx + '-path') || {}).value || '').trim();
+          var pathErr2 = document.getElementById('b-dp-' + idx + '-path-err');
+          if (!pathVal2 || !pathVal2.startsWith('/')) {
+            if (pathErr2) pathErr2.textContent = 'Path must start with /';
+            errors.push('Datapoint ' + dpName + ': path must start with /');
+          } else { if (pathErr2) pathErr2.textContent = ''; }
+          dp.path = pathVal2;
+          dp.method = ((document.getElementById('b-dp-' + idx + '-method') || {}).value || 'GET');
+          dp.status = parseInt(((document.getElementById('b-dp-' + idx + '-status') || {}).value || '200'), 10) || 200;
+          var bodyRaw = ((document.getElementById('b-dp-' + idx + '-body') || {}).value || '').trim();
+          var bodyErr = document.getElementById('b-dp-' + idx + '-body-err');
+          try {
+            dp.body = JSON.parse(bodyRaw || '{}');
+            if (bodyErr) bodyErr.textContent = '';
+          } catch (e) {
+            if (bodyErr) bodyErr.textContent = 'Must be valid JSON';
+            errors.push('Datapoint ' + dpName + ' body: invalid JSON');
+            dp.body = {};
+          }
+        } else if (pattern === 'fetch') {
+          var pathVal3 = ((document.getElementById('b-dp-' + idx + '-path') || {}).value || '').trim();
+          var pathErr3 = document.getElementById('b-dp-' + idx + '-path-err');
+          if (!pathVal3 || !pathVal3.startsWith('/')) {
+            if (pathErr3) pathErr3.textContent = 'Path must start with /';
+            errors.push('Datapoint ' + dpName + ': path must start with /');
+          } else { if (pathErr3) pathErr3.textContent = ''; }
+          dp.path = pathVal3;
+          dp.status = parseInt(((document.getElementById('b-dp-' + idx + '-status') || {}).value || '200'), 10) || 200;
+        } else if (pattern === 'polling') {
+          var stepsContainer = document.getElementById('b-dp-' + idx + '-steps');
+          var stepBlocks = stepsContainer ? stepsContainer.querySelectorAll('.step-block') : [];
+          if (stepBlocks.length < 2) {
+            errors.push('Datapoint ' + dpName + ': polling requires at least 2 steps');
+          }
+          dp.steps = [];
+          stepBlocks.forEach(function (sb, si) {
+            var sMethod = ((document.getElementById('b-dp-' + idx + '-step-' + si + '-method') || {}).value || 'POST');
+            var sPath = ((document.getElementById('b-dp-' + idx + '-step-' + si + '-path') || {}).value || '').trim();
+            var sPathErr = document.getElementById('b-dp-' + idx + '-step-' + si + '-path-err');
+            if (!sPath || !sPath.startsWith('/')) {
+              if (sPathErr) sPathErr.textContent = 'Path must start with /';
+              errors.push('Datapoint ' + dpName + ' step ' + (si + 1) + ': path must start with /');
+            } else { if (sPathErr) sPathErr.textContent = ''; }
+            var sStatus = parseInt(((document.getElementById('b-dp-' + idx + '-step-' + si + '-status') || {}).value || '200'), 10) || 200;
+            var step = { method: sMethod, path: sPath, status: sStatus };
+
+            if (si === 0) {
+              var genCb = document.getElementById('b-dp-' + idx + '-step-' + si + '-gen-id');
+              step.generates_id = genCb && genCb.checked;
+              if (step.generates_id) {
+                var deliveryRadios = document.querySelectorAll('input[name="b-dp-' + idx + '-step-' + si + '-delivery"]');
+                var deliveryMode = 'header';
+                deliveryRadios.forEach(function (r) { if (r.checked) deliveryMode = r.value; });
+                step.delivery = deliveryMode;
+                if (deliveryMode === 'header') {
+                  step.id_header = ((document.getElementById('b-dp-' + idx + '-step-' + si + '-id-header') || {}).value || '').trim();
+                  step.id_header_value = ((document.getElementById('b-dp-' + idx + '-step-' + si + '-id-header-val') || {}).value || '').trim();
+                  if (!step.id_header || !step.id_header_value) {
+                    errors.push('Datapoint ' + dpName + ' step 1: id_header and id_header_value are required when generates_id is enabled');
+                  }
+                } else {
+                  step.id_body_field = ((document.getElementById('b-dp-' + idx + '-step-' + si + '-id-body-field') || {}).value || '').trim();
+                  if (!step.id_body_field) {
+                    errors.push('Datapoint ' + dpName + ' step 1: id_body_field is required when generates_id is enabled (body delivery)');
+                  }
+                }
+              }
+            }
+
+            if (si === stepBlocks.length - 1) {
+              var retCb = document.getElementById('b-dp-' + idx + '-returns-payload');
+              step.returns_payload = retCb && retCb.checked;
+            }
+
+            dp.steps.push(step);
+          });
+        } else if (pattern === 'callback') {
+          var cbPath = ((document.getElementById('b-dp-' + idx + '-path') || {}).value || '').trim();
+          var cbPathErr = document.getElementById('b-dp-' + idx + '-path-err');
+          if (!cbPath || !cbPath.startsWith('/')) {
+            if (cbPathErr) cbPathErr.textContent = 'Path must start with /';
+            errors.push('Datapoint ' + dpName + ': path must start with /');
+          } else { if (cbPathErr) cbPathErr.textContent = ''; }
+          dp.path = cbPath;
+          dp.status = parseInt(((document.getElementById('b-dp-' + idx + '-status') || {}).value || '202'), 10) || 202;
+          dp.callback_delay = ((document.getElementById('b-dp-' + idx + '-callback-delay') || {}).value || '0');
+          var cbRadios = document.querySelectorAll('input[name="b-dp-' + idx + '-cb-src"]');
+          var cbSrc = 'field';
+          cbRadios.forEach(function (r) { if (r.checked) cbSrc = r.value; });
+          dp.cb_src = cbSrc;
+          dp.cb_field = ((document.getElementById('b-dp-' + idx + '-cb-field') || {}).value || '').trim();
+          var cbFieldErr = document.getElementById('b-dp-' + idx + '-cb-field-err');
+          if (!dp.cb_field) {
+            if (cbFieldErr) cbFieldErr.textContent = 'Required';
+            errors.push('Datapoint ' + dpName + ': callback URL field/header name is required');
+          } else { if (cbFieldErr) cbFieldErr.textContent = ''; }
+        } else if (pattern === 'paginated') {
+          var pgPath = ((document.getElementById('b-dp-' + idx + '-path') || {}).value || '').trim();
+          var pgPathErr = document.getElementById('b-dp-' + idx + '-path-err');
+          if (!pgPath || !pgPath.startsWith('/')) {
+            if (pgPathErr) pgPathErr.textContent = 'Path must start with /';
+            errors.push('Datapoint ' + dpName + ': path must start with /');
+          } else { if (pgPathErr) pgPathErr.textContent = ''; }
+          dp.path = pgPath;
+          dp.status = parseInt(((document.getElementById('b-dp-' + idx + '-status') || {}).value || '200'), 10) || 200;
+          dp.items_field = ((document.getElementById('b-dp-' + idx + '-items-field') || {}).value || '').trim();
+          var itmErr = document.getElementById('b-dp-' + idx + '-items-field-err');
+          if (!dp.items_field) {
+            if (itmErr) itmErr.textContent = 'items_field is required for paginated';
+            errors.push('Datapoint ' + dpName + ': items_field is required for paginated');
+          } else { if (itmErr) itmErr.textContent = ''; }
+          dp.total_field       = ((document.getElementById('b-dp-' + idx + '-total-field')       || {}).value || '').trim();
+          dp.has_more_field    = ((document.getElementById('b-dp-' + idx + '-has-more-field')    || {}).value || '').trim();
+          dp.next_offset_field = ((document.getElementById('b-dp-' + idx + '-next-offset-field') || {}).value || '').trim();
+        }
+
+        data.datapoints.push(dp);
+      });
+
+      // Check duplicate datapoint names
+      var seen = {};
+      dpNames.forEach(function (n) {
+        if (seen[n]) errors.push('Datapoint names must be unique within a partner');
+        seen[n] = true;
+      });
+
+      var yaml = '';
+      if (data.partner && data.datapoints.length > 0) {
+        try { yaml = _builderYamlFromState(data); } catch (e) { yaml = '# (serialisation error: ' + e.message + ')'; }
+      }
+
+      return { valid: errors.length === 0, yaml: yaml, errors: errors, data: data };
+    }
+
+    function builderUpdatePreview() {
+      clearTimeout(_builderPreviewTimer);
+      _builderPreviewTimer = setTimeout(function () {
+        var result = builderCollectFormData();
+        var pre = document.getElementById('builder-yaml-preview');
+        if (pre) pre.textContent = result.yaml || '# (fill in the fields above)';
+      }, 200);
+    }
+
+    function builderSubmit() {
+      var result = builderCollectFormData();
+      if (!result.valid) {
+        result.errors.forEach(function (e) { notify(e, 'error'); });
+        return;
+      }
+
+      // Capture partner name before async call (clarification #4)
+      var submittedPartnerName = document.getElementById('b-partner-name').value.trim();
+
+      var btn = document.getElementById('builder-submit-btn');
+      var origLabel = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+
+      var url = '/imnot/admin/partners' + (_builderMode === 'edit' ? '?force=true' : '');
+      fetch(url, {
+        method: 'POST',
+        headers: (function () {
+          var h = authHeaders();
+          h['Content-Type'] = 'text/plain';
+          return h;
+        })(),
+        body: result.yaml,
+      })
+        .then(function (r) {
+          if (r.status === 201 || r.status === 200) {
+            _builderDirty = false;
+            var oldName = _builderOriginalName;
+            var renamed = _builderMode === 'edit' && oldName && oldName !== submittedPartnerName;
+            if (renamed) {
+              return fetch('/imnot/admin/partners/' + encodeURIComponent(oldName), {
+                method: 'DELETE', headers: authHeaders(),
+              }).finally(function () { builderHighlightCard(submittedPartnerName); });
+            }
+            builderHighlightCard(submittedPartnerName);
+            return;
+          }
+          return r.json().then(function (body) {
+            var detail = body.detail || body.message || '';
+            if (r.status === 409) {
+              notify('Partner already exists. Switch to edit mode or use force.', 'error');
+            } else if (r.status === 422) {
+              notify('Validation error: ' + detail, 'error');
+            } else if (r.status === 400) {
+              notify('Server has no partners directory configured', 'error');
+            } else {
+              notify('Server error: HTTP ' + r.status + (detail ? ' — ' + detail : ''), 'error');
+            }
+          });
+        })
+        .catch(function (e) { notify('Network error: ' + e.message, 'error'); })
+        .finally(function () {
+          btn.disabled = false;
+          btn.textContent = origLabel;
+        });
+    }
+
+    function builderHighlightCard(partnerName) {
+      showSection('partners');
+      loadPartners().then(function () {
+        var cards = document.querySelectorAll('.card');
+        cards.forEach(function (card) {
+          var nameEl = card.querySelector('.card-name');
+          if (nameEl && nameEl.textContent === partnerName) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            card.classList.add('card--highlight');
+            setTimeout(function () { card.classList.remove('card--highlight'); }, 2400);
+          }
+        });
+      });
+    }
+
+    function deletePartner(partnerName) {
+      if (!confirm('Delete partner "' + partnerName + '"?\nThis removes the YAML file from disk and cannot be undone.')) return;
+      fetch('/imnot/admin/partners/' + encodeURIComponent(partnerName), {
+        method: 'DELETE', headers: authHeaders(),
+      })
+        .then(function (r) {
+          if (r.status === 404) { notify('Partner "' + partnerName + '" not found.', 'error'); return; }
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          closeAllPanels();
+          loadPartners();
+          notify('Partner "' + partnerName + '" deleted.', 'ok');
+        })
+        .catch(function (e) { notify('Delete failed: ' + e.message, 'error'); });
+    }
+
+    // Seed initial two polling steps when pattern-fields are rendered
+    // This must run after the .dp-pattern-fields div is in the DOM.
+    // We use MutationObserver to detect new polling blocks and seed them.
+    (function () {
+      var observer = new MutationObserver(function (mutations) {
+        mutations.forEach(function (m) {
+          m.addedNodes.forEach(function (node) {
+            if (node.nodeType !== 1) return;
+            // Find polling pattern-fields that have an empty steps container
+            var stepsContainers = node.querySelectorAll ? node.querySelectorAll('[id$="-steps"]:empty') : [];
+            stepsContainers.forEach(function (sc) {
+              var match = sc.id.match(/^b-dp-(\d+)-steps$/);
+              if (match) {
+                var dIdx = parseInt(match[1], 10);
+                _builderAppendStep(dIdx, 0, 2);
+                _builderAppendStep(dIdx, 1, 2);
+                builderUpdatePreview();
+              }
+            });
+          });
+        });
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    })();
+
     // ---- Sessions ----
     function loadSessions() {
       fetch('/imnot/admin/sessions', { headers: authHeaders() })
@@ -1753,6 +3016,8 @@ img, svg {
       });
       localStorage.setItem('imnot-section', name);
       if (name === 'sessions') loadSessions();
+      // 'builder' and 'partners' need no auto-load side effect here;
+      // showBuilder() handles pre-fill explicitly when entering builder mode.
     }
 
     // ---- Init ----
@@ -1764,6 +3029,7 @@ img, svg {
       }
       var section = localStorage.getItem('imnot-section') || 'partners';
       if (section === 'payload') section = 'partners';
+      if (section === 'builder') section = 'partners'; // Builder is transient
       showSection(section);
       checkHealth();
       loadPartners();

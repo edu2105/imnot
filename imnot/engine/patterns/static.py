@@ -17,6 +17,7 @@ Responsibilities:
 
 from __future__ import annotations
 
+import json
 from typing import Any, Callable
 
 from fastapi import Response
@@ -43,10 +44,13 @@ def make_static_handler(
 
     async def handler() -> JSONResponse:
         cfg = configs[key]
-        return JSONResponse(
-            status_code=cfg.get("status", 200),
-            content=cfg.get("body") or {},
-        )
+        body = cfg.get("body") or {}
+        if isinstance(body, str):
+            try:
+                body = json.loads(body)
+            except (ValueError, TypeError):
+                pass
+        return JSONResponse(status_code=cfg.get("status", 200), content=body)
 
     handler.__name__ = f"static_{endpoint.method}_{endpoint.path.replace('/', '_').strip('_')}"
 
