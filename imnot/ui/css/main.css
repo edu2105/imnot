@@ -810,12 +810,18 @@
   margin: 0;
 }
 
-/* Builder form footer */
+/* Builder form footer — sticky so Cancel/Save are always reachable */
 .builder-footer {
   display: flex;
   gap: var(--space-3);
   justify-content: flex-end;
-  padding-top: var(--space-2);
+  position: sticky;
+  bottom: 0;
+  background-color: var(--color-page-bg);
+  border-top: 1px solid var(--color-rule);
+  padding: var(--space-3) 0;
+  margin-top: var(--space-2);
+  z-index: 10;
 }
 
 /* Inline field validation error */
