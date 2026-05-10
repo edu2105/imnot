@@ -14,23 +14,23 @@ datapoints:
           token_type: Bearer
           expires_in: 3600
 
-  - name: report
-    description: Polling-based report generation and retrieval
+  - name: reservation
+    description: Polling-based reservation creation and retrieval
     pattern: polling
     endpoints:
-      # Step 1 — submit report request
+      # Step 1 — submit reservation request
       - step: 1
         method: POST
-        path: /staylink/reports
+        path: /staylink/reservations
         response:
           status: 202
           generates_id: true
           id_header: Location
-          id_header_value: /staylink/reports/{id}
+          id_header_value: /staylink/reservations/{id}
       # Step 2 — check completion status
       - step: 2
         method: HEAD
-        path: /staylink/reports/{id}
+        path: /staylink/reservations/{id}
         response:
           status: 201
           headers:
@@ -38,7 +38,7 @@ datapoints:
       # Step 3 — retrieve stored payload
       - step: 3
         method: GET
-        path: /staylink/reports/{id}
+        path: /staylink/reservations/{id}
         response:
           status: 200
           returns_payload: true
