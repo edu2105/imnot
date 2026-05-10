@@ -638,7 +638,7 @@ imnot/
 
 - `callback` pattern callbacks have no retry logic — if the callback URL is unreachable, the failure is logged and the retrigger endpoint can be used to re-fire.
 - No native HTTPS support — use a reverse proxy (Nginx, Caddy) to terminate TLS.
-- Admin UI is desktop-only — no mobile layout. Session-scoped payload upload and partner registration via UI are not yet supported (API only).
+- Admin UI is desktop-only — no mobile layout. Session-scoped payload upload via UI is not yet supported (API only).
 - XML response bodies are not supported — responses are always JSON.
 - No built-in mTLS support.
 - Single-node only — the SQLite session store is not shared across instances.
