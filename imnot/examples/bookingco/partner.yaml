@@ -3,16 +3,22 @@ description: BookingCo fictional partner — demonstrates static and fetch patte
 
 datapoints:
 
-  - name: token
-    description: Session token endpoint (non-standard, returns a plain token string)
+  - name: reservation
+    description: Fixed reservation lookup — static response, no session state
     pattern: static
     endpoints:
-      - method: POST
-        path: /bookingco/auth/token
+      - method: GET
+        path: /bookingco/v1/reservation
         response:
           status: 200
           body:
-            token: "static-token-replace-in-real-use"
+            reservationId: "RES-001"
+            status: confirmed
+            guestName: "Jane Smith"
+            checkIn: "2026-06-01"
+            checkOut: "2026-06-03"
+            roomType: DBL
+            nights: 2
 
   - name: charges
     description: Retrieve posted charges for a property
