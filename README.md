@@ -68,6 +68,8 @@ From the browser you can:
 - Hot-reload YAML without restarting the server
 - Run load tests against any HTTP endpoint (standalone or partner-bound)
 
+→ [Load Test reference](docs/load-test.md)
+
 ---
 
 ## AI-ready
@@ -100,6 +102,7 @@ Output only the YAML — no code, no explanation.
 |-------|-----|
 | Pattern reference | [docs/patterns.md](docs/patterns.md) |
 | Admin API reference | [docs/admin-api.md](docs/admin-api.md) |
+| Load Test | [docs/load-test.md](docs/load-test.md) |
 | CLI & configuration | [docs/cli.md](docs/cli.md) |
 | Docker & deployment | [docs/deployment.md](docs/deployment.md) |
 | Partner YAML schema | [partners/README.md](partners/README.md) |
