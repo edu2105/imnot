@@ -1213,6 +1213,184 @@ img, svg {
   z-index: 10;
 }
 
+/* ============================================================
+   Load Test tab (.lt-*)
+   ============================================================ */
+
+.lt-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
+@media (max-width: 40rem) {
+  .lt-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lt-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.lt-field-group label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-muted);
+}
+
+.lt-mode-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.lt-status-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-brand);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-family: var(--font-mono);
+  flex-wrap: wrap;
+}
+
+.lt-status-bar span {
+  color: var(--color-ink);
+}
+
+.lt-results-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-3);
+}
+
+@media (max-width: 60rem) {
+  .lt-results-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 40rem) {
+  .lt-results-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.lt-metric-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.lt-metric-card .lt-metric-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--color-ink);
+}
+
+.lt-metric-card .lt-metric-label {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.lt-template-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.lt-template-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  min-width: 16rem;
+  max-width: 22rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.lt-template-card .lt-template-name {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--color-ink);
+}
+
+.lt-template-card .lt-template-summary {
+  font-size: 0.75rem;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+}
+
+.lt-template-card .lt-template-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.lt-history-table {
+  width: 100%;
+  font-size: 0.8125rem;
+  border-collapse: collapse;
+}
+
+.lt-history-table thead tr {
+  background-color: var(--color-surface-alt);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.lt-history-table th {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.lt-history-table td {
+  padding: 0.625rem 1rem;
+  border-bottom: 1px solid var(--color-rule);
+  vertical-align: middle;
+}
+
+.lt-history-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.lt-history-table tbody tr:hover {
+  background-color: var(--color-brand-subtle);
+}
+
+.lt-history-table .lt-td-mono {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-muted);
+}
+
+.lt-section-divider {
+  border: none;
+  border-top: 1px solid var(--color-rule);
+  margin: var(--space-6) 0;
+}
+
 /* Inline field validation error */
 .field-error {
   font-size: 0.75rem;
@@ -1397,6 +1575,7 @@ img, svg {
       <button class="subnav-tab subnav-tab--active" data-tab="partners"  onclick="showSection('partners')">Partners</button>
       <button class="subnav-tab"                    data-tab="sessions"  onclick="showSection('sessions')">Active Sessions</button>
       <button class="subnav-tab"                    data-tab="builder"   onclick="showSection('builder')">Builder</button>
+      <button class="subnav-tab"                    data-tab="loadtest"  onclick="showSection('loadtest')">Load Test</button>
     </div>
   </nav>
 
@@ -1468,6 +1647,205 @@ img, svg {
             </table>
           </div>
         </div>
+      </section>
+
+
+      <!-- ---- Load Test ---- -->
+      <section data-section="loadtest" hidden>
+
+        <div class="section-header">
+          <div class="section-title">
+            <h2>Load Test</h2>
+            <p>Fire high-volume HTTP requests at a target URL and measure latency.</p>
+          </div>
+        </div>
+
+        <!-- Mode + form -->
+        <div class="panel" style="margin-bottom:var(--space-5);">
+          <div class="panel-section">
+            <div class="lt-field-group" style="max-width:20rem;margin-bottom:var(--space-4);">
+              <label for="lt-mode">Mode</label>
+              <select id="lt-mode" class="endpoint-select" onchange="ltModeChange()">
+                <option value="standalone">Standalone</option>
+                <option value="partner">Partner-bound</option>
+              </select>
+            </div>
+
+            <!-- Standalone fields -->
+            <div id="lt-standalone-fields" class="lt-mode-fields">
+              <div class="lt-form-grid">
+                <div class="lt-field-group" style="grid-column:1/-1;">
+                  <label for="lt-target-url">Target URL *</label>
+                  <input id="lt-target-url" type="url" class="form-input" style="width:100%;" placeholder="https://api.example.com/webhook" />
+                </div>
+                <div class="lt-field-group">
+                  <label for="lt-method">Method</label>
+                  <select id="lt-method" class="endpoint-select">
+                    <option value="POST" selected>POST</option>
+                    <option value="GET">GET</option>
+                    <option value="PUT">PUT</option>
+                    <option value="PATCH">PATCH</option>
+                    <option value="DELETE">DELETE</option>
+                  </select>
+                </div>
+                <div class="lt-field-group">
+                  <label for="lt-rate">Rate / second *</label>
+                  <input id="lt-rate" type="number" class="form-input" min="1" max="2000" placeholder="100" />
+                </div>
+                <div class="lt-field-group" style="grid-column:1/-1;">
+                  <label for="lt-headers">Headers (JSON object, optional)</label>
+                  <textarea id="lt-headers" rows="2" class="form-textarea" placeholder='{"X-API-Key": "abc123"}'></textarea>
+                </div>
+                <div class="lt-field-group" style="grid-column:1/-1;">
+                  <label for="lt-payload-template">Payload Template (JSON, use {{vary}} as placeholder)</label>
+                  <textarea id="lt-payload-template" rows="4" class="form-textarea" placeholder='{"propertyId": "{{vary}}", "event": "checkin"}'></textarea>
+                </div>
+                <div class="lt-field-group" style="grid-column:1/-1;">
+                  <label for="lt-vary-values">Vary Values (one per line, cycled in order)</label>
+                  <textarea id="lt-vary-values" rows="3" class="form-textarea" placeholder="P001&#10;P002&#10;P003"></textarea>
+                </div>
+              </div>
+            </div>
+
+            <!-- Partner-bound fields -->
+            <div id="lt-partner-fields" class="lt-mode-fields" hidden>
+              <div class="lt-form-grid">
+                <div class="lt-field-group">
+                  <label for="lt-partner-select">Partner (callback pattern only)</label>
+                  <select id="lt-partner-select" class="endpoint-select" onchange="ltPartnerChange()">
+                    <option value="">— select partner —</option>
+                  </select>
+                </div>
+                <div class="lt-field-group">
+                  <label for="lt-datapoint-select">Datapoint</label>
+                  <select id="lt-datapoint-select" class="endpoint-select">
+                    <option value="">— select datapoint —</option>
+                  </select>
+                </div>
+                <div class="lt-field-group" style="grid-column:1/-1;">
+                  <label for="lt-target-url-partner">Target URL *</label>
+                  <input id="lt-target-url-partner" type="url" class="form-input" style="width:100%;" placeholder="https://nifi.internal/webhook" />
+                </div>
+                <div class="lt-field-group">
+                  <label for="lt-rate-partner">Rate / second *</label>
+                  <input id="lt-rate-partner" type="number" class="form-input" min="1" max="2000" placeholder="500" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Stop after (shared) -->
+            <div style="margin-top:var(--space-4);">
+              <div style="font-size:0.8125rem;font-weight:600;color:var(--color-muted);margin-bottom:var(--space-2);">Stop after</div>
+              <div style="display:flex;gap:var(--space-4);flex-wrap:wrap;">
+                <label class="toggle-row">
+                  <input type="radio" name="lt-stop-mode" value="count" id="lt-stop-count" checked onchange="ltStopModeChange()" />
+                  Total requests
+                </label>
+                <label class="toggle-row">
+                  <input type="radio" name="lt-stop-mode" value="duration" id="lt-stop-duration" onchange="ltStopModeChange()" />
+                  Duration (seconds)
+                </label>
+              </div>
+              <div style="display:flex;gap:var(--space-3);margin-top:var(--space-2);">
+                <div id="lt-count-group" class="lt-field-group">
+                  <input id="lt-total-count" type="number" class="form-input" min="1" placeholder="1000" style="width:10rem;" />
+                </div>
+                <div id="lt-duration-group" class="lt-field-group" hidden>
+                  <input id="lt-duration-seconds" type="number" class="form-input" min="1" placeholder="30" style="width:10rem;" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Run controls -->
+            <div style="display:flex;gap:var(--space-3);margin-top:var(--space-4);flex-wrap:wrap;">
+              <button onclick="ltRun()" class="btn btn-primary" id="lt-run-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+                Run
+              </button>
+              <button onclick="ltCancel()" class="btn btn-secondary" id="lt-cancel-btn" hidden>Cancel</button>
+              <button onclick="ltSaveTemplate()" class="btn btn-secondary" id="lt-save-template-btn">Save as Template</button>
+            </div>
+          </div>
+
+          <!-- Status bar (hidden until run starts) -->
+          <div class="panel-section" id="lt-status-section" hidden>
+            <div class="lt-status-bar" id="lt-status-bar">
+              Fired: <span id="lt-stat-fired">0</span> / <span id="lt-stat-total">?</span> &nbsp;|&nbsp;
+              Success: <span id="lt-stat-success">0</span> &nbsp;|&nbsp;
+              Errors: <span id="lt-stat-errors">0</span> &nbsp;|&nbsp;
+              Elapsed: <span id="lt-stat-elapsed">0s</span>
+            </div>
+          </div>
+
+          <!-- Results panel (hidden until run completes) -->
+          <div class="panel-section" id="lt-results-section" hidden>
+            <h3 style="font-size:0.875rem;font-weight:600;margin-bottom:var(--space-3);">Results</h3>
+            <div class="lt-results-grid" id="lt-results-grid"></div>
+          </div>
+        </div>
+
+        <hr class="lt-section-divider" />
+
+        <!-- Templates -->
+        <div style="margin-bottom:var(--space-6);">
+          <div class="section-header" style="margin-bottom:var(--space-4);">
+            <div class="section-title" style="margin-bottom:0;">
+              <h2>Templates</h2>
+              <p>Saved run configurations.</p>
+            </div>
+            <button onclick="ltLoadTemplates()" class="btn btn-secondary">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+              Refresh
+            </button>
+          </div>
+          <div class="lt-template-grid" id="lt-templates-container">
+            <p style="font-size:0.875rem;color:var(--color-muted);">No templates saved yet.</p>
+          </div>
+        </div>
+
+        <hr class="lt-section-divider" />
+
+        <!-- Run History -->
+        <div>
+          <div class="section-header" style="margin-bottom:var(--space-4);">
+            <div class="section-title" style="margin-bottom:0;">
+              <h2>Run History</h2>
+              <p>Last 50 completed runs.</p>
+            </div>
+            <button onclick="ltLoadHistory()" class="btn btn-secondary">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+              Refresh
+            </button>
+          </div>
+          <div class="table-wrapper">
+            <div class="table-scroll">
+              <table class="lt-history-table">
+                <thead>
+                  <tr>
+                    <th>Date/Time</th>
+                    <th>Mode</th>
+                    <th>Target URL</th>
+                    <th>Fired</th>
+                    <th>Success</th>
+                    <th>Errors</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="lt-history-tbody">
+                  <tr><td colspan="8" style="padding:2.5rem 1rem;text-align:center;color:var(--color-muted);font-size:0.875rem;">No run history.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
       </section>
 
 
@@ -1964,6 +2342,351 @@ img, svg {
             });
         })
         .catch(function (e) { displayEl.textContent = 'Error: ' + e.message; });
+    }
+
+    // ---- Load Test ----
+
+    var _ltRunId = null;
+    var _ltPollTimer = null;
+    var _ltMode = 'standalone';
+
+    function showLoadTest() {
+      ltModeChange();
+      ltLoadTemplates();
+      ltLoadHistory();
+      fetch('/imnot/admin/partners', { headers: authHeaders() })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (data) {
+          var sel = document.getElementById('lt-partner-select');
+          if (!sel) return;
+          sel.innerHTML = '<option value="">— select partner —</option>';
+          (data || []).forEach(function (p) {
+            var cbDps = (p.datapoints || []).filter(function (dp) { return dp.pattern === 'callback'; });
+            if (cbDps.length) {
+              var opt = document.createElement('option');
+              opt.value = p.partner;
+              opt.textContent = p.partner;
+              sel.appendChild(opt);
+            }
+          });
+        })
+        .catch(function () {});
+    }
+
+    function ltModeChange() {
+      var mode = (document.getElementById('lt-mode') || {}).value || 'standalone';
+      _ltMode = mode;
+      var standaloneFields = document.getElementById('lt-standalone-fields');
+      var partnerFields = document.getElementById('lt-partner-fields');
+      var saveBtn = document.getElementById('lt-save-template-btn');
+      if (standaloneFields) standaloneFields.hidden = (mode !== 'standalone');
+      if (partnerFields) partnerFields.hidden = (mode !== 'partner');
+      if (saveBtn) saveBtn.hidden = (mode === 'partner');
+    }
+
+    function ltStopModeChange() {
+      var isCount = document.getElementById('lt-stop-count').checked;
+      var countGrp = document.getElementById('lt-count-group');
+      var durGrp = document.getElementById('lt-duration-group');
+      if (countGrp) countGrp.hidden = !isCount;
+      if (durGrp) durGrp.hidden = isCount;
+    }
+
+    function ltPartnerChange() {
+      var partnerSel = document.getElementById('lt-partner-select');
+      var dpSel = document.getElementById('lt-datapoint-select');
+      if (!partnerSel || !dpSel) return;
+      var partnerName = partnerSel.value;
+      dpSel.innerHTML = '<option value="">— select datapoint —</option>';
+      if (!partnerName) return;
+      fetch('/imnot/admin/partners', { headers: authHeaders() })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (data) {
+          var found = (data || []).find(function (p) { return p.partner === partnerName; });
+          if (!found) return;
+          (found.datapoints || []).filter(function (dp) { return dp.pattern === 'callback'; }).forEach(function (dp) {
+            var opt = document.createElement('option');
+            opt.value = dp.name;
+            opt.textContent = dp.name;
+            dpSel.appendChild(opt);
+          });
+        })
+        .catch(function () {});
+    }
+
+    function ltCollectForm() {
+      var errors = [];
+      var config = {};
+      var mode = (document.getElementById('lt-mode') || {}).value || 'standalone';
+      config.mode = mode;
+
+      var isCount = document.getElementById('lt-stop-count').checked;
+      if (mode === 'standalone') {
+        var url = ((document.getElementById('lt-target-url') || {}).value || '').trim();
+        if (!url) errors.push('Target URL is required');
+        config.target_url = url;
+        config.method = (document.getElementById('lt-method') || {}).value || 'POST';
+        var headersRaw = ((document.getElementById('lt-headers') || {}).value || '').trim();
+        if (headersRaw) {
+          try { config.headers = JSON.parse(headersRaw); } catch (e) { errors.push('Headers: invalid JSON'); }
+        }
+        var tpl = ((document.getElementById('lt-payload-template') || {}).value || '').trim();
+        if (tpl) config.payload_template = tpl;
+        var varyRaw = ((document.getElementById('lt-vary-values') || {}).value || '').trim();
+        if (varyRaw) config.vary_values = varyRaw.split('\n').map(function (v) { return v.trim(); }).filter(function (v) { return v; });
+        var rate = parseFloat((document.getElementById('lt-rate') || {}).value || '0');
+        if (!rate || rate <= 0) errors.push('Rate / second must be > 0');
+        config.rate_per_second = rate;
+      } else {
+        var partner = (document.getElementById('lt-partner-select') || {}).value || '';
+        var dp = (document.getElementById('lt-datapoint-select') || {}).value || '';
+        if (!partner) errors.push('Partner is required');
+        if (!dp) errors.push('Datapoint is required');
+        config.partner = partner;
+        config.datapoint = dp;
+        var urlPartner = ((document.getElementById('lt-target-url-partner') || {}).value || '').trim();
+        if (!urlPartner) errors.push('Target URL is required');
+        config.target_url = urlPartner;
+        var ratePartner = parseFloat((document.getElementById('lt-rate-partner') || {}).value || '0');
+        if (!ratePartner || ratePartner <= 0) errors.push('Rate / second must be > 0');
+        config.rate_per_second = ratePartner;
+      }
+
+      if (isCount) {
+        var cnt = parseInt((document.getElementById('lt-total-count') || {}).value || '0', 10);
+        if (!cnt || cnt <= 0) errors.push('Total requests must be > 0');
+        config.total_count = cnt;
+        config.duration_seconds = null;
+      } else {
+        var dur = parseFloat((document.getElementById('lt-duration-seconds') || {}).value || '0');
+        if (!dur || dur <= 0) errors.push('Duration must be > 0');
+        config.duration_seconds = dur;
+        config.total_count = null;
+      }
+
+      return { valid: errors.length === 0, config: config, errors: errors };
+    }
+
+    function ltRun() {
+      var result = ltCollectForm();
+      if (!result.valid) {
+        notify(result.errors.join('; '), 'error');
+        return;
+      }
+      var totalHint = result.config.total_count || '?';
+      fetch('/imnot/admin/stress/run', { method: 'POST', headers: authHeaders(), body: JSON.stringify(result.config) })
+        .then(function (r) { if (!r.ok) return r.json().then(function (d) { throw new Error(d.detail || 'HTTP ' + r.status); }); return r.json(); })
+        .then(function (d) {
+          _ltRunId = d.run_id;
+          var statusSection = document.getElementById('lt-status-section');
+          var resultsSection = document.getElementById('lt-results-section');
+          var cancelBtn = document.getElementById('lt-cancel-btn');
+          if (statusSection) statusSection.hidden = false;
+          if (resultsSection) resultsSection.hidden = true;
+          if (cancelBtn) cancelBtn.hidden = false;
+          document.getElementById('lt-stat-fired').textContent = '0';
+          document.getElementById('lt-stat-total').textContent = String(totalHint);
+          document.getElementById('lt-stat-success').textContent = '0';
+          document.getElementById('lt-stat-errors').textContent = '0';
+          document.getElementById('lt-stat-elapsed').textContent = '0s';
+          ltStartPolling();
+        })
+        .catch(function (e) { notify('Run failed: ' + e.message, 'error'); });
+    }
+
+    function ltStartPolling() {
+      ltStopPolling();
+      _ltPollTimer = setInterval(ltPoll, 1000);
+    }
+
+    function ltStopPolling() {
+      if (_ltPollTimer !== null) {
+        clearInterval(_ltPollTimer);
+        _ltPollTimer = null;
+      }
+    }
+
+    function ltPoll() {
+      if (!_ltRunId) { ltStopPolling(); return; }
+      fetch('/imnot/admin/stress/' + encodeURIComponent(_ltRunId), { headers: authHeaders() })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (d) {
+          document.getElementById('lt-stat-fired').textContent = String(d.fired || 0);
+          document.getElementById('lt-stat-success').textContent = String(d.success_count || 0);
+          document.getElementById('lt-stat-errors').textContent = String(d.error_count || 0);
+          document.getElementById('lt-stat-elapsed').textContent = (d.elapsed_seconds || 0).toFixed(1) + 's';
+          var terminal = ['done', 'cancelled', 'error'];
+          if (terminal.indexOf(d.status) !== -1) {
+            ltStopPolling();
+            var cancelBtn = document.getElementById('lt-cancel-btn');
+            if (cancelBtn) cancelBtn.hidden = true;
+            ltShowResults(d);
+            ltLoadHistory();
+          }
+        })
+        .catch(function () {});
+    }
+
+    function ltCancel() {
+      if (!_ltRunId) return;
+      fetch('/imnot/admin/stress/' + encodeURIComponent(_ltRunId), { method: 'DELETE', headers: authHeaders() })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function () { notify('Run cancel requested.', 'ok'); })
+        .catch(function (e) { notify('Cancel failed: ' + e.message, 'error'); });
+    }
+
+    function ltShowResults(data) {
+      var section = document.getElementById('lt-results-section');
+      var grid = document.getElementById('lt-results-grid');
+      if (!section || !grid) return;
+      section.hidden = false;
+      function metric(val, label) {
+        var v = (val !== null && val !== undefined) ? val : '—';
+        return '<div class="lt-metric-card">'
+          + '<span class="lt-metric-value">' + escHtml(String(v)) + '</span>'
+          + '<span class="lt-metric-label">' + escHtml(label) + '</span>'
+          + '</div>';
+      }
+      grid.innerHTML = metric(data.fired, 'Fired')
+        + metric(data.success_count, 'Success')
+        + metric(data.error_count, 'Errors')
+        + metric(data.p50_ms !== undefined && data.p50_ms !== null ? Math.round(data.p50_ms) + 'ms' : null, 'P50')
+        + metric(data.p95_ms !== undefined && data.p95_ms !== null ? Math.round(data.p95_ms) + 'ms' : null, 'P95')
+        + metric(data.p99_ms !== undefined && data.p99_ms !== null ? Math.round(data.p99_ms) + 'ms' : null, 'P99')
+        + metric(data.actual_rate_per_second !== undefined && data.actual_rate_per_second !== null ? data.actual_rate_per_second.toFixed(1) : null, 'Actual Rate/s')
+        + metric(data.duration_seconds !== undefined && data.duration_seconds !== null ? data.duration_seconds.toFixed(2) + 's' : null, 'Duration');
+    }
+
+    function ltLoadTemplates() {
+      fetch('/imnot/admin/stress/templates', { headers: authHeaders() })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (data) {
+          var container = document.getElementById('lt-templates-container');
+          if (!container) return;
+          if (!data || !data.length) {
+            container.innerHTML = '<p style="font-size:0.875rem;color:var(--color-muted);">No templates saved yet.</p>';
+            return;
+          }
+          container.innerHTML = data.map(function (t) {
+            var cfg = t.config || {};
+            var summary = (cfg.mode || 'standalone') + ' · ' + (cfg.target_url || '') + ' · ' + (cfg.rate_per_second || '?') + ' req/s';
+            var cfgEscaped = escHtml(JSON.stringify(t.config));
+            return '<div class="lt-template-card">'
+              + '<div class="lt-template-name">' + escHtml(t.name) + '</div>'
+              + '<div class="lt-template-summary">' + escHtml(summary) + '</div>'
+              + '<div class="lt-template-actions">'
+              + '<button class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.75rem;" '
+              + 'onclick="ltApplyTemplate(JSON.parse(this.dataset.cfg))" data-cfg="' + cfgEscaped + '">Apply</button>'
+              + '<button class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.75rem;" '
+              + 'onclick="ltDeleteTemplate(\'' + escHtml(t.template_id) + '\')">Delete</button>'
+              + '</div>'
+              + '</div>';
+          }).join('');
+        })
+        .catch(function () {});
+    }
+
+    function ltSaveTemplate() {
+      if (_ltMode === 'partner') return;
+      var result = ltCollectForm();
+      if (!result.valid) {
+        notify('Fix form errors before saving: ' + result.errors.join('; '), 'error');
+        return;
+      }
+      var name = prompt('Template name:');
+      if (!name || !name.trim()) return;
+      fetch('/imnot/admin/stress/templates', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ name: name.trim(), config: result.config })
+      })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function () { notify('Template saved.', 'ok'); ltLoadTemplates(); })
+        .catch(function (e) { notify('Save failed: ' + e.message, 'error'); });
+    }
+
+    function ltDeleteTemplate(templateId) {
+      if (!confirm('Delete this template?')) return;
+      fetch('/imnot/admin/stress/templates/' + encodeURIComponent(templateId), { method: 'DELETE', headers: authHeaders() })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function () { notify('Template deleted.', 'ok'); ltLoadTemplates(); })
+        .catch(function (e) { notify('Delete failed: ' + e.message, 'error'); });
+    }
+
+    function ltApplyTemplate(config) {
+      var modeEl = document.getElementById('lt-mode');
+      if (modeEl) { modeEl.value = config.mode || 'standalone'; ltModeChange(); }
+      if (config.mode === 'standalone') {
+        if (document.getElementById('lt-target-url')) document.getElementById('lt-target-url').value = config.target_url || '';
+        if (document.getElementById('lt-method')) document.getElementById('lt-method').value = config.method || 'POST';
+        if (document.getElementById('lt-headers')) document.getElementById('lt-headers').value = config.headers ? JSON.stringify(config.headers, null, 2) : '';
+        if (document.getElementById('lt-payload-template')) document.getElementById('lt-payload-template').value = config.payload_template || '';
+        if (document.getElementById('lt-vary-values')) document.getElementById('lt-vary-values').value = (config.vary_values || []).join('\n');
+        if (document.getElementById('lt-rate')) document.getElementById('lt-rate').value = config.rate_per_second || '';
+      }
+      if (config.total_count !== null && config.total_count !== undefined) {
+        document.getElementById('lt-stop-count').checked = true;
+        document.getElementById('lt-total-count').value = config.total_count;
+        ltStopModeChange();
+      } else if (config.duration_seconds !== null && config.duration_seconds !== undefined) {
+        document.getElementById('lt-stop-duration').checked = true;
+        document.getElementById('lt-duration-seconds').value = config.duration_seconds;
+        ltStopModeChange();
+      }
+    }
+
+    function ltLoadHistory() {
+      fetch('/imnot/admin/stress/runs', { headers: authHeaders() })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (data) {
+          var tbody = document.getElementById('lt-history-tbody');
+          if (!tbody) return;
+          if (!data || !data.length) {
+            tbody.innerHTML = '<tr><td colspan="8" style="padding:2.5rem 1rem;text-align:center;color:var(--color-muted);font-size:0.875rem;">No run history.</td></tr>';
+            return;
+          }
+          tbody.innerHTML = data.map(function (run) {
+            var cfg = run.config || {};
+            var res = run.results || {};
+            var cfgEscaped = escHtml(JSON.stringify(run.config));
+            return '<tr>'
+              + '<td class="lt-td-mono">' + escHtml((run.ran_at || '').slice(0, 19).replace('T', ' ')) + '</td>'
+              + '<td>' + escHtml(cfg.mode || '—') + '</td>'
+              + '<td class="lt-td-mono" style="max-width:14rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(cfg.target_url || '—') + '</td>'
+              + '<td>' + (res.fired !== undefined ? res.fired : '—') + '</td>'
+              + '<td>' + (res.success_count !== undefined ? res.success_count : '—') + '</td>'
+              + '<td>' + (res.error_count !== undefined ? res.error_count : '—') + '</td>'
+              + '<td>' + escHtml(run.status || '—') + '</td>'
+              + '<td style="display:flex;gap:0.375rem;">'
+              + '<button class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.75rem;" '
+              + 'onclick="ltViewResults(\'' + escHtml(run.run_id) + '\')">View</button>'
+              + '<button class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.75rem;" '
+              + 'onclick="ltReplay(JSON.parse(this.dataset.cfg))" data-cfg="' + cfgEscaped + '">Replay</button>'
+              + '</td>'
+              + '</tr>';
+          }).join('');
+        })
+        .catch(function () {});
+    }
+
+    function ltViewResults(runId) {
+      fetch('/imnot/admin/stress/' + encodeURIComponent(runId), { headers: authHeaders() })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (d) {
+          var statusSection = document.getElementById('lt-status-section');
+          if (statusSection) statusSection.hidden = false;
+          document.getElementById('lt-stat-fired').textContent = String(d.fired || 0);
+          document.getElementById('lt-stat-success').textContent = String(d.success_count || 0);
+          document.getElementById('lt-stat-errors').textContent = String(d.error_count || 0);
+          document.getElementById('lt-stat-elapsed').textContent = (d.elapsed_seconds || 0).toFixed(1) + 's';
+          document.getElementById('lt-stat-total').textContent = String(d.fired || '?');
+          ltShowResults(d);
+        })
+        .catch(function (e) { notify('Failed to load results: ' + e.message, 'error'); });
+    }
+
+    function ltReplay(config) {
+      ltApplyTemplate(config);
     }
 
     // ---- Builder ----
@@ -3016,6 +3739,7 @@ img, svg {
       });
       localStorage.setItem('imnot-section', name);
       if (name === 'sessions') loadSessions();
+      if (name === 'loadtest') showLoadTest();
       // 'builder' and 'partners' need no auto-load side effect here;
       // showBuilder() handles pre-fill explicitly when entering builder mode.
     }
@@ -3030,6 +3754,7 @@ img, svg {
       var section = localStorage.getItem('imnot-section') || 'partners';
       if (section === 'payload') section = 'partners';
       if (section === 'builder') section = 'partners'; // Builder is transient
+      if (section === 'loadtest') section = 'partners'; // Load Test is transient
       showSection(section);
       checkHealth();
       loadPartners();

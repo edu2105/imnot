@@ -66,6 +66,7 @@ From the browser you can:
 - Run end-to-end endpoint tests — including full polling flows
 - Manage active sessions
 - Hot-reload YAML without restarting the server
+- Run load tests against any HTTP endpoint (standalone or partner-bound)
 
 ---
 

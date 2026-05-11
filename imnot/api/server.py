@@ -27,6 +27,7 @@ from starlette.requests import Request
 from imnot.config import UIConfig, load_config
 from imnot.engine.router import register_routes
 from imnot.engine.session_store import SessionStore
+from imnot.engine.stress import StressStore
 from imnot.loader.yaml_loader import load_partners
 
 logger = logging.getLogger(__name__)
@@ -84,15 +85,18 @@ def create_app(
     ``Authorization: Bearer <admin_key>``.
     """
     store = SessionStore(db_path=db_path)
+    stress_store = StressStore(db_path=db_path)
     partners = load_partners(partners_dir) if partners_dir is not None else []
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         store.init()
+        stress_store.init()
         logger.info("imnot starting — %d partner(s) loaded", len(partners))
         if admin_key:
             logger.info("Admin endpoints protected by Bearer token auth")
         yield
+        stress_store.close()
         store.close()
         logger.info("imnot shut down")
 
@@ -103,6 +107,7 @@ def create_app(
         lifespan=lifespan,
     )
 
+    app.state.stress_store = stress_store
     app.add_middleware(LoggingMiddleware)
     register_routes(
         app,

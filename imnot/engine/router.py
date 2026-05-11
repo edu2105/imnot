@@ -37,6 +37,7 @@ from imnot.engine.patterns.paginated import make_paginated_handler
 from imnot.engine.patterns.push import fire_callback, make_push_handler
 from imnot.engine.patterns.static import make_static_handler
 from imnot.engine.session_store import SessionStore
+from imnot.engine.stress_router import register_stress_routes
 from imnot.loader.yaml_loader import DatapointDef, EndpointDef, PartnerDef, load_partners
 from imnot.partners import register_partner
 from imnot.postman import build_postman_collection
@@ -96,6 +97,9 @@ def register_routes(
         _register_admin_auth_middleware(app, admin_key)
     _register_docs_routes(app, partners_dir)
     _register_infra_routes(app, partners, store)
+    stress_store = getattr(app.state, "stress_store", None)
+    if stress_store is not None:
+        register_stress_routes(app, store, stress_store)
     if effective_ui_config.enabled:
         _register_ui_routes(app, effective_ui_config)
     for partner in partners:
