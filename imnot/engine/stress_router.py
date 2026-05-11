@@ -94,6 +94,17 @@ def register_stress_routes(app: FastAPI, store: SessionStore, stress_store: Stre
             return JSONResponse(status_code=404, content={"detail": f"Template '{template_id}' not found"})
         return JSONResponse({"status": "ok", "template_id": template_id})
 
+    async def delete_run_history(run_id: str) -> JSONResponse:
+        if run_id in _active_runs:
+            return JSONResponse(
+                status_code=409,
+                content={"detail": f"Run '{run_id}' is still active; cancel it first"},
+            )
+        deleted = stress_store.delete_run(run_id)
+        if not deleted:
+            return JSONResponse(status_code=404, content={"detail": f"Run '{run_id}' not found"})
+        return JSONResponse({"status": "ok", "run_id": run_id})
+
     async def get_run(run_id: str) -> JSONResponse:
         state = _active_runs.get(run_id)
         if state is not None:
@@ -148,6 +159,7 @@ def register_stress_routes(app: FastAPI, store: SessionStore, stress_store: Stre
 
     start_run.__name__ = "stress_start_run"
     list_runs.__name__ = "stress_list_runs"
+    delete_run_history.__name__ = "stress_delete_run_history"
     list_templates.__name__ = "stress_list_templates"
     create_template.__name__ = "stress_create_template"
     delete_template.__name__ = "stress_delete_template"
@@ -156,6 +168,7 @@ def register_stress_routes(app: FastAPI, store: SessionStore, stress_store: Stre
 
     app.add_api_route("/imnot/admin/stress/run", start_run, methods=["POST"])
     app.add_api_route("/imnot/admin/stress/runs", list_runs, methods=["GET"])
+    app.add_api_route("/imnot/admin/stress/runs/{run_id}", delete_run_history, methods=["DELETE"])
     app.add_api_route("/imnot/admin/stress/templates", list_templates, methods=["GET"])
     app.add_api_route("/imnot/admin/stress/templates", create_template, methods=["POST"])
     app.add_api_route("/imnot/admin/stress/templates/{template_id}", delete_template, methods=["DELETE"])

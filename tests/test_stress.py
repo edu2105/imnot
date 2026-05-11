@@ -704,6 +704,33 @@ async def test_run_stress_partner_mode_no_payload(stress_store: StressStore, ses
     assert row["results"]["fired"] == 1
 
 
+def test_delete_run_from_history(app_client: TestClient):
+    """DELETE /imnot/admin/stress/runs/{run_id} removes a completed run from DB."""
+    ss: StressStore = app_client.app.state.stress_store
+    ss.create_run("hist-del-1", {"rate_per_second": 1, "total_count": 1})
+    ss.flush_run("hist-del-1", "done", {"fired": 1})
+
+    resp = app_client.delete("/imnot/admin/stress/runs/hist-del-1")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
+    assert ss.get_run("hist-del-1") is None
+
+
+def test_delete_run_from_history_not_found(app_client: TestClient):
+    resp = app_client.delete("/imnot/admin/stress/runs/no-such-run")
+    assert resp.status_code == 404
+
+
+def test_delete_run_from_history_still_active(app_client: TestClient):
+    """DELETE /runs/{run_id} returns 409 if the run is still in _active_runs."""
+    run_id = "still-active"
+    state = RunState(run_id=run_id, status="running", config={})
+    _active_runs[run_id] = state
+
+    resp = app_client.delete(f"/imnot/admin/stress/runs/{run_id}")
+    assert resp.status_code == 409
+
+
 def test_post_run_partner_missing_fields(app_client: TestClient):
     """Partner mode without partner/datapoint fields → 422."""
     resp = app_client.post(

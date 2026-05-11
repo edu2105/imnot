@@ -148,6 +148,11 @@ class StressStore:
             for r in rows
         ]
 
+    def delete_run(self, run_id: str) -> bool:
+        with self._cursor() as cur:
+            cur.execute("DELETE FROM stress_runs WHERE run_id = ?", (run_id,))
+            return cur.rowcount > 0
+
     def create_template(self, template_id: str, name: str, config: dict) -> None:
         with self._cursor() as cur:
             cur.execute(

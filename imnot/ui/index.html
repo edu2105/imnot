@@ -1660,6 +1660,18 @@ img, svg {
           </div>
         </div>
 
+        <!-- Templates (top, hidden when empty) -->
+        <div id="lt-templates-section" hidden style="margin-bottom:var(--space-6);">
+          <div class="section-header" style="margin-bottom:var(--space-4);">
+            <div class="section-title" style="margin-bottom:0;">
+              <h2>Templates</h2>
+              <p>Saved run configurations — click Apply to pre-fill the form.</p>
+            </div>
+          </div>
+          <div class="lt-template-grid" id="lt-templates-container"></div>
+          <hr class="lt-section-divider" style="margin-top:var(--space-6);" />
+        </div>
+
         <!-- Mode + form -->
         <div class="panel" style="margin-bottom:var(--space-5);">
           <div class="panel-section">
@@ -1788,27 +1800,6 @@ img, svg {
 
         <hr class="lt-section-divider" />
 
-        <!-- Templates -->
-        <div style="margin-bottom:var(--space-6);">
-          <div class="section-header" style="margin-bottom:var(--space-4);">
-            <div class="section-title" style="margin-bottom:0;">
-              <h2>Templates</h2>
-              <p>Saved run configurations.</p>
-            </div>
-            <button onclick="ltLoadTemplates()" class="btn btn-secondary">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-              </svg>
-              Refresh
-            </button>
-          </div>
-          <div class="lt-template-grid" id="lt-templates-container">
-            <p style="font-size:0.875rem;color:var(--color-muted);">No templates saved yet.</p>
-          </div>
-        </div>
-
-        <hr class="lt-section-divider" />
-
         <!-- Run History -->
         <div>
           <div class="section-header" style="margin-bottom:var(--space-4);">
@@ -1845,6 +1836,19 @@ img, svg {
             </div>
           </div>
         </div>
+
+        <!-- Save-as-Template dialog -->
+        <dialog id="lt-template-dialog" style="border:1px solid var(--color-border);border-radius:var(--radius-lg);background:var(--color-surface);color:var(--color-text);padding:var(--space-5);min-width:22rem;max-width:90vw;">
+          <h3 style="font-size:0.9375rem;font-weight:600;margin-bottom:var(--space-4);">Save as Template</h3>
+          <div class="lt-field-group" style="margin-bottom:var(--space-4);">
+            <label for="lt-template-name-input">Template name</label>
+            <input id="lt-template-name-input" type="text" class="form-input" placeholder="e.g. NiFi checkin 1100 props" style="width:100%;" />
+          </div>
+          <div style="display:flex;gap:var(--space-3);justify-content:flex-end;">
+            <button type="button" class="btn btn-secondary" onclick="document.getElementById('lt-template-dialog').close()">Cancel</button>
+            <button type="button" class="btn btn-primary" onclick="ltSaveTemplateConfirm()">Save</button>
+          </div>
+        </dialog>
 
       </section>
 
@@ -2349,6 +2353,7 @@ img, svg {
     var _ltRunId = null;
     var _ltPollTimer = null;
     var _ltMode = 'standalone';
+    var _ltPendingTemplateConfig = null;
 
     function showLoadTest() {
       ltModeChange();
@@ -2561,10 +2566,11 @@ img, svg {
       fetch('/imnot/admin/stress/templates', { headers: authHeaders() })
         .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(function (data) {
+          var section = document.getElementById('lt-templates-section');
           var container = document.getElementById('lt-templates-container');
           if (!container) return;
           if (!data || !data.length) {
-            container.innerHTML = '<p style="font-size:0.875rem;color:var(--color-muted);">No templates saved yet.</p>';
+            if (section) section.hidden = true;
             return;
           }
           container.innerHTML = data.map(function (t) {
@@ -2577,11 +2583,12 @@ img, svg {
               + '<div class="lt-template-actions">'
               + '<button class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.75rem;" '
               + 'onclick="ltApplyTemplate(JSON.parse(this.dataset.cfg))" data-cfg="' + cfgEscaped + '">Apply</button>'
-              + '<button class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.75rem;" '
+              + '<button class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.75rem;color:var(--color-error);" '
               + 'onclick="ltDeleteTemplate(\'' + escHtml(t.template_id) + '\')">Delete</button>'
               + '</div>'
               + '</div>';
           }).join('');
+          if (section) section.hidden = false;
         })
         .catch(function () {});
     }
@@ -2593,12 +2600,21 @@ img, svg {
         notify('Fix form errors before saving: ' + result.errors.join('; '), 'error');
         return;
       }
-      var name = prompt('Template name:');
-      if (!name || !name.trim()) return;
+      _ltPendingTemplateConfig = result.config;
+      var input = document.getElementById('lt-template-name-input');
+      if (input) input.value = '';
+      var dlg = document.getElementById('lt-template-dialog');
+      if (dlg) dlg.showModal();
+    }
+
+    function ltSaveTemplateConfirm() {
+      var name = ((document.getElementById('lt-template-name-input') || {}).value || '').trim();
+      if (!name) { notify('Template name is required.', 'error'); return; }
+      document.getElementById('lt-template-dialog').close();
       fetch('/imnot/admin/stress/templates', {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({ name: name.trim(), config: result.config })
+        body: JSON.stringify({ name: name, config: _ltPendingTemplateConfig })
       })
         .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(function () { notify('Template saved.', 'ok'); ltLoadTemplates(); })
@@ -2610,6 +2626,14 @@ img, svg {
       fetch('/imnot/admin/stress/templates/' + encodeURIComponent(templateId), { method: 'DELETE', headers: authHeaders() })
         .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(function () { notify('Template deleted.', 'ok'); ltLoadTemplates(); })
+        .catch(function (e) { notify('Delete failed: ' + e.message, 'error'); });
+    }
+
+    function ltDeleteRun(runId) {
+      if (!confirm('Remove this run from history?')) return;
+      fetch('/imnot/admin/stress/runs/' + encodeURIComponent(runId), { method: 'DELETE', headers: authHeaders() })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function () { notify('Run removed.', 'ok'); ltLoadHistory(); })
         .catch(function (e) { notify('Delete failed: ' + e.message, 'error'); });
     }
 
@@ -2662,6 +2686,8 @@ img, svg {
               + 'onclick="ltViewResults(\'' + escHtml(run.run_id) + '\')">View</button>'
               + '<button class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.75rem;" '
               + 'onclick="ltReplay(JSON.parse(this.dataset.cfg))" data-cfg="' + cfgEscaped + '">Replay</button>'
+              + '<button class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.75rem;color:var(--color-error);" '
+              + 'onclick="ltDeleteRun(\'' + escHtml(run.run_id) + '\')">Delete</button>'
               + '</td>'
               + '</tr>';
           }).join('');
