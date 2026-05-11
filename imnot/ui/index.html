@@ -896,16 +896,17 @@ img, svg {
   font-size: 0.75rem;
   font-weight: 500;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--color-brand);
-  background-color: var(--color-brand);
-  color: #fff;
+  border: 1px solid var(--color-error-border);
+  background-color: var(--color-error-bg);
+  color: var(--color-error-text);
   cursor: pointer;
-  transition: background-color var(--t-fast), border-color var(--t-fast);
+  transition: background-color var(--t-fast), border-color var(--t-fast), color var(--t-fast);
 }
 
 .btn-danger-sm:hover {
-  background-color: var(--color-brand-hover);
-  border-color: var(--color-brand-hover);
+  background-color: var(--color-error-border);
+  border-color: var(--color-error-text);
+  color: var(--color-error-text);
 }
 
 .sessions-table .td-empty {
@@ -1213,6 +1214,82 @@ img, svg {
   z-index: 10;
 }
 
+/* Inline field validation error */
+.field-error {
+  font-size: 0.75rem;
+  color: var(--color-error-text);
+  min-height: 1rem;
+  display: block;
+}
+
+/* Post-registration card highlight: background flickers twice then returns. */
+@keyframes card-bg-pulse {
+  0%   { background-color: var(--color-surface); }
+  25%  { background-color: var(--color-surface-alt); }
+  50%  { background-color: var(--color-surface); }
+  75%  { background-color: var(--color-surface-alt); }
+  100% { background-color: var(--color-surface); }
+}
+
+.card--highlight {
+  animation: card-bg-pulse 2.4s ease-in-out;
+}
+
+/* Checkbox + label row (generates_id, returns_payload) */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.875rem;
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.toggle-row input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--color-brand);
+  cursor: pointer;
+}
+
+/* Conditional sub-group that appears when a toggle is on */
+.conditional-group {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--color-surface-alt);
+  border-left: 2px solid var(--color-brand);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* card-header right-align helper for Edit button */
+.card .card-header {
+  flex: 1;
+}
+
+.card-header-edit {
+  margin-left: auto;
+}
+
+/* Patterns reference hint link below the Pattern select */
+.builder-pattern-hint {
+  font-size: 0.6875rem;
+  color: var(--color-brand);
+  text-decoration: none;
+  margin-top: 0.125rem;
+  display: inline-block;
+  opacity: 0.8;
+  transition: opacity var(--t-fast);
+}
+
+.builder-pattern-hint:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+
 /* ============================================================
    Load Test tab (.lt-*)
    ============================================================ */
@@ -1316,6 +1393,7 @@ img, svg {
 .lt-template-card {
   background-color: var(--color-surface);
   border: 1px solid var(--color-border);
+  border-top: 3px solid var(--color-brand);
   border-radius: var(--radius-md);
   padding: var(--space-4);
   min-width: 16rem;
@@ -1389,81 +1467,6 @@ img, svg {
   border: none;
   border-top: 1px solid var(--color-rule);
   margin: var(--space-6) 0;
-}
-
-/* Inline field validation error */
-.field-error {
-  font-size: 0.75rem;
-  color: var(--color-error-text);
-  min-height: 1rem;
-  display: block;
-}
-
-/* Post-registration card highlight: background flickers twice then returns. */
-@keyframes card-bg-pulse {
-  0%   { background-color: var(--color-surface); }
-  25%  { background-color: var(--color-surface-alt); }
-  50%  { background-color: var(--color-surface); }
-  75%  { background-color: var(--color-surface-alt); }
-  100% { background-color: var(--color-surface); }
-}
-
-.card--highlight {
-  animation: card-bg-pulse 2.4s ease-in-out;
-}
-
-/* Checkbox + label row (generates_id, returns_payload) */
-.toggle-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: 0.875rem;
-  color: var(--color-ink);
-  cursor: pointer;
-}
-
-.toggle-row input[type="checkbox"] {
-  width: 1rem;
-  height: 1rem;
-  accent-color: var(--color-brand);
-  cursor: pointer;
-}
-
-/* Conditional sub-group that appears when a toggle is on */
-.conditional-group {
-  margin-top: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  background-color: var(--color-surface-alt);
-  border-left: 2px solid var(--color-brand);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-/* card-header right-align helper for Edit button */
-.card .card-header {
-  flex: 1;
-}
-
-.card-header-edit {
-  margin-left: auto;
-}
-
-/* Patterns reference hint link below the Pattern select */
-.builder-pattern-hint {
-  font-size: 0.6875rem;
-  color: var(--color-brand);
-  text-decoration: none;
-  margin-top: 0.125rem;
-  display: inline-block;
-  opacity: 0.8;
-  transition: opacity var(--t-fast);
-}
-
-.builder-pattern-hint:hover {
-  opacity: 1;
-  text-decoration: underline;
 }
 
 /* ============================================================
