@@ -2831,6 +2831,8 @@ img, svg {
           }
         } else if (dp.pattern === 'callback') {
           if (eps.length > 0) {
+            var cbMethodSel = document.getElementById('b-dp-' + idx + '-method');
+            if (cbMethodSel && eps[0].method) cbMethodSel.value = eps[0].method;
             var pathInp = document.getElementById('b-dp-' + idx + '-path');
             if (pathInp) pathInp.value = eps[0].path || '';
           }
@@ -2994,10 +2996,17 @@ img, svg {
           + _builderFirstTwoStepsHtml(i);
       }
       if (pattern === 'callback') {
+        var cbMethodOpts = ['POST','PUT','PATCH'].map(function (m) {
+          return '<option value="' + m + '"' + (m === 'POST' ? ' selected' : '') + '>' + m + '</option>';
+        }).join('');
         return '<div class="form-stack">'
           + '<div class="form-row">'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-method">Method</label>'
+          + '<select id="b-dp-' + i + '-method" class="endpoint-select" onchange="_builderMarkDirty();builderUpdatePreview()">' + cbMethodOpts + '</select>'
+          + '</div>'
           + '<div class="form-group" style="flex:2;">'
-          + '<label class="form-label" for="b-dp-' + i + '-path">POST path *</label>'
+          + '<label class="form-label" for="b-dp-' + i + '-path">Path *</label>'
           + '<input id="b-dp-' + i + '-path" type="text" class="form-input" style="width:100%;" placeholder="/partner/submit" oninput="_builderMarkDirty();builderUpdatePreview()" />'
           + '<span class="field-error" id="b-dp-' + i + '-path-err"></span>'
           + '</div>'
@@ -3326,7 +3335,7 @@ img, svg {
             }
           });
         } else if (dp.pattern === 'callback') {
-          lines.push('      - method: POST');
+          lines.push('      - method: ' + (dp.method || 'POST'));
           lines.push('        path: ' + _yamlStr(dp.path));
           lines.push('        response:');
           lines.push('          status: ' + dp.status);
@@ -3477,6 +3486,7 @@ img, svg {
             if (cbPathErr) cbPathErr.textContent = 'Path must start with /';
             errors.push('Datapoint ' + dpName + ': path must start with /');
           } else { if (cbPathErr) cbPathErr.textContent = ''; }
+          dp.method = ((document.getElementById('b-dp-' + idx + '-method') || {}).value || 'POST');
           dp.path = cbPath;
           dp.status = parseInt(((document.getElementById('b-dp-' + idx + '-status') || {}).value || '202'), 10) || 202;
           dp.callback_delay = ((document.getElementById('b-dp-' + idx + '-callback-delay') || {}).value || '0');
