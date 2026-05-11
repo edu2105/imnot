@@ -113,6 +113,8 @@ Consumer endpoints (partner routes, `/healthz`) are never affected. Set `IMNOT_A
 
 ## Load Test endpoints
 
+> **Security warning:** The stress endpoints allow firing high-volume HTTP requests at an arbitrary target URL. Unlike a local tool (`hey`, `wrk`), imnot runs as a persistent server — if exposed to the internet without a strong `IMNOT_ADMIN_KEY`, these endpoints can be used to launch HTTP floods against third-party systems from your host's IP address. **Never expose imnot's admin port publicly without authentication.** Set `IMNOT_ADMIN_KEY` in production and restrict network access to the admin port at the infrastructure level.
+
 All routes under `/imnot/admin/stress/` are auth-gated by the same Bearer token as the rest of the admin API.
 
 ### `POST /imnot/admin/stress/run`
