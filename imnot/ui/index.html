@@ -1660,6 +1660,8 @@ img, svg {
           </div>
         </div>
 
+        <hr class="lt-section-divider" />
+
         <!-- Templates (top, hidden when empty) -->
         <div id="lt-templates-section" hidden style="margin-bottom:var(--space-6);">
           <div class="section-header" style="margin-bottom:var(--space-4);">
@@ -2583,7 +2585,7 @@ img, svg {
               + '<div class="lt-template-actions">'
               + '<button class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.75rem;" '
               + 'onclick="ltApplyTemplate(JSON.parse(this.dataset.cfg))" data-cfg="' + cfgEscaped + '">Apply</button>'
-              + '<button class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.75rem;color:var(--color-error);" '
+              + '<button class="btn-danger-sm" '
               + 'onclick="ltDeleteTemplate(\'' + escHtml(t.template_id) + '\')">Delete</button>'
               + '</div>'
               + '</div>';
@@ -2686,7 +2688,7 @@ img, svg {
               + 'onclick="ltViewResults(\'' + escHtml(run.run_id) + '\')">View</button>'
               + '<button class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.75rem;" '
               + 'onclick="ltReplay(JSON.parse(this.dataset.cfg))" data-cfg="' + cfgEscaped + '">Replay</button>'
-              + '<button class="btn btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.75rem;color:var(--color-error);" '
+              + '<button class="btn-danger-sm" '
               + 'onclick="ltDeleteRun(\'' + escHtml(run.run_id) + '\')">Delete</button>'
               + '</td>'
               + '</tr>';
