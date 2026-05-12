@@ -18,10 +18,10 @@ class ServerConfig:
 
 @dataclass
 class LoggingConfig:
-    log_dir: str = "."
+    log_dir: str = "logs"
     max_bytes: int = 10_485_760  # 10 MB
     backup_name_format: str = "date"
-    archived_logs_dir: str = "./archived-logs"
+    archived_logs_dir: str = "./archived"
     debug: bool = False
     stdout: bool = False
 
