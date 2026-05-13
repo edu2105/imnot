@@ -51,10 +51,10 @@ _IMNOT_TOML_TEMPLATE = """\
 # stop_timeout_seconds = 5             # seconds to wait for graceful shutdown
 
 [logging]
-# log_dir = "."                           # directory for log files (default: current dir)
+# log_dir = "logs"                        # directory for log files (default: logs/)
 # max_bytes = 10485760                    # rotate when log file reaches this size (10 MB)
 # backup_name_format = "date"             # "date" (2026-04-20) or "epoch" (1745789123)
-# archived_logs_dir = "./archived-logs"   # rotated backups, relative to log_dir
+# archived_logs_dir = "./archived"        # rotated backups, relative to log_dir
 # debug = false                           # enable DEBUG-level logs
 # stdout = false                          # also emit to stdout (useful for Docker/ECS)
 

@@ -934,7 +934,7 @@ def test_start_logs_written_to_db_dir_not_cwd(runner, tmp_path):
         os.chdir(original)
 
     assert result.exit_code == 0
-    assert (db_dir / "imnot.cli.log").exists(), "log file should be in db_dir"
+    assert (db_dir / "logs" / "imnot.cli.log").exists(), "log file should be in db_dir/logs"
     assert not (cwd_dir / "imnot.cli.log").exists(), "log file must NOT be in CWD"
 
 

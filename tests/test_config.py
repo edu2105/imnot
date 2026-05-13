@@ -21,10 +21,10 @@ def test_server_config_defaults():
 
 def test_logging_config_defaults():
     c = LoggingConfig()
-    assert c.log_dir == "."
+    assert c.log_dir == "logs"
     assert c.max_bytes == 10_485_760
     assert c.backup_name_format == "date"
-    assert c.archived_logs_dir == "./archived-logs"
+    assert c.archived_logs_dir == "./archived"
     assert c.debug is False
     assert c.stdout is False
 
