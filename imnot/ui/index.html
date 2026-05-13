@@ -3034,6 +3034,9 @@ img, svg {
           + '</div>';
       }
       if (pattern === 'paginated') {
+        var pgStyleOpts = ['offset_limit','cursor','page_number'].map(function (s) {
+          return '<option value="' + s + '"' + (s === 'offset_limit' ? ' selected' : '') + '>' + s + '</option>';
+        }).join('');
         return '<div class="form-stack">'
           + '<div class="form-row">'
           + '<div class="form-group" style="flex:2;">'
@@ -3044,6 +3047,10 @@ img, svg {
           + '<div class="form-group">'
           + '<label class="form-label" for="b-dp-' + i + '-status">Status</label>'
           + '<input id="b-dp-' + i + '-status" type="number" class="form-input" value="200" min="100" max="599" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-pg-style">style</label>'
+          + '<select id="b-dp-' + i + '-pg-style" class="endpoint-select" onchange="_builderMarkDirty();_builderPgStyleChange(' + i + ');builderUpdatePreview()">' + pgStyleOpts + '</select>'
           + '</div>'
           + '</div>'
           + '<div class="form-row">'
@@ -3060,14 +3067,47 @@ img, svg {
           + '<label class="form-label" for="b-dp-' + i + '-has-more-field">has_more_field</label>'
           + '<input id="b-dp-' + i + '-has-more-field" type="text" class="form-input" placeholder="e.g. hasMore (optional)" oninput="_builderMarkDirty();builderUpdatePreview()" />'
           + '</div>'
+          + '</div>'
+          + '<div id="b-dp-' + i + '-pg-offset-fields" class="form-row">'
           + '<div class="form-group">'
           + '<label class="form-label" for="b-dp-' + i + '-next-offset-field">next_offset_field</label>'
           + '<input id="b-dp-' + i + '-next-offset-field" type="text" class="form-input" placeholder="e.g. nextOffset (optional)" oninput="_builderMarkDirty();builderUpdatePreview()" />'
           + '</div>'
           + '</div>'
+          + '<div id="b-dp-' + i + '-pg-cursor-fields" class="form-row" style="display:none;">'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-cursor-field">cursor_field *</label>'
+          + '<input id="b-dp-' + i + '-cursor-field" type="text" class="form-input" placeholder="e.g. nextCursor" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '<span class="field-error" id="b-dp-' + i + '-cursor-field-err"></span>'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-cursor-ttl">cursor_ttl_seconds</label>'
+          + '<input id="b-dp-' + i + '-cursor-ttl" type="number" class="form-input" placeholder="3600 (optional)" min="0" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '</div>'
+          + '</div>'
+          + '<div id="b-dp-' + i + '-pg-page-fields" class="form-row" style="display:none;">'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-page-param">page_param</label>'
+          + '<input id="b-dp-' + i + '-page-param" type="text" class="form-input" placeholder="page (optional)" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-size-param">size_param</label>'
+          + '<input id="b-dp-' + i + '-size-param" type="text" class="form-input" placeholder="size (optional)" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '</div>'
+          + '</div>'
           + '</div>';
       }
       return '';
+    }
+
+    function _builderPgStyleChange(dpIdx) {
+      var style = (document.getElementById('b-dp-' + dpIdx + '-pg-style') || {}).value || 'offset_limit';
+      var offsetEl = document.getElementById('b-dp-' + dpIdx + '-pg-offset-fields');
+      var cursorEl = document.getElementById('b-dp-' + dpIdx + '-pg-cursor-fields');
+      var pageEl   = document.getElementById('b-dp-' + dpIdx + '-pg-page-fields');
+      if (offsetEl) offsetEl.style.display = style === 'offset_limit' ? '' : 'none';
+      if (cursorEl) cursorEl.style.display = style === 'cursor'        ? '' : 'none';
+      if (pageEl)   pageEl.style.display   = style === 'page_number'   ? '' : 'none';
     }
 
     function _builderFirstTwoStepsHtml(dpIdx) {
@@ -3286,11 +3326,21 @@ img, svg {
           lines.push('        response:');
           lines.push('          status: ' + dp.status);
           lines.push('    pagination:');
-          lines.push('      style: offset_limit');
+          var pgStyle = dp.pg_style || 'offset_limit';
+          lines.push('      style: ' + pgStyle);
           lines.push('      items_field: ' + _yamlStr(dp.items_field));
-          if (dp.total_field)       lines.push('      total_field: '       + _yamlStr(dp.total_field));
-          if (dp.has_more_field)    lines.push('      has_more_field: '    + _yamlStr(dp.has_more_field));
-          if (dp.next_offset_field) lines.push('      next_offset_field: ' + _yamlStr(dp.next_offset_field));
+          if (dp.total_field)    lines.push('      total_field: '    + _yamlStr(dp.total_field));
+          if (dp.has_more_field) lines.push('      has_more_field: ' + _yamlStr(dp.has_more_field));
+          if (pgStyle === 'offset_limit') {
+            if (dp.next_offset_field) lines.push('      next_offset_field: ' + _yamlStr(dp.next_offset_field));
+          } else if (pgStyle === 'cursor') {
+            lines.push('      cursor_field: ' + _yamlStr(dp.cursor_field || ''));
+            var ttlVal = parseInt(dp.cursor_ttl, 10);
+            if (!isNaN(ttlVal) && ttlVal !== 3600) lines.push('      cursor_ttl_seconds: ' + ttlVal);
+          } else if (pgStyle === 'page_number') {
+            if (dp.page_param) lines.push('      page_param: ' + _yamlStr(dp.page_param));
+            if (dp.size_param) lines.push('      size_param: ' + _yamlStr(dp.size_param));
+          }
           return;
         }
 
@@ -3509,15 +3559,29 @@ img, svg {
           } else { if (pgPathErr) pgPathErr.textContent = ''; }
           dp.path = pgPath;
           dp.status = parseInt(((document.getElementById('b-dp-' + idx + '-status') || {}).value || '200'), 10) || 200;
+          dp.pg_style = ((document.getElementById('b-dp-' + idx + '-pg-style') || {}).value || 'offset_limit');
           dp.items_field = ((document.getElementById('b-dp-' + idx + '-items-field') || {}).value || '').trim();
           var itmErr = document.getElementById('b-dp-' + idx + '-items-field-err');
           if (!dp.items_field) {
             if (itmErr) itmErr.textContent = 'items_field is required for paginated';
             errors.push('Datapoint ' + dpName + ': items_field is required for paginated');
           } else { if (itmErr) itmErr.textContent = ''; }
-          dp.total_field       = ((document.getElementById('b-dp-' + idx + '-total-field')       || {}).value || '').trim();
-          dp.has_more_field    = ((document.getElementById('b-dp-' + idx + '-has-more-field')    || {}).value || '').trim();
-          dp.next_offset_field = ((document.getElementById('b-dp-' + idx + '-next-offset-field') || {}).value || '').trim();
+          dp.total_field    = ((document.getElementById('b-dp-' + idx + '-total-field')    || {}).value || '').trim();
+          dp.has_more_field = ((document.getElementById('b-dp-' + idx + '-has-more-field') || {}).value || '').trim();
+          if (dp.pg_style === 'offset_limit') {
+            dp.next_offset_field = ((document.getElementById('b-dp-' + idx + '-next-offset-field') || {}).value || '').trim();
+          } else if (dp.pg_style === 'cursor') {
+            dp.cursor_field = ((document.getElementById('b-dp-' + idx + '-cursor-field') || {}).value || '').trim();
+            var cfErr = document.getElementById('b-dp-' + idx + '-cursor-field-err');
+            if (!dp.cursor_field) {
+              if (cfErr) cfErr.textContent = 'cursor_field is required for cursor style';
+              errors.push('Datapoint ' + dpName + ': cursor_field is required for style cursor');
+            } else { if (cfErr) cfErr.textContent = ''; }
+            dp.cursor_ttl = ((document.getElementById('b-dp-' + idx + '-cursor-ttl') || {}).value || '').trim();
+          } else if (dp.pg_style === 'page_number') {
+            dp.page_param = ((document.getElementById('b-dp-' + idx + '-page-param') || {}).value || '').trim();
+            dp.size_param = ((document.getElementById('b-dp-' + idx + '-size-param') || {}).value || '').trim();
+          }
         }
 
         data.datapoints.push(dp);

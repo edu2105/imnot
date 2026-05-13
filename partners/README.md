@@ -453,13 +453,13 @@ curl -X POST http://localhost:8000/imnot/admin/partner/rate-push/callback/<reque
 
 ### Pattern: `paginated`
 
-**Use when:** the endpoint returns a list of items that consumers will page through using
-`offset` and `limit` query parameters.
+**Use when:** the endpoint returns a list of items that consumers page through. Supports
+`offset/limit`, `cursor`, and `page-number` styles.
 
 **How it works:** you upload an array payload (the full dataset) via the admin API; imnot
-slices it at request time based on the `offset` and `limit` query parameters and wraps the
-slice in an envelope whose field names you define in the `pagination:` block. Supports
-session isolation via `X-Imnot-Session` — two test sessions can hold independent datasets.
+slices it at request time and wraps the slice in an envelope whose field names you define in
+the `pagination:` block. Supports session isolation via `X-Imnot-Session` — two test sessions
+can hold independent datasets.
 
 **Required endpoints:** at least one endpoint (typically a `GET`).
 
@@ -467,34 +467,52 @@ session isolation via `X-Imnot-Session` — two test sessions can hold independe
 
 **Pagination config fields:**
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `style` | Yes | Must be `offset_limit` (v1 only; `cursor` and `page_number` reserved) |
-| `items_field` | Yes | Top-level response key that holds the item array (e.g. `items`, `results`, `data`) |
-| `total_field` | No | Top-level response key for total dataset count |
-| `has_more_field` | No | Top-level response key for boolean "more pages exist" flag |
-| `next_offset_field` | No | Top-level response key for the next page's offset value (null when no more pages) |
+| Field | Required | Style | Description |
+|-------|----------|-------|-------------|
+| `style` | Yes | all | Must be `offset_limit`, `cursor`, or `page_number` |
+| `items_field` | Yes | all | Top-level response key that holds the item array (e.g. `items`, `results`, `data`) |
+| `total_field` | No | all | Top-level response key for total dataset count |
+| `has_more_field` | No | all | Top-level response key for boolean "more pages exist" flag |
+| `next_offset_field` | No | `offset_limit` | Top-level response key for the next page's offset value (null when no more pages); silently ignored for `page_number` |
+| `cursor_field` | Yes (cursor only) | `cursor` | Response key that carries the next-page cursor token (e.g. `nextCursor`); always present, `null` on last page |
+| `cursor_ttl_seconds` | No | `cursor` | Seconds before a cursor expires (default 3600); `0` means never expires |
+| `page_param` | No | `page_number` | Query parameter name for the page number (default `"page"`) |
+| `size_param` | No | `page_number` | Query parameter name for the page size (default `"size"`) |
 
-**Query parameters accepted by the handler:**
+**Query parameters — `offset_limit` style:**
 
 | Param | Default | Behavior |
 |-------|---------|----------|
 | `offset` | `0` | Start position (0-based). Negative values treated as 0 |
 | `limit` | `default_limit` (50) | Page size. Values ≤ 0 fall back to `default_limit` |
 
+**Query parameters — `cursor` style:**
+
+| Param | Default | Behavior |
+|-------|---------|----------|
+| `cursor` | (absent = first page) | Opaque cursor token returned by the previous response |
+| `limit` | `default_limit` (50) | Page size |
+
+**Query parameters — `page_number` style:**
+
+| Param | Default | Behavior |
+|-------|---------|----------|
+| `page` (or `page_param` value) | `1` | 1-indexed page number. Values < 1 clamped to 1 |
+| `size` (or `size_param` value) | `default_limit` (50) | Page size |
+
 `default_limit` is configurable via `imnot.toml` `[pagination] default_limit`.
 
-**Out-of-bounds:** if `offset >= total`, the response returns an empty array, `total`, and
-`hasMore: false` — no error.
+**Out-of-bounds:** if the requested page or offset is past the end of the dataset, the
+response returns an empty array and `hasMore: false` — no error.
 
 **Payload validation:** the uploaded payload must be a JSON **array**. If it is not, the
 handler returns `422` with `"Payload must be a JSON array for the paginated pattern"`.
 
-**Example:**
+**Example — `offset_limit`:**
 
 ```yaml
 - name: listing
-  description: Paginated property listings
+  description: Paginated property listings (offset/limit)
   pattern: paginated
   endpoints:
     - method: GET
@@ -529,6 +547,62 @@ Response:
   "hasMore": true,
   "nextOffset": 2
 }
+```
+
+**Example — `cursor`:**
+
+```yaml
+- name: listing
+  description: Paginated property listings (cursor)
+  pattern: paginated
+  endpoints:
+    - method: GET
+      path: /ratesync/listings
+      response:
+        status: 200
+  pagination:
+    style: cursor
+    items_field: results
+    cursor_field: nextCursor
+    cursor_ttl_seconds: 1800
+    has_more_field: hasMore
+```
+
+First request (no cursor):
+```bash
+curl "http://localhost:8000/ratesync/listings?limit=2"
+# → {"results":[...],"nextCursor":"<uuid>","hasMore":true}
+```
+
+Next page:
+```bash
+curl "http://localhost:8000/ratesync/listings?limit=2&cursor=<uuid>"
+```
+
+**Example — `page_number`:**
+
+```yaml
+- name: listing
+  description: Paginated property listings (page number)
+  pattern: paginated
+  endpoints:
+    - method: GET
+      path: /ratesync/listings
+      response:
+        status: 200
+  pagination:
+    style: page_number
+    items_field: results
+    page_param: pageNum
+    size_param: perPage
+    total_field: total
+    has_more_field: hasMore
+```
+
+First page:
+```bash
+curl "http://localhost:8000/ratesync/listings?pageNum=1&perPage=2"
+# → {"results":[...],"total":3,"hasMore":true}
 ```
 
 ---
@@ -576,8 +650,9 @@ runs in a container and you cannot exec in to run the CLI. See the main README f
 - [ ] Polling steps that reference the generated UUID use `{id}` in their path
 - [ ] The polling fetch step has `returns_payload: true`
 - [ ] Every `callback` datapoint has exactly one endpoint with exactly one of `callback_url_field` or `callback_url_header` set (not both, not neither)
-- [ ] Every `paginated` datapoint has a `pagination:` block with `style: offset_limit` and `items_field` set
-- [ ] The `pagination:` block contains only recognized keys: `style`, `items_field`, `total_field`, `has_more_field`, `next_offset_field`
+- [ ] Every `paginated` datapoint has a `pagination:` block with `style` (`offset_limit`, `cursor`, or `page_number`) and `items_field` set
+- [ ] If `style: cursor`, `cursor_field` is also set in the `pagination:` block
+- [ ] The `pagination:` block contains only recognized keys: `style`, `items_field`, `total_field`, `has_more_field`, `next_offset_field`, `cursor_field`, `cursor_ttl_seconds`, `page_param`, `size_param`
 - [ ] The payload uploaded for a `paginated` datapoint is a JSON array (not an object)
 - [ ] All `response` blocks are nested inside their endpoint, not at the datapoint level
 - [ ] No two endpoints across the whole file share the same `method` + `path` combination
@@ -600,8 +675,9 @@ or API documentation, follow this process:
    sequence to the `polling` pattern. Define as many steps as the real API uses.
 
 3. **Identify paginated list endpoints** — if an endpoint returns a list of items with
-   `offset`/`limit` (or page-number) query parameters, use the `paginated` pattern. Upload
-   the full dataset as an array; imnot handles slicing at request time.
+   `offset`/`limit` query parameters, use `paginated` with `style: offset_limit`. If it uses
+   cursor tokens, use `style: cursor`. If it uses a page number (e.g. `page=1`), use
+   `style: page_number`. Upload the full dataset as an array; imnot handles slicing at request time.
 
 4. **Identify sync resources** — if an endpoint simply returns the current state of a
    single resource (not a list), use the `fetch` pattern.

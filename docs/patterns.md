@@ -232,7 +232,13 @@ The retrigger always uses the **current** stored payload, so you can update the 
 
 ## `paginated`
 
-Upload a full array of items once; imnot slices the array at request time based on `offset` and `limit` query parameters.
+Upload a full array of items once; imnot slices the array at request time. Three pagination styles are supported via the `style` field.
+
+---
+
+### Style: `offset_limit`
+
+Consumers page using `offset` and `limit` query parameters.
 
 ```yaml
 - name: listing
@@ -243,7 +249,7 @@ Upload a full array of items once; imnot slices the array at request time based 
       response:
         status: 200
   pagination:
-    style: offset_limit      # v1 only value
+    style: offset_limit
     items_field: results     # required: key that holds the page in the response
     total_field: total       # optional: total dataset count
     has_more_field: hasMore  # optional: boolean — more pages exist
@@ -263,13 +269,88 @@ curl "http://localhost:8000/ratesync/listings?offset=0&limit=2"
 # → {"results":[{"id":1},{"id":2}],"total":5,"hasMore":true,"nextOffset":2}
 ```
 
-Default page size when `limit` is not sent is configured in `imnot.toml`:
+---
+
+### Style: `cursor`
+
+imnot issues opaque cursor tokens (UUID v4) stored server-side. Consumers pass `cursor=<token>` to fetch the next page; the response always includes a `cursor_field` key (`null` on the last page).
+
+```yaml
+- name: listing
+  pattern: paginated
+  endpoints:
+    - method: GET
+      path: /ratesync/listings
+      response:
+        status: 200
+  pagination:
+    style: cursor
+    items_field: results       # required
+    cursor_field: nextCursor   # required: response key that carries the cursor token
+    cursor_ttl_seconds: 3600   # optional (default 3600); 0 = never expires
+    total_field: total         # optional
+    has_more_field: hasMore    # optional
+```
+
+Fetch the first page (no cursor):
+```bash
+curl "http://localhost:8000/ratesync/listings?limit=2"
+# → {"results":[{"id":1},{"id":2}],"nextCursor":"<uuid>","total":5,"hasMore":true}
+```
+
+Fetch the next page:
+```bash
+curl "http://localhost:8000/ratesync/listings?limit=2&cursor=<uuid>"
+# → {"results":[{"id":3},{"id":4}],"nextCursor":"<uuid2>","total":5,"hasMore":true}
+```
+
+Last page:
+```bash
+# → {"results":[{"id":5}],"nextCursor":null,"total":5,"hasMore":false}
+```
+
+Expired or unknown cursor returns `400 {"detail": "Cursor expired or not found"}`.
+
+---
+
+### Style: `page_number`
+
+Consumers page using 1-indexed `page` and `size` query parameters (configurable via `page_param` / `size_param`).
+
+```yaml
+- name: listing
+  pattern: paginated
+  endpoints:
+    - method: GET
+      path: /ratesync/listings
+      response:
+        status: 200
+  pagination:
+    style: page_number
+    items_field: results    # required
+    page_param: page        # optional (default "page")
+    size_param: size        # optional (default "size")
+    total_field: total      # optional
+    has_more_field: hasMore # optional
+```
+
+Fetch page 1:
+```bash
+curl "http://localhost:8000/ratesync/listings?page=1&size=2"
+# → {"results":[{"id":1},{"id":2}],"total":5,"hasMore":true}
+```
+
+Pages are 1-indexed — `page=1` is the first page. `page=0` is clamped to `page=1`. `next_offset_field` is silently ignored if declared in a `page_number` block.
+
+---
+
+Default page size when the size param is absent is configured in `imnot.toml`:
 ```toml
 [pagination]
 default_limit = 50
 ```
 
-Session isolation (`X-Imnot-Session`) is supported — two sessions can hold different datasets and page through them independently.
+Session isolation (`X-Imnot-Session`) is supported for all three styles — two sessions can hold different datasets and page through them independently.
 
 ---
 
