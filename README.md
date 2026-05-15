@@ -47,7 +47,7 @@ imnot start
 | `fetch` | Synchronous GET that returns an uploaded payload |
 | `polling` | N-step async flow: submit → status check(s) → fetch result |
 | `callback` | Webhook simulation — imnot fires the outbound call after receiving a submit |
-| `paginated` | Offset/limit list endpoints sliced from an uploaded array at request time |
+| `paginated` | Paginated list endpoints (offset/limit, cursor, or page-number) sliced from an uploaded array at request time |
 
 All `fetch`, `polling`, and `paginated` endpoints support `X-Imnot-Session` for per-test isolation — parallel test runs stay independent.
 

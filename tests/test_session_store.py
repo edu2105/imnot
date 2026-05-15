@@ -250,3 +250,71 @@ def test_init_migrates_last_used_column(tmp_path):
     sessions = s.list_sessions()
     assert sessions[0]["last_used"] is None
     s.close()
+
+
+# ---------------------------------------------------------------------------
+# Cursor store / resolve / expire
+# ---------------------------------------------------------------------------
+
+
+def test_store_cursor_returns_id(store):
+    cursor_id = store.store_cursor("ratesync", "listing", None, offset=10)
+    assert isinstance(cursor_id, str) and len(cursor_id) == 36
+
+
+def test_resolve_cursor_returns_offset(store):
+    cursor_id = store.store_cursor("ratesync", "listing", None, offset=20)
+    result = store.resolve_cursor(cursor_id)
+    assert result == 20
+
+
+def test_resolve_cursor_with_session(store):
+    session_id = store.store_session_payload("ratesync", "listing", [])
+    cursor_id = store.store_cursor("ratesync", "listing", session_id, offset=5)
+    assert store.resolve_cursor(cursor_id) == 5
+
+
+def test_resolve_cursor_unknown_returns_none(store):
+    result = store.resolve_cursor("00000000-0000-0000-0000-000000000000")
+    assert result is None
+
+
+_CURSOR_INSERT_SQL = (
+    "INSERT INTO paginated_cursors "
+    "(cursor_id, partner, datapoint, session_id, offset_val, created_at, expires_at) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?)"
+)
+
+
+def test_resolve_cursor_expired_returns_none(store):
+    from datetime import datetime, timedelta, timezone
+
+    past = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+    with store._cursor() as cur:
+        cur.execute(_CURSOR_INSERT_SQL, ("expired-id", "ratesync", "listing", None, 5, past, past))
+    result = store.resolve_cursor("expired-id")
+    assert result is None
+
+
+def test_resolve_cursor_no_ttl_never_expires(store):
+    cursor_id = store.store_cursor("ratesync", "listing", None, offset=3, ttl_seconds=0)
+    assert store.resolve_cursor(cursor_id) == 3
+
+
+def test_expire_cursors_deletes_old_rows(store):
+    from datetime import datetime, timedelta, timezone
+
+    past = (datetime.now(timezone.utc) - timedelta(seconds=10)).isoformat()
+    future = (datetime.now(timezone.utc) + timedelta(seconds=3600)).isoformat()
+    now = datetime.now(timezone.utc).isoformat()
+
+    with store._cursor() as cur:
+        cur.execute(_CURSOR_INSERT_SQL, ("old-cursor", "ratesync", "listing", None, 0, past, past))
+        cur.execute(_CURSOR_INSERT_SQL, ("new-cursor", "ratesync", "listing", None, 10, now, future))
+        cur.execute(_CURSOR_INSERT_SQL, ("no-ttl-cursor", "ratesync", "listing", None, 20, now, None))
+
+    deleted = store.expire_cursors(now)
+    assert deleted == 1
+    assert store.resolve_cursor("old-cursor") is None
+    assert store.resolve_cursor("new-cursor") == 10
+    assert store.resolve_cursor("no-ttl-cursor") == 20

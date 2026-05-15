@@ -34,6 +34,46 @@ def _make_datapoint(
     )
 
 
+def _make_cursor_datapoint(
+    name: str = "listing",
+    cursor_field: str = "nextCursor",
+    cursor_ttl_seconds: int = 3600,
+    total_field: str | None = None,
+    has_more_field: str | None = None,
+) -> DatapointDef:
+    pagination: dict = {
+        "style": "cursor",
+        "items_field": "items",
+        "cursor_field": cursor_field,
+        "cursor_ttl_seconds": cursor_ttl_seconds,
+    }
+    if total_field:
+        pagination["total_field"] = total_field
+    if has_more_field:
+        pagination["has_more_field"] = has_more_field
+    return DatapointDef(name=name, description="", pattern="paginated", endpoints=[], pagination=pagination)
+
+
+def _make_page_number_datapoint(
+    name: str = "listing",
+    page_param: str = "page",
+    size_param: str = "size",
+    total_field: str | None = None,
+    has_more_field: str | None = None,
+) -> DatapointDef:
+    pagination: dict = {
+        "style": "page_number",
+        "items_field": "items",
+        "page_param": page_param,
+        "size_param": size_param,
+    }
+    if total_field:
+        pagination["total_field"] = total_field
+    if has_more_field:
+        pagination["has_more_field"] = has_more_field
+    return DatapointDef(name=name, description="", pattern="paginated", endpoints=[], pagination=pagination)
+
+
 def _make_endpoint(status: int = 200) -> EndpointDef:
     return EndpointDef(method="GET", path="/ratesync/listings", step=None, response={"status": status})
 
@@ -228,6 +268,63 @@ def test_next_offset_field_absent_not_in_response(store):
     assert "nextOffset" not in body
 
 
+def test_offset_echo_field_present_in_response(store):
+    app = FastAPI()
+    pagination = {"style": "offset_limit", "items_field": "results", "offset_echo_field": "offset"}
+    dp = DatapointDef(name="listing", description="", pattern="paginated", endpoints=[], pagination=pagination)
+    handler = make_paginated_handler("ratesync", dp, _make_endpoint(), store, 10)
+    app.add_api_route("/ratesync/listings", handler, methods=["GET"])
+    c = TestClient(app)
+    store.store_global_payload("ratesync", "listing", _ten_items())
+    body = c.get("/ratesync/listings?offset=4&limit=3").json()
+    assert body["offset"] == 4
+
+
+def test_limit_echo_field_present_in_response(store):
+    app = FastAPI()
+    pagination = {"style": "offset_limit", "items_field": "results", "limit_echo_field": "limit"}
+    dp = DatapointDef(name="listing", description="", pattern="paginated", endpoints=[], pagination=pagination)
+    handler = make_paginated_handler("ratesync", dp, _make_endpoint(), store, 10)
+    app.add_api_route("/ratesync/listings", handler, methods=["GET"])
+    c = TestClient(app)
+    store.store_global_payload("ratesync", "listing", _ten_items())
+    body = c.get("/ratesync/listings?offset=0&limit=3").json()
+    assert body["limit"] == 3
+
+
+def test_echo_fields_reflect_actual_request_values(store):
+    app = FastAPI()
+    pagination = {
+        "style": "offset_limit",
+        "items_field": "results",
+        "total_field": "count",
+        "offset_echo_field": "offset",
+        "limit_echo_field": "limit",
+    }
+    dp = DatapointDef(name="listing", description="", pattern="paginated", endpoints=[], pagination=pagination)
+    handler = make_paginated_handler("ratesync", dp, _make_endpoint(), store, 10)
+    app.add_api_route("/ratesync/listings", handler, methods=["GET"])
+    c = TestClient(app)
+    store.store_global_payload("ratesync", "listing", _ten_items())
+    body = c.get("/ratesync/listings?offset=5&limit=3").json()
+    assert body["count"] == 10
+    assert body["offset"] == 5
+    assert body["limit"] == 3
+    assert body["results"] == _ten_items()[5:8]
+
+
+def test_echo_fields_absent_when_not_configured(store):
+    app = FastAPI()
+    dp = _make_datapoint()
+    handler = make_paginated_handler("ratesync", dp, _make_endpoint(), store, 10)
+    app.add_api_route("/ratesync/listings", handler, methods=["GET"])
+    c = TestClient(app)
+    store.store_global_payload("ratesync", "listing", _ten_items())
+    body = c.get("/ratesync/listings?offset=0&limit=3").json()
+    assert "offset" not in body
+    assert "limit" not in body
+
+
 # ---------------------------------------------------------------------------
 # Session isolation
 # ---------------------------------------------------------------------------
@@ -304,3 +401,324 @@ def test_custom_status_code(store):
     store.store_global_payload("ratesync", "listing", _ten_items())
     r = c.get("/ratesync/listings?offset=0&limit=3")
     assert r.status_code == 206
+
+
+# ---------------------------------------------------------------------------
+# Cursor handler
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def cursor_client(store):
+    app = FastAPI()
+    datapoint = _make_cursor_datapoint(has_more_field="hasMore", total_field="total")
+    endpoint = _make_endpoint()
+    handler = make_paginated_handler("bookingco", datapoint, endpoint, store, default_limit=3)
+    app.add_api_route("/bookingco/listings", handler, methods=["GET"])
+    return TestClient(app, raise_server_exceptions=True), store
+
+
+def test_cursor_first_request_returns_cursor(cursor_client):
+    c, store = cursor_client
+    store.store_global_payload("bookingco", "listing", _ten_items())
+    r = c.get("/bookingco/listings?limit=3")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["items"]) == 3
+    assert body["items"][0]["id"] == 0
+    assert body["nextCursor"] is not None
+    assert body["hasMore"] is True
+    assert body["total"] == 10
+
+
+def test_cursor_second_request_continues(cursor_client):
+    c, store = cursor_client
+    store.store_global_payload("bookingco", "listing", _ten_items())
+    r1 = c.get("/bookingco/listings?limit=3")
+    cursor = r1.json()["nextCursor"]
+    r2 = c.get(f"/bookingco/listings?limit=3&cursor={cursor}")
+    assert r2.status_code == 200
+    body = r2.json()
+    assert len(body["items"]) == 3
+    assert body["items"][0]["id"] == 3
+
+
+def test_cursor_last_page_returns_null_cursor(cursor_client):
+    c, store = cursor_client
+    store.store_global_payload("bookingco", "listing", _ten_items())
+    r1 = c.get("/bookingco/listings?limit=9")
+    assert r1.json()["hasMore"] is True
+    cursor = r1.json()["nextCursor"]
+    r2 = c.get(f"/bookingco/listings?limit=9&cursor={cursor}")
+    assert r2.status_code == 200
+    body = r2.json()
+    assert len(body["items"]) == 1
+    assert body["nextCursor"] is None
+    assert body["hasMore"] is False
+
+
+def test_cursor_expired_returns_400(cursor_client):
+    c, store = cursor_client
+    store.store_global_payload("bookingco", "listing", _ten_items())
+    r = c.get("/bookingco/listings?cursor=00000000-0000-0000-0000-000000000000")
+    assert r.status_code == 400
+    assert "Cursor expired or not found" in r.json()["detail"]
+
+
+def test_cursor_no_payload_returns_404(cursor_client):
+    c, _ = cursor_client
+    r = c.get("/bookingco/listings")
+    assert r.status_code == 404
+
+
+def test_cursor_session_isolation(store):
+    app = FastAPI()
+    datapoint = _make_cursor_datapoint()
+    endpoint = _make_endpoint()
+    handler = make_paginated_handler("bookingco", datapoint, endpoint, store, default_limit=3)
+    app.add_api_route("/bookingco/listings", handler, methods=["GET"])
+    c = TestClient(app)
+
+    items_alice = [{"user": "alice", "id": i} for i in range(6)]
+    items_bob = [{"user": "bob", "id": i} for i in range(9)]
+    s_alice = store.store_session_payload("bookingco", "listing", items_alice)
+    s_bob = store.store_session_payload("bookingco", "listing", items_bob)
+
+    r_alice = c.get("/bookingco/listings?limit=3", headers={"X-Imnot-Session": s_alice})
+    r_bob = c.get("/bookingco/listings?limit=3", headers={"X-Imnot-Session": s_bob})
+
+    assert r_alice.json()["items"][0]["user"] == "alice"
+    assert r_bob.json()["items"][0]["user"] == "bob"
+
+    c_alice = r_alice.json()["nextCursor"]
+    c_bob = r_bob.json()["nextCursor"]
+    assert c_alice != c_bob
+
+    r_alice2 = c.get(f"/bookingco/listings?limit=3&cursor={c_alice}", headers={"X-Imnot-Session": s_alice})
+    assert r_alice2.json()["items"][0]["user"] == "alice"
+    assert r_alice2.json()["items"][0]["id"] == 3
+
+
+def test_cursor_ttl_zero_never_expires(store):
+    app = FastAPI()
+    datapoint = _make_cursor_datapoint(cursor_ttl_seconds=0)
+    endpoint = _make_endpoint()
+    handler = make_paginated_handler("bookingco", datapoint, endpoint, store, default_limit=3)
+    app.add_api_route("/bookingco/listings", handler, methods=["GET"])
+    c = TestClient(app)
+    store.store_global_payload("bookingco", "listing", _ten_items())
+    r1 = c.get("/bookingco/listings?limit=3")
+    cursor = r1.json()["nextCursor"]
+    assert store.resolve_cursor(cursor) == 3
+
+
+def test_cursor_optional_fields_absent(store):
+    app = FastAPI()
+    datapoint = _make_cursor_datapoint()
+    endpoint = _make_endpoint()
+    handler = make_paginated_handler("bookingco", datapoint, endpoint, store, default_limit=3)
+    app.add_api_route("/bookingco/listings", handler, methods=["GET"])
+    c = TestClient(app)
+    store.store_global_payload("bookingco", "listing", _ten_items())
+    body = c.get("/bookingco/listings?limit=3").json()
+    assert "total" not in body
+    assert "hasMore" not in body
+    assert "nextCursor" in body
+
+
+def test_cursor_handler_name(store):
+    handler = make_paginated_handler("bookingco", _make_cursor_datapoint(), _make_endpoint(), store, 10)
+    assert "paginated" in handler.__name__
+    assert "bookingco" in handler.__name__
+
+
+def test_cursor_payload_not_list_returns_422(cursor_client):
+    c, store = cursor_client
+    store.store_global_payload("bookingco", "listing", {"not": "a list"})
+    r = c.get("/bookingco/listings")
+    assert r.status_code == 422
+    assert "JSON array" in r.json()["detail"]
+
+
+def test_cursor_non_numeric_limit_uses_default(cursor_client):
+    c, store = cursor_client
+    store.store_global_payload("bookingco", "listing", _ten_items())
+    r = c.get("/bookingco/listings?limit=bad")
+    assert r.status_code == 200
+    assert len(r.json()["items"]) == 3  # default_limit=3
+
+
+def test_cursor_limit_zero_uses_default(cursor_client):
+    c, store = cursor_client
+    store.store_global_payload("bookingco", "listing", _ten_items())
+    r = c.get("/bookingco/listings?limit=0")
+    assert r.status_code == 200
+    assert len(r.json()["items"]) == 3  # default_limit=3
+
+
+# ---------------------------------------------------------------------------
+# Page-number handler
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def page_client(store):
+    app = FastAPI()
+    datapoint = _make_page_number_datapoint(total_field="total", has_more_field="hasMore")
+    endpoint = _make_endpoint()
+    handler = make_paginated_handler("staylink", datapoint, endpoint, store, default_limit=3)
+    app.add_api_route("/staylink/listings", handler, methods=["GET"])
+    return TestClient(app, raise_server_exceptions=True), store
+
+
+def test_page_number_page_1(page_client):
+    c, store = page_client
+    store.store_global_payload("staylink", "listing", _ten_items())
+    r = c.get("/staylink/listings?page=1&size=3")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["items"]) == 3
+    assert body["items"][0]["id"] == 0
+    assert body["total"] == 10
+    assert body["hasMore"] is True
+
+
+def test_page_number_page_2(page_client):
+    c, store = page_client
+    store.store_global_payload("staylink", "listing", _ten_items())
+    r = c.get("/staylink/listings?page=2&size=3")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["items"]) == 3
+    assert body["items"][0]["id"] == 3
+    assert body["hasMore"] is True
+
+
+def test_page_number_last_page(page_client):
+    c, store = page_client
+    store.store_global_payload("staylink", "listing", _ten_items())
+    r = c.get("/staylink/listings?page=4&size=3")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["items"]) == 1
+    assert body["items"][0]["id"] == 9
+    assert body["hasMore"] is False
+
+
+def test_page_number_out_of_range(page_client):
+    c, store = page_client
+    store.store_global_payload("staylink", "listing", _ten_items())
+    r = c.get("/staylink/listings?page=999&size=3")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["items"] == []
+    assert body["hasMore"] is False
+
+
+def test_page_number_default_page_1(page_client):
+    c, store = page_client
+    store.store_global_payload("staylink", "listing", _ten_items())
+    r = c.get("/staylink/listings?size=3")
+    assert r.status_code == 200
+    assert r.json()["items"][0]["id"] == 0
+
+
+def test_page_number_page_0_clamped_to_1(page_client):
+    c, store = page_client
+    store.store_global_payload("staylink", "listing", _ten_items())
+    r = c.get("/staylink/listings?page=0&size=3")
+    assert r.status_code == 200
+    assert r.json()["items"][0]["id"] == 0
+
+
+def test_page_number_custom_params(store):
+    app = FastAPI()
+    datapoint = _make_page_number_datapoint(page_param="pageNum", size_param="perPage")
+    endpoint = _make_endpoint()
+    handler = make_paginated_handler("staylink", datapoint, endpoint, store, default_limit=3)
+    app.add_api_route("/staylink/listings", handler, methods=["GET"])
+    c = TestClient(app)
+    store.store_global_payload("staylink", "listing", _ten_items())
+    r = c.get("/staylink/listings?pageNum=2&perPage=4")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["items"][0]["id"] == 4
+
+
+def test_page_number_no_payload_404(page_client):
+    c, _ = page_client
+    r = c.get("/staylink/listings?page=1")
+    assert r.status_code == 404
+
+
+def test_page_number_payload_not_list_422(page_client):
+    c, store = page_client
+    store.store_global_payload("staylink", "listing", {"not": "a list"})
+    r = c.get("/staylink/listings?page=1")
+    assert r.status_code == 422
+
+
+def test_page_number_next_offset_field_ignored(store):
+    pagination = {
+        "style": "page_number",
+        "items_field": "items",
+        "next_offset_field": "nextOffset",
+    }
+    dp = DatapointDef(name="listing", description="", pattern="paginated", endpoints=[], pagination=pagination)
+    app = FastAPI()
+    handler = make_paginated_handler("staylink", dp, _make_endpoint(), store, default_limit=5)
+    app.add_api_route("/staylink/listings", handler, methods=["GET"])
+    c = TestClient(app)
+    store.store_global_payload("staylink", "listing", _ten_items())
+    body = c.get("/staylink/listings?page=1&size=5").json()
+    assert "nextOffset" not in body
+
+
+def test_page_number_handler_name(store):
+    handler = make_paginated_handler("staylink", _make_page_number_datapoint(), _make_endpoint(), store, 10)
+    assert "paginated" in handler.__name__
+    assert "staylink" in handler.__name__
+
+
+def test_page_number_non_numeric_page_uses_default(page_client):
+    c, store = page_client
+    store.store_global_payload("staylink", "listing", _ten_items())
+    r = c.get("/staylink/listings?page=abc&size=3")
+    assert r.status_code == 200
+    assert r.json()["items"][0]["id"] == 0  # clamped to page 1
+
+
+def test_page_number_non_numeric_size_uses_default(page_client):
+    c, store = page_client
+    store.store_global_payload("staylink", "listing", _ten_items())
+    r = c.get("/staylink/listings?page=1&size=bad")
+    assert r.status_code == 200
+    assert len(r.json()["items"]) == 3  # default_limit=3
+
+
+def test_page_number_size_zero_uses_default(page_client):
+    c, store = page_client
+    store.store_global_payload("staylink", "listing", _ten_items())
+    r = c.get("/staylink/listings?page=1&size=0")
+    assert r.status_code == 200
+    assert len(r.json()["items"]) == 3  # default_limit=3
+
+
+def test_page_number_session_isolation(store):
+    app = FastAPI()
+    datapoint = _make_page_number_datapoint()
+    endpoint = _make_endpoint()
+    handler = make_paginated_handler("staylink", datapoint, endpoint, store, default_limit=3)
+    app.add_api_route("/staylink/listings", handler, methods=["GET"])
+    c = TestClient(app)
+
+    items_alice = [{"user": "alice", "id": i} for i in range(6)]
+    items_bob = [{"user": "bob", "id": i} for i in range(9)]
+    s_alice = store.store_session_payload("staylink", "listing", items_alice)
+    s_bob = store.store_session_payload("staylink", "listing", items_bob)
+
+    r_alice = c.get("/staylink/listings?page=1&size=3", headers={"X-Imnot-Session": s_alice})
+    r_bob = c.get("/staylink/listings?page=1&size=3", headers={"X-Imnot-Session": s_bob})
+
+    assert r_alice.json()["items"][0]["user"] == "alice"
+    assert r_bob.json()["items"][0]["user"] == "bob"

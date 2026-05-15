@@ -65,6 +65,16 @@ CREATE TABLE IF NOT EXISTS push_requests (
     callback_method TEXT NOT NULL,
     created_at      TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS paginated_cursors (
+    cursor_id   TEXT PRIMARY KEY,
+    partner     TEXT NOT NULL,
+    datapoint   TEXT NOT NULL,
+    session_id  TEXT,              -- NULL for global-mode
+    offset_val  INTEGER NOT NULL,  -- logical position this cursor points to
+    created_at  TEXT NOT NULL,
+    expires_at  TEXT               -- NULL means no TTL
+);
 """
 
 
@@ -320,6 +330,69 @@ class SessionStore:
         """Delete all sessions. Returns the number of rows deleted."""
         with self._cursor() as cur:
             cur.execute("DELETE FROM sessions")
+            return cur.rowcount
+
+    # ------------------------------------------------------------------
+    # Cursor tracking (paginated cursor style)
+    # ------------------------------------------------------------------
+
+    def store_cursor(
+        self,
+        partner: str,
+        datapoint: str,
+        session_id: str | None,
+        offset: int,
+        ttl_seconds: int = 3600,
+    ) -> str:
+        """Insert a cursor row pointing to *offset*. Returns the cursor UUID.
+
+        If *ttl_seconds* is 0, *expires_at* is stored as NULL (never expires).
+        """
+        cursor_id = _new_id()
+        now = _now()
+        if ttl_seconds == 0:
+            expires_at = None
+        else:
+            from datetime import timedelta
+
+            dt_now = datetime.fromisoformat(now)
+            expires_at = (dt_now + timedelta(seconds=ttl_seconds)).isoformat()
+        with self._cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO paginated_cursors
+                    (cursor_id, partner, datapoint, session_id, offset_val, created_at, expires_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (cursor_id, partner, datapoint, session_id, offset, now, expires_at),
+            )
+        return cursor_id
+
+    def resolve_cursor(self, cursor_id: str) -> int | None:
+        """Return *offset_val* for a cursor, or None if expired or unknown."""
+        now = _now()
+        with self._cursor() as cur:
+            cur.execute(
+                "SELECT offset_val, expires_at FROM paginated_cursors WHERE cursor_id = ?",
+                (cursor_id,),
+            )
+            row = cur.fetchone()
+        if row is None:
+            return None
+        if row["expires_at"] is not None and row["expires_at"] < now:
+            return None
+        return row["offset_val"]
+
+    def expire_cursors(self, before: str) -> int:
+        """Delete cursor rows whose *expires_at* is earlier than *before*.
+
+        Returns the number of rows deleted.
+        """
+        with self._cursor() as cur:
+            cur.execute(
+                "DELETE FROM paginated_cursors WHERE expires_at IS NOT NULL AND expires_at < ?",
+                (before,),
+            )
             return cur.rowcount
 
 

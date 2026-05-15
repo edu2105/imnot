@@ -21,7 +21,19 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_PATTERNS = {"oauth", "polling", "callback", "static", "fetch", "paginated"}
 
-_PAGINATION_VALID_KEYS = {"style", "items_field", "total_field", "has_more_field", "next_offset_field"}
+_PAGINATION_VALID_KEYS = {
+    "style",
+    "items_field",
+    "total_field",
+    "has_more_field",
+    "next_offset_field",
+    "offset_echo_field",
+    "limit_echo_field",
+    "cursor_field",
+    "cursor_ttl_seconds",
+    "page_param",
+    "size_param",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -111,13 +123,18 @@ def _parse_datapoint(raw: dict[str, Any], partner: str) -> DatapointDef:
         style = raw_pagination.get("style")
         if not style:
             raise ValueError(f"Datapoint '{name}' in partner '{partner}': 'pagination.style' is required")
-        if style != "offset_limit":
+        _VALID_STYLES = {"offset_limit", "cursor", "page_number"}
+        if style not in _VALID_STYLES:
             raise ValueError(
-                f"Datapoint '{name}' in partner '{partner}': 'pagination.style' must be "
-                f"'offset_limit' (got '{style}'). Other styles are not supported in v1."
+                f"Datapoint '{name}' in partner '{partner}': 'pagination.style' must be one of "
+                f"{sorted(_VALID_STYLES)} (got '{style}')"
             )
         if not raw_pagination.get("items_field"):
             raise ValueError(f"Datapoint '{name}' in partner '{partner}': 'pagination.items_field' is required")
+        if style == "cursor" and not raw_pagination.get("cursor_field"):
+            raise ValueError(
+                f"Datapoint '{name}' in partner '{partner}': 'pagination.cursor_field' is required for style 'cursor'"
+            )
         pagination = raw_pagination
 
     return DatapointDef(

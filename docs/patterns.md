@@ -232,44 +232,215 @@ The retrigger always uses the **current** stored payload, so you can update the 
 
 ## `paginated`
 
-Upload a full array of items once; imnot slices the array at request time based on `offset` and `limit` query parameters.
+Upload a full array of items once; imnot slices the array at request time. Three pagination styles are supported via the `style` field.
+
+---
+
+### Style: `offset_limit`
+
+Consumers page using `offset` and `limit` query parameters. Use `offset_echo_field` and `limit_echo_field` to mirror those values back in the response — many real APIs include them alongside the total count.
 
 ```yaml
-- name: listing
+- name: reservations
   pattern: paginated
   endpoints:
     - method: GET
-      path: /ratesync/listings
+      path: /staylink/reservations
       response:
         status: 200
   pagination:
-    style: offset_limit      # v1 only value
-    items_field: results     # required: key that holds the page in the response
-    total_field: total       # optional: total dataset count
-    has_more_field: hasMore  # optional: boolean — more pages exist
-    next_offset_field: nextOffset  # optional: offset for the next page (null on last page)
+    style: offset_limit
+    items_field: reservations
+    total_field: count
+    offset_echo_field: offset
+    limit_echo_field: limit
+    has_more_field: hasMore
 ```
 
-Upload the dataset:
+Upload the full dataset (a JSON array):
 ```bash
-curl -X POST http://localhost:8000/imnot/admin/ratesync/listing/payload \
+curl -X POST http://localhost:8000/imnot/admin/staylink/reservations/payload \
   -H "Content-Type: application/json" \
-  -d '[{"id":1},{"id":2},{"id":3},{"id":4},{"id":5}]'
+  -d '[
+    {"id": "RES-001", "guestName": "John Smith",   "roomType": "Deluxe",   "checkIn": "2026-06-01", "checkOut": "2026-06-03"},
+    {"id": "RES-002", "guestName": "Maria Garcia", "roomType": "Suite",    "checkIn": "2026-06-02", "checkOut": "2026-06-05"},
+    {"id": "RES-003", "guestName": "Lucas Brown",  "roomType": "Standard", "checkIn": "2026-06-03", "checkOut": "2026-06-04"}
+  ]'
 ```
 
-Fetch the first page:
+First page:
+```
+GET /staylink/reservations?offset=0&limit=2
+```
+```json
+{
+  "count": 3,
+  "offset": 0,
+  "limit": 2,
+  "hasMore": true,
+  "reservations": [
+    {"id": "RES-001", "guestName": "John Smith",   "roomType": "Deluxe", "checkIn": "2026-06-01", "checkOut": "2026-06-03"},
+    {"id": "RES-002", "guestName": "Maria Garcia", "roomType": "Suite",  "checkIn": "2026-06-02", "checkOut": "2026-06-05"}
+  ]
+}
+```
+
+Second page:
+```
+GET /staylink/reservations?offset=2&limit=2
+```
+```json
+{
+  "count": 3,
+  "offset": 2,
+  "limit": 2,
+  "hasMore": false,
+  "reservations": [
+    {"id": "RES-003", "guestName": "Lucas Brown", "roomType": "Standard", "checkIn": "2026-06-03", "checkOut": "2026-06-04"}
+  ]
+}
+```
+
+`next_offset_field` is also available if the API explicitly returns the next page's offset value.
+
+---
+
+### Style: `cursor`
+
+imnot issues opaque cursor tokens (UUID v4) stored server-side. Consumers pass `cursor=<token>` to fetch the next page; the response always includes a `cursor_field` key (`null` on the last page).
+
+```yaml
+- name: rates
+  pattern: paginated
+  endpoints:
+    - method: GET
+      path: /ratesync/rates
+      response:
+        status: 200
+  pagination:
+    style: cursor
+    items_field: data
+    cursor_field: nextCursor
+    cursor_ttl_seconds: 3600
+    has_more_field: hasMore
+```
+
+Upload the full dataset:
 ```bash
-curl "http://localhost:8000/ratesync/listings?offset=0&limit=2"
-# → {"results":[{"id":1},{"id":2}],"total":5,"hasMore":true,"nextOffset":2}
+curl -X POST http://localhost:8000/imnot/admin/ratesync/rates/payload \
+  -H "Content-Type: application/json" \
+  -d '[
+    {"id": "RATE-001", "name": "Standard Rate", "amount": 120.00, "currency": "USD"},
+    {"id": "RATE-002", "name": "Weekend Rate",  "amount": 150.00, "currency": "USD"},
+    {"id": "RATE-003", "name": "Promo Rate",    "amount":  89.00, "currency": "USD"}
+  ]'
 ```
 
-Default page size when `limit` is not sent is configured in `imnot.toml`:
+First page (no cursor):
+```bash
+curl "http://localhost:8000/ratesync/rates?limit=2"
+```
+```json
+{
+  "data": [
+    {"id": "RATE-001", "name": "Standard Rate", "amount": 120.00, "currency": "USD"},
+    {"id": "RATE-002", "name": "Weekend Rate",  "amount": 150.00, "currency": "USD"}
+  ],
+  "nextCursor": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "hasMore": true
+}
+```
+
+Next page (pass the cursor from the previous response):
+```bash
+curl "http://localhost:8000/ratesync/rates?limit=2&cursor=a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+```
+```json
+{
+  "data": [
+    {"id": "RATE-003", "name": "Promo Rate", "amount": 89.00, "currency": "USD"}
+  ],
+  "nextCursor": null,
+  "hasMore": false
+}
+```
+
+Expired or unknown cursor returns `400 {"detail": "Cursor expired or not found"}`.
+
+---
+
+### Style: `page_number`
+
+Consumers send a 1-indexed page number instead of a raw offset. Use `page_param` / `size_param` when the real API uses non-default names.
+
+```yaml
+- name: properties
+  pattern: paginated
+  endpoints:
+    - method: GET
+      path: /bookingco/properties
+      response:
+        status: 200
+  pagination:
+    style: page_number
+    items_field: properties
+    total_field: total
+    has_more_field: hasMore
+    page_param: page
+    size_param: size
+```
+
+Upload the full dataset:
+```bash
+curl -X POST http://localhost:8000/imnot/admin/bookingco/properties/payload \
+  -H "Content-Type: application/json" \
+  -d '[
+    {"id": "PROP-001", "name": "The Grand Hotel", "city": "Miami", "rooms": 120},
+    {"id": "PROP-002", "name": "Seaside Resort",  "city": "Miami", "rooms":  85},
+    {"id": "PROP-003", "name": "Downtown Suites", "city": "Miami", "rooms":  60}
+  ]'
+```
+
+First page:
+```
+GET /bookingco/properties?page=1&size=2
+```
+```json
+{
+  "total": 3,
+  "hasMore": true,
+  "properties": [
+    {"id": "PROP-001", "name": "The Grand Hotel", "city": "Miami", "rooms": 120},
+    {"id": "PROP-002", "name": "Seaside Resort",  "city": "Miami", "rooms":  85}
+  ]
+}
+```
+
+Second page:
+```
+GET /bookingco/properties?page=2&size=2
+```
+```json
+{
+  "total": 3,
+  "hasMore": false,
+  "properties": [
+    {"id": "PROP-003", "name": "Downtown Suites", "city": "Miami", "rooms": 60}
+  ]
+}
+```
+
+Pages are 1-indexed — `page=1` is the first page. `page=0` is clamped to `page=1`.
+
+---
+
+Default page size when the size param is absent is configured in `imnot.toml`:
 ```toml
 [pagination]
 default_limit = 50
 ```
 
-Session isolation (`X-Imnot-Session`) is supported — two sessions can hold different datasets and page through them independently.
+Session isolation (`X-Imnot-Session`) is supported for all three styles — two sessions can hold different datasets and page through them independently.
 
 ---
 

@@ -354,6 +354,60 @@
   letter-spacing: 0.04em;
 }
 
+.field-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.875rem;
+  height: 0.875rem;
+  font-size: 0.6rem;
+  font-style: normal;
+  font-weight: 700;
+  color: var(--color-muted);
+  background: var(--color-border);
+  border-radius: 50%;
+  cursor: default;
+  position: relative;
+  vertical-align: middle;
+  margin-left: 0.25rem;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.field-tip:hover {
+  color: var(--color-brand);
+}
+
+.field-tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  transform: none;
+  background: var(--color-ink);
+  color: var(--color-page-bg);
+  font-size: 0.7rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.45;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius-sm);
+  white-space: normal;
+  width: 15rem;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--t-fast);
+  z-index: 100;
+}
+
+.field-tip:hover::after {
+  opacity: 1;
+}
+
 .form-input {
   width: 10rem;
   padding: 0.5rem 0.75rem;
