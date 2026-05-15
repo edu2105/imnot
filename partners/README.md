@@ -24,7 +24,7 @@ partners/
 ## Top-level structure
 
 ```yaml
-partner: <string>           # unique identifier — letters, digits, hyphens, underscores only; max 64 chars (e.g. "ohip", "stripe")
+partner: <string>           # unique identifier — letters, digits, hyphens, underscores only; max 64 chars (e.g. "staylink", "bookingco")
 description: <string>       # human-readable description of the partner
 
 datapoints:                 # list of one or more datapoints (see below)
@@ -266,7 +266,7 @@ The same `{id}` token appears in the submit step's `id_header_value` and in subs
 
 ---
 
-#### OHIP-style example (header delivery, 3 steps)
+#### StayLink-style example (header delivery, 3 steps)
 
 ```yaml
 - name: reservation
@@ -298,16 +298,16 @@ The same `{id}` token appears in the submit step's `id_header_value` and in subs
         returns_payload: true
 ```
 
-#### Cloudbeds-style example (body delivery, 3 steps)
+#### BookingCo-style example (body delivery, 3 steps)
 
 ```yaml
 - name: rate-push
-  description: Polling-based rate push to Cloudbeds
+  description: Polling-based rate push to BookingCo
   pattern: polling
   endpoints:
     - step: 1
       method: POST
-      path: /cloudbeds/rates
+      path: /bookingco/rates
       response:
         status: 200
         generates_id: true
@@ -315,7 +315,7 @@ The same `{id}` token appears in the submit step's `id_header_value` and in subs
 
     - step: 2
       method: GET
-      path: /cloudbeds/jobs/{id}/status
+      path: /bookingco/jobs/{id}/status
       response:
         status: 200
         body:
@@ -323,7 +323,7 @@ The same `{id}` token appears in the submit step's `id_header_value` and in subs
 
     - step: 3
       method: GET
-      path: /cloudbeds/jobs/{id}/results
+      path: /bookingco/jobs/{id}/results
       response:
         status: 200
         returns_payload: true
@@ -568,15 +568,39 @@ Response:
     has_more_field: hasMore
 ```
 
+Upload the dataset:
+```bash
+curl -X POST http://localhost:8000/imnot/admin/ratesync/listing/payload \
+  -H "Content-Type: application/json" \
+  -d '[{"id":1,"name":"Apt A"},{"id":2,"name":"Apt B"},{"id":3,"name":"Apt C"}]'
+```
+
 First request (no cursor):
 ```bash
 curl "http://localhost:8000/ratesync/listings?limit=2"
-# → {"results":[...],"nextCursor":"<uuid>","hasMore":true}
 ```
 
-Next page:
+Response:
+```json
+{
+  "results": [{"id": 1, "name": "Apt A"}, {"id": 2, "name": "Apt B"}],
+  "nextCursor": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "hasMore": true
+}
+```
+
+Next page (pass the cursor from the previous response):
 ```bash
-curl "http://localhost:8000/ratesync/listings?limit=2&cursor=<uuid>"
+curl "http://localhost:8000/ratesync/listings?limit=2&cursor=a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+```
+
+Response:
+```json
+{
+  "results": [{"id": 3, "name": "Apt C"}],
+  "nextCursor": null,
+  "hasMore": false
+}
 ```
 
 **Example — `page_number`:**
@@ -599,10 +623,39 @@ curl "http://localhost:8000/ratesync/listings?limit=2&cursor=<uuid>"
     has_more_field: hasMore
 ```
 
+Upload the dataset:
+```bash
+curl -X POST http://localhost:8000/imnot/admin/ratesync/listing/payload \
+  -H "Content-Type: application/json" \
+  -d '[{"id":1,"name":"Apt A"},{"id":2,"name":"Apt B"},{"id":3,"name":"Apt C"}]'
+```
+
 First page:
 ```bash
 curl "http://localhost:8000/ratesync/listings?pageNum=1&perPage=2"
-# → {"results":[...],"total":3,"hasMore":true}
+```
+
+Response:
+```json
+{
+  "results": [{"id": 1, "name": "Apt A"}, {"id": 2, "name": "Apt B"}],
+  "total": 3,
+  "hasMore": true
+}
+```
+
+Second page:
+```bash
+curl "http://localhost:8000/ratesync/listings?pageNum=2&perPage=2"
+```
+
+Response:
+```json
+{
+  "results": [{"id": 3, "name": "Apt C"}],
+  "total": 3,
+  "hasMore": false
+}
 ```
 
 ---

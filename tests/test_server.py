@@ -35,7 +35,7 @@ def test_app_has_openapi_schema(client):
 
 
 # ---------------------------------------------------------------------------
-# Full OHIP flow through create_app (integration smoke test)
+# Full StayLink flow through create_app (integration smoke test)
 # ---------------------------------------------------------------------------
 
 
