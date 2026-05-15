@@ -743,6 +743,60 @@ img, svg {
   letter-spacing: 0.04em;
 }
 
+.field-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.875rem;
+  height: 0.875rem;
+  font-size: 0.6rem;
+  font-style: normal;
+  font-weight: 700;
+  color: var(--color-muted);
+  background: var(--color-border);
+  border-radius: 50%;
+  cursor: default;
+  position: relative;
+  vertical-align: middle;
+  margin-left: 0.25rem;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.field-tip:hover {
+  color: var(--color-brand);
+}
+
+.field-tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  transform: none;
+  background: var(--color-ink);
+  color: var(--color-page-bg);
+  font-size: 0.7rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.45;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius-sm);
+  white-space: normal;
+  width: 15rem;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--t-fast);
+  z-index: 100;
+}
+
+.field-tip:hover::after {
+  opacity: 1;
+}
+
 .form-input {
   width: 10rem;
   padding: 0.5rem 0.75rem;
@@ -2786,7 +2840,6 @@ img, svg {
       document.getElementById('builder-datapoints').innerHTML = '';
       document.getElementById('builder-yaml-preview').textContent = '';
       document.querySelectorAll('.field-error').forEach(function (el) { el.textContent = ''; });
-      builderAddDatapoint();
     }
 
     function builderPreFill(partnerData) {
@@ -2840,8 +2893,49 @@ img, svg {
             var delayInp = document.getElementById('b-dp-' + idx + '-callback-delay');
             if (delayInp) delayInp.value = dp.callback_delay_seconds;
           }
+          var cbSrcValue = dp.callback_url_header ? 'header' : 'field';
+          var cbFieldValue = dp.callback_url_field || dp.callback_url_header || '';
+          var cbRadios = document.querySelectorAll('input[name="b-dp-' + idx + '-cb-src"]');
+          cbRadios.forEach(function(r) { r.checked = (r.value === cbSrcValue); });
+          var cbFieldInp = document.getElementById('b-dp-' + idx + '-cb-field');
+          if (cbFieldInp) cbFieldInp.value = cbFieldValue;
+        } else if (dp.pattern === 'paginated') {
+          if (eps.length > 0) {
+            var pgPathInp = document.getElementById('b-dp-' + idx + '-path');
+            if (pgPathInp) pgPathInp.value = eps[0].path || '';
+          }
+          var pg = dp.pagination || {};
+          var pgStyleSel = document.getElementById('b-dp-' + idx + '-pg-style');
+          if (pgStyleSel && pg.style) {
+            pgStyleSel.value = pg.style;
+            _builderPgStyleChange(idx);
+          }
+          var itemsFld = document.getElementById('b-dp-' + idx + '-items-field');
+          if (itemsFld) itemsFld.value = pg.items_field || '';
+          var totalFld = document.getElementById('b-dp-' + idx + '-total-field');
+          if (totalFld) totalFld.value = pg.total_field || '';
+          var hasMoreFld = document.getElementById('b-dp-' + idx + '-has-more-field');
+          if (hasMoreFld) hasMoreFld.value = pg.has_more_field || '';
+          if (pg.style === 'offset_limit') {
+            var nof = document.getElementById('b-dp-' + idx + '-next-offset-field');
+            if (nof) nof.value = pg.next_offset_field || '';
+            var oef = document.getElementById('b-dp-' + idx + '-offset-echo-field');
+            if (oef) oef.value = pg.offset_echo_field || '';
+            var lef = document.getElementById('b-dp-' + idx + '-limit-echo-field');
+            if (lef) lef.value = pg.limit_echo_field || '';
+          } else if (pg.style === 'cursor') {
+            var cfInp = document.getElementById('b-dp-' + idx + '-cursor-field');
+            if (cfInp) cfInp.value = pg.cursor_field || '';
+            var ttlInp = document.getElementById('b-dp-' + idx + '-cursor-ttl');
+            if (ttlInp && pg.cursor_ttl_seconds !== undefined) ttlInp.value = pg.cursor_ttl_seconds;
+          } else if (pg.style === 'page_number') {
+            var ppInp = document.getElementById('b-dp-' + idx + '-page-param');
+            if (ppInp) ppInp.value = pg.page_param || '';
+            var spInp = document.getElementById('b-dp-' + idx + '-size-param');
+            if (spInp) spInp.value = pg.size_param || '';
+          }
         } else {
-          // oauth, static, fetch, paginated — single endpoint path
+          // oauth, static, fetch — single endpoint path
           if (eps.length > 0) {
             var singlePath = document.getElementById('b-dp-' + idx + '-path');
             if (singlePath) singlePath.value = eps[0].path || '';
@@ -2902,8 +2996,6 @@ img, svg {
     function builderRemoveDatapoint(idx) {
       var block = document.querySelector('.dp-block[data-dp-idx="' + idx + '"]');
       if (block) block.remove();
-      var remaining = document.querySelectorAll('.dp-block');
-      if (remaining.length === 0) builderAddDatapoint();
       builderUpdatePreview();
     }
 
@@ -3055,43 +3147,51 @@ img, svg {
           + '</div>'
           + '<div class="form-row">'
           + '<div class="form-group">'
-          + '<label class="form-label" for="b-dp-' + i + '-items-field">items_field *</label>'
+          + '<label class="form-label" for="b-dp-' + i + '-items-field">items_field *<span class="field-tip" data-tip="Response key whose value is the array of items for this page. e.g. items_field: results → {results: [...]}">i</span></label>'
           + '<input id="b-dp-' + i + '-items-field" type="text" class="form-input" placeholder="e.g. results" oninput="_builderMarkDirty();builderUpdatePreview()" />'
           + '<span class="field-error" id="b-dp-' + i + '-items-field-err"></span>'
           + '</div>'
           + '<div class="form-group">'
-          + '<label class="form-label" for="b-dp-' + i + '-total-field">total_field</label>'
+          + '<label class="form-label" for="b-dp-' + i + '-total-field">total_field<span class="field-tip" data-tip="Response key for the total item count across all pages. Omit if the real API does not return a total. e.g. total_field: total → {total: 42}">i</span></label>'
           + '<input id="b-dp-' + i + '-total-field" type="text" class="form-input" placeholder="e.g. total (optional)" oninput="_builderMarkDirty();builderUpdatePreview()" />'
           + '</div>'
           + '<div class="form-group">'
-          + '<label class="form-label" for="b-dp-' + i + '-has-more-field">has_more_field</label>'
+          + '<label class="form-label" for="b-dp-' + i + '-has-more-field">has_more_field<span class="field-tip" data-tip="Response key for a boolean — true when more pages follow. e.g. has_more_field: hasMore → {hasMore: true}">i</span></label>'
           + '<input id="b-dp-' + i + '-has-more-field" type="text" class="form-input" placeholder="e.g. hasMore (optional)" oninput="_builderMarkDirty();builderUpdatePreview()" />'
           + '</div>'
           + '</div>'
           + '<div id="b-dp-' + i + '-pg-offset-fields" class="form-row">'
           + '<div class="form-group">'
-          + '<label class="form-label" for="b-dp-' + i + '-next-offset-field">next_offset_field</label>'
+          + '<label class="form-label" for="b-dp-' + i + '-next-offset-field">next_offset_field<span class="field-tip" data-tip="Response key for the offset to use in the next request. Null on the last page. e.g. next_offset_field: nextOffset → {nextOffset: 10}">i</span></label>'
           + '<input id="b-dp-' + i + '-next-offset-field" type="text" class="form-input" placeholder="e.g. nextOffset (optional)" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-offset-echo-field">offset_echo_field<span class="field-tip" data-tip="Response key that echoes back the offset value from the request. e.g. offset_echo_field: offset → {offset: 10}">i</span></label>'
+          + '<input id="b-dp-' + i + '-offset-echo-field" type="text" class="form-input" placeholder="e.g. offset (optional)" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-limit-echo-field">limit_echo_field<span class="field-tip" data-tip="Response key that echoes back the limit value from the request. e.g. limit_echo_field: limit → {limit: 5}">i</span></label>'
+          + '<input id="b-dp-' + i + '-limit-echo-field" type="text" class="form-input" placeholder="e.g. limit (optional)" oninput="_builderMarkDirty();builderUpdatePreview()" />'
           + '</div>'
           + '</div>'
           + '<div id="b-dp-' + i + '-pg-cursor-fields" class="form-row" style="display:none;">'
           + '<div class="form-group">'
-          + '<label class="form-label" for="b-dp-' + i + '-cursor-field">cursor_field *</label>'
+          + '<label class="form-label" for="b-dp-' + i + '-cursor-field">cursor_field *<span class="field-tip" data-tip="Response key that carries the opaque cursor token for the next page. Set to null on the last page. e.g. cursor_field: nextCursor → {nextCursor: uuid}">i</span></label>'
           + '<input id="b-dp-' + i + '-cursor-field" type="text" class="form-input" placeholder="e.g. nextCursor" oninput="_builderMarkDirty();builderUpdatePreview()" />'
           + '<span class="field-error" id="b-dp-' + i + '-cursor-field-err"></span>'
           + '</div>'
           + '<div class="form-group">'
-          + '<label class="form-label" for="b-dp-' + i + '-cursor-ttl">cursor_ttl_seconds</label>'
+          + '<label class="form-label" for="b-dp-' + i + '-cursor-ttl">cursor_ttl_seconds<span class="field-tip" data-tip="How long cursor tokens remain valid (seconds). Default 3600. Set to 0 for no expiry.">i</span></label>'
           + '<input id="b-dp-' + i + '-cursor-ttl" type="number" class="form-input" placeholder="3600 (optional)" min="0" oninput="_builderMarkDirty();builderUpdatePreview()" />'
           + '</div>'
           + '</div>'
           + '<div id="b-dp-' + i + '-pg-page-fields" class="form-row" style="display:none;">'
           + '<div class="form-group">'
-          + '<label class="form-label" for="b-dp-' + i + '-page-param">page_param</label>'
+          + '<label class="form-label" for="b-dp-' + i + '-page-param">page_param<span class="field-tip" data-tip="Query parameter name consumers send for the page number. Default: page. e.g. page_param: page → ?page=2">i</span></label>'
           + '<input id="b-dp-' + i + '-page-param" type="text" class="form-input" placeholder="page (optional)" oninput="_builderMarkDirty();builderUpdatePreview()" />'
           + '</div>'
           + '<div class="form-group">'
-          + '<label class="form-label" for="b-dp-' + i + '-size-param">size_param</label>'
+          + '<label class="form-label" for="b-dp-' + i + '-size-param">size_param<span class="field-tip" data-tip="Query parameter name consumers send for the page size. Default: size. e.g. size_param: size → ?size=20">i</span></label>'
           + '<input id="b-dp-' + i + '-size-param" type="text" class="form-input" placeholder="size (optional)" oninput="_builderMarkDirty();builderUpdatePreview()" />'
           + '</div>'
           + '</div>'
@@ -3332,7 +3432,9 @@ img, svg {
           if (dp.total_field)    lines.push('      total_field: '    + _yamlStr(dp.total_field));
           if (dp.has_more_field) lines.push('      has_more_field: ' + _yamlStr(dp.has_more_field));
           if (pgStyle === 'offset_limit') {
-            if (dp.next_offset_field) lines.push('      next_offset_field: ' + _yamlStr(dp.next_offset_field));
+            if (dp.next_offset_field)  lines.push('      next_offset_field: '  + _yamlStr(dp.next_offset_field));
+            if (dp.offset_echo_field)  lines.push('      offset_echo_field: '  + _yamlStr(dp.offset_echo_field));
+            if (dp.limit_echo_field)   lines.push('      limit_echo_field: '   + _yamlStr(dp.limit_echo_field));
           } else if (pgStyle === 'cursor') {
             lines.push('      cursor_field: ' + _yamlStr(dp.cursor_field || ''));
             var ttlVal = parseInt(dp.cursor_ttl, 10);
@@ -3569,7 +3671,9 @@ img, svg {
           dp.total_field    = ((document.getElementById('b-dp-' + idx + '-total-field')    || {}).value || '').trim();
           dp.has_more_field = ((document.getElementById('b-dp-' + idx + '-has-more-field') || {}).value || '').trim();
           if (dp.pg_style === 'offset_limit') {
-            dp.next_offset_field = ((document.getElementById('b-dp-' + idx + '-next-offset-field') || {}).value || '').trim();
+            dp.next_offset_field  = ((document.getElementById('b-dp-' + idx + '-next-offset-field')  || {}).value || '').trim();
+            dp.offset_echo_field  = ((document.getElementById('b-dp-' + idx + '-offset-echo-field')  || {}).value || '').trim();
+            dp.limit_echo_field   = ((document.getElementById('b-dp-' + idx + '-limit-echo-field')   || {}).value || '').trim();
           } else if (dp.pg_style === 'cursor') {
             dp.cursor_field = ((document.getElementById('b-dp-' + idx + '-cursor-field') || {}).value || '').trim();
             var cfErr = document.getElementById('b-dp-' + idx + '-cursor-field-err');
@@ -3638,9 +3742,9 @@ img, svg {
       })
         .then(function (r) {
           if (r.status === 201 || r.status === 200) {
-            _builderDirty = false;
             var oldName = _builderOriginalName;
             var renamed = _builderMode === 'edit' && oldName && oldName !== submittedPartnerName;
+            builderReset();
             if (renamed) {
               return fetch('/imnot/admin/partners/' + encodeURIComponent(oldName), {
                 method: 'DELETE', headers: authHeaders(),
