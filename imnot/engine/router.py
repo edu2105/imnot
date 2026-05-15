@@ -106,7 +106,9 @@ def register_routes(
         _register_ui_routes(app, effective_ui_config)
     for partner in partners:
         for datapoint in partner.datapoints:
-            _register_consumer_routes(app, partner, datapoint, store, configs, paginated_config_refs, registered_routes, default_limit)
+            _register_consumer_routes(
+                app, partner, datapoint, store, configs, paginated_config_refs, registered_routes, default_limit
+            )
             if datapoint.pattern in _PAYLOAD_PATTERNS:
                 _register_admin_routes(app, partner, datapoint, store)
                 registered_admin_dps.add((partner.partner, datapoint.name))

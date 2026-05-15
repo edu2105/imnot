@@ -48,7 +48,9 @@ def make_paginated_handler(
             )
 
         if style == "cursor":
-            return _cursor(request, payload, pagination, partner, dp_name, store, default_limit, status_code, session_id)
+            return _cursor(
+                request, payload, pagination, partner, dp_name, store, default_limit, status_code, session_id
+            )
         elif style == "page_number":
             return _page_number(request, payload, pagination, default_limit, status_code)
         else:
