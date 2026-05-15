@@ -27,6 +27,8 @@ _PAGINATION_VALID_KEYS = {
     "total_field",
     "has_more_field",
     "next_offset_field",
+    "offset_echo_field",
+    "limit_echo_field",
     "cursor_field",
     "cursor_ttl_seconds",
     "page_param",

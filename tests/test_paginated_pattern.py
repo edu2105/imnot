@@ -268,6 +268,63 @@ def test_next_offset_field_absent_not_in_response(store):
     assert "nextOffset" not in body
 
 
+def test_offset_echo_field_present_in_response(store):
+    app = FastAPI()
+    pagination = {"style": "offset_limit", "items_field": "results", "offset_echo_field": "offset"}
+    dp = DatapointDef(name="listing", description="", pattern="paginated", endpoints=[], pagination=pagination)
+    handler = make_paginated_handler("ratesync", dp, _make_endpoint(), store, 10)
+    app.add_api_route("/ratesync/listings", handler, methods=["GET"])
+    c = TestClient(app)
+    store.store_global_payload("ratesync", "listing", _ten_items())
+    body = c.get("/ratesync/listings?offset=4&limit=3").json()
+    assert body["offset"] == 4
+
+
+def test_limit_echo_field_present_in_response(store):
+    app = FastAPI()
+    pagination = {"style": "offset_limit", "items_field": "results", "limit_echo_field": "limit"}
+    dp = DatapointDef(name="listing", description="", pattern="paginated", endpoints=[], pagination=pagination)
+    handler = make_paginated_handler("ratesync", dp, _make_endpoint(), store, 10)
+    app.add_api_route("/ratesync/listings", handler, methods=["GET"])
+    c = TestClient(app)
+    store.store_global_payload("ratesync", "listing", _ten_items())
+    body = c.get("/ratesync/listings?offset=0&limit=3").json()
+    assert body["limit"] == 3
+
+
+def test_echo_fields_reflect_actual_request_values(store):
+    app = FastAPI()
+    pagination = {
+        "style": "offset_limit",
+        "items_field": "results",
+        "total_field": "count",
+        "offset_echo_field": "offset",
+        "limit_echo_field": "limit",
+    }
+    dp = DatapointDef(name="listing", description="", pattern="paginated", endpoints=[], pagination=pagination)
+    handler = make_paginated_handler("ratesync", dp, _make_endpoint(), store, 10)
+    app.add_api_route("/ratesync/listings", handler, methods=["GET"])
+    c = TestClient(app)
+    store.store_global_payload("ratesync", "listing", _ten_items())
+    body = c.get("/ratesync/listings?offset=5&limit=3").json()
+    assert body["count"] == 10
+    assert body["offset"] == 5
+    assert body["limit"] == 3
+    assert body["results"] == _ten_items()[5:8]
+
+
+def test_echo_fields_absent_when_not_configured(store):
+    app = FastAPI()
+    dp = _make_datapoint()
+    handler = make_paginated_handler("ratesync", dp, _make_endpoint(), store, 10)
+    app.add_api_route("/ratesync/listings", handler, methods=["GET"])
+    c = TestClient(app)
+    store.store_global_payload("ratesync", "listing", _ten_items())
+    body = c.get("/ratesync/listings?offset=0&limit=3").json()
+    assert "offset" not in body
+    assert "limit" not in body
+
+
 # ---------------------------------------------------------------------------
 # Session isolation
 # ---------------------------------------------------------------------------
@@ -471,7 +528,7 @@ def test_cursor_optional_fields_absent(store):
 
 def test_cursor_handler_name(store):
     handler = make_paginated_handler("bookingco", _make_cursor_datapoint(), _make_endpoint(), store, 10)
-    assert "cursor" in handler.__name__
+    assert "paginated" in handler.__name__
     assert "bookingco" in handler.__name__
 
 
@@ -619,7 +676,7 @@ def test_page_number_next_offset_field_ignored(store):
 
 def test_page_number_handler_name(store):
     handler = make_paginated_handler("staylink", _make_page_number_datapoint(), _make_endpoint(), store, 10)
-    assert "page" in handler.__name__
+    assert "paginated" in handler.__name__
     assert "staylink" in handler.__name__
 
 

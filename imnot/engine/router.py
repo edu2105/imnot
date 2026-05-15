@@ -75,6 +75,7 @@ def register_routes(
     # Mutable config dict shared with all static handlers.  The reload endpoint
     # overwrites entries here so running handlers immediately serve fresh config.
     configs: dict[tuple, dict[str, Any]] = {}
+    paginated_config_refs: dict[tuple, list] = {}
 
     # Maps (METHOD, path) → "partner/datapoint" for every registered consumer route.
     # Used both for duplicate-prevention at startup (raises ValueError on collision)
@@ -85,6 +86,7 @@ def register_routes(
     effective_ui_config = ui_config if ui_config is not None else UIConfig()
 
     app.state.configs = configs
+    app.state.paginated_config_refs = paginated_config_refs
     app.state.store = store
     app.state.partners = partners
     app.state.partners_dir = partners_dir
@@ -104,7 +106,7 @@ def register_routes(
         _register_ui_routes(app, effective_ui_config)
     for partner in partners:
         for datapoint in partner.datapoints:
-            _register_consumer_routes(app, partner, datapoint, store, configs, registered_routes, default_limit)
+            _register_consumer_routes(app, partner, datapoint, store, configs, paginated_config_refs, registered_routes, default_limit)
             if datapoint.pattern in _PAYLOAD_PATTERNS:
                 _register_admin_routes(app, partner, datapoint, store)
                 registered_admin_dps.add((partner.partner, datapoint.name))
@@ -176,6 +178,7 @@ def _register_consumer_routes(
     datapoint: DatapointDef,
     store: SessionStore,
     configs: dict[tuple, dict[str, Any]],
+    paginated_config_refs: dict[tuple, list],
     registered_routes: dict[tuple[str, str], str],
     default_limit: int = 50,
 ) -> None:
@@ -241,7 +244,10 @@ def _register_consumer_routes(
     elif datapoint.pattern == "paginated":
         for endpoint in datapoint.endpoints:
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
-            handler = make_paginated_handler(partner.partner, datapoint, endpoint, store, default_limit)
+            ref_key = (partner.partner, datapoint.name, endpoint.method.upper(), endpoint.path)
+            pagination_ref: list[dict] = [datapoint.pagination or {}]
+            paginated_config_refs[ref_key] = pagination_ref
+            handler = make_paginated_handler(partner.partner, datapoint, endpoint, store, default_limit, pagination_ref)
             _add(endpoint.path, handler, endpoint.method)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered paginated route %s %s", endpoint.method, endpoint.path)
@@ -439,13 +445,21 @@ def _register_infra_routes(
     async def list_partners() -> JSONResponse:
         def _serialize_dp(dp: DatapointDef) -> dict:
             callback_delay: int | None = None
+            callback_url_field: str | None = None
+            callback_url_header: str | None = None
             if dp.pattern == "callback" and dp.endpoints:
-                callback_delay = int(dp.endpoints[0].response.get("callback_delay_seconds", 0))
+                resp = dp.endpoints[0].response
+                callback_delay = int(resp.get("callback_delay_seconds", 0))
+                callback_url_field = resp.get("callback_url_field")
+                callback_url_header = resp.get("callback_url_header")
             return {
                 "name": dp.name,
                 "pattern": dp.pattern,
                 "endpoints": [{"method": ep.method, "path": ep.path, "step": ep.step} for ep in dp.endpoints],
                 "callback_delay_seconds": callback_delay,
+                "callback_url_field": callback_url_field,
+                "callback_url_header": callback_url_header,
+                "pagination": dp.pagination,
             }
 
         return JSONResponse(
@@ -484,6 +498,7 @@ def _register_infra_routes(
             return JSONResponse(status_code=500, content={"detail": "Reload failed. Check server logs for details."})
 
         configs: dict = request.app.state.configs
+        paginated_config_refs: dict = request.app.state.paginated_config_refs
         store_: SessionStore = request.app.state.store
         registered: dict[tuple[str, str], str] = request.app.state.registered_routes
         registered_admin: set[tuple[str, str]] = request.app.state.registered_admin_dps
@@ -502,6 +517,14 @@ def _register_infra_routes(
                             configs[key] = ep.response
                             updated.append(f"{ep.method.upper()} {ep.path}")
 
+                # Hot-swap paginated pagination config for already-registered routes
+                if dp.pattern == "paginated":
+                    for ep in dp.endpoints:
+                        ref_key = (partner.partner, dp.name, ep.method.upper(), ep.path)
+                        if ref_key in paginated_config_refs:
+                            paginated_config_refs[ref_key][0] = dp.pagination or {}
+                            updated.append(f"{ep.method.upper()} {ep.path}")
+
                 # Register brand-new consumer routes (new partners or new datapoints)
                 new_eps = [ep for ep in dp.endpoints if (ep.method.upper(), ep.path) not in registered]
                 if new_eps:
@@ -512,6 +535,7 @@ def _register_infra_routes(
                             dp,
                             store_,
                             configs,
+                            paginated_config_refs,
                             registered,
                             request.app.state.default_limit,
                         )
@@ -568,6 +592,7 @@ def _register_infra_routes(
 
         partner = result.partner
         configs_: dict = request.app.state.configs
+        paginated_config_refs_: dict = request.app.state.paginated_config_refs
         store_: SessionStore = request.app.state.store
         registered_: dict[tuple[str, str], str] = request.app.state.registered_routes
         registered_admin_: set[tuple[str, str]] = request.app.state.registered_admin_dps
@@ -583,6 +608,13 @@ def _register_infra_routes(
                     if key in configs_:
                         configs_[key] = ep.response
 
+            # Hot-swap paginated pagination config for already-registered routes
+            if dp.pattern == "paginated":
+                for ep in dp.endpoints:
+                    ref_key = (partner.partner, dp.name, ep.method.upper(), ep.path)
+                    if ref_key in paginated_config_refs_:
+                        paginated_config_refs_[ref_key][0] = dp.pagination or {}
+
             # Register brand-new consumer routes
             new_eps = [ep for ep in dp.endpoints if (ep.method.upper(), ep.path) not in registered_]
             if new_eps:
@@ -593,6 +625,7 @@ def _register_infra_routes(
                         dp,
                         store_,
                         configs_,
+                        paginated_config_refs_,
                         registered_,
                         request.app.state.default_limit,
                     )
