@@ -80,17 +80,15 @@ def test_no_partner_routes_when_no_partners_dir(schema):
 
 
 def test_export_script_writes_valid_json(tmp_path, monkeypatch):
-    out = tmp_path / "openapi.json"
     script = REPO_ROOT / "scripts" / "export_openapi.py"
 
-    # Patch the output path by running the script and redirecting output
     result = subprocess.run(
         [sys.executable, str(script)],
         capture_output=True,
         text=True,
         cwd=tmp_path,
     )
-    # Script writes to repo root, so check there
+    assert result.returncode == 0, result.stderr
     generated = REPO_ROOT / "openapi.json"
     assert generated.exists()
     data = json.loads(generated.read_text())
