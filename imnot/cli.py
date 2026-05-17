@@ -221,6 +221,17 @@ def start(
     effective_admin_key = admin_key or None
     pid_path = db_path.with_suffix(".pid")
 
+    if effective_host == "0.0.0.0" and not effective_admin_key:
+        _warn = (
+            "WARNING: imnot is binding to 0.0.0.0 (all interfaces) with no IMNOT_ADMIN_KEY set. "
+            "Admin endpoints are unauthenticated and reachable from the network. "
+            "Set IMNOT_ADMIN_KEY or bind to 127.0.0.1 for non-local deployments."
+        )
+        click.echo(_warn, err=True)
+        cli_log.warning(
+            "Binding to 0.0.0.0 with no IMNOT_ADMIN_KEY — admin endpoints are unauthenticated"
+        )
+
     click.echo(f"Starting imnot on http://{effective_host}:{effective_port}")
     cli_log.info(
         "Starting imnot host=%s port=%d db=%s partners_dir=%s admin_key=%s",

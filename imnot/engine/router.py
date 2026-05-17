@@ -393,7 +393,16 @@ def _register_ui_routes(app: FastAPI, ui_config: UIConfig) -> None:
     )
 
     async def serve_ui() -> HTMLResponse:
-        return HTMLResponse(content=themed.decode("utf-8"))
+        return HTMLResponse(
+            content=themed.decode("utf-8"),
+            headers={
+                "X-Frame-Options": "DENY",
+                "X-Content-Type-Options": "nosniff",
+                "Content-Security-Policy": (
+                    "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
+                ),
+            },
+        )
 
     app.add_api_route("/imnot/admin/ui", serve_ui, methods=["GET"], include_in_schema=False)
     logger.debug("Registered admin UI route")
@@ -437,6 +446,12 @@ def _register_infra_routes(
             return JSONResponse(status_code=400, content={"detail": "Invalid partner name."})
         if not partner_dir.exists():
             return JSONResponse(status_code=404, content={"detail": f"Partner '{partner_name}' not found."})
+        symlinks = [str(p) for p in partner_dir.rglob("*") if p.is_symlink()]
+        if symlinks:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Partner directory contains symlinks; refusing to delete.", "symlinks": symlinks},
+            )
         shutil.rmtree(partner_dir)
         for i, p in enumerate(partners):
             if p.partner == partner_name:

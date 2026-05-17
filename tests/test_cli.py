@@ -907,6 +907,69 @@ def test_start_missing_partners_dir_warns_no_partners(runner, tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Admin key warning when binding to 0.0.0.0 without a key
+# ---------------------------------------------------------------------------
+
+
+def test_start_warns_when_binding_0_0_0_0_without_admin_key(runner, tmp_path):
+    """imnot start should warn (but not abort) when host is 0.0.0.0 and IMNOT_ADMIN_KEY is unset."""
+    partners_dir = tmp_path / "partners"
+    partners_dir.mkdir()
+    original = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with patch("imnot.cli.uvicorn.run"):
+            result = runner.invoke(
+                cli,
+                [
+                    "start",
+                    "--host",
+                    "0.0.0.0",
+                    "--db",
+                    str(tmp_path / "test.db"),
+                    "--partners-dir",
+                    str(partners_dir),
+                ],
+            )
+    finally:
+        os.chdir(original)
+
+    assert result.exit_code == 0
+    assert "WARNING" in result.output
+    assert "0.0.0.0" in result.output
+    assert "IMNOT_ADMIN_KEY" in result.output
+
+
+def test_start_no_warning_when_admin_key_set_with_0_0_0_0(runner, tmp_path):
+    """No warning when --host 0.0.0.0 is combined with an admin key."""
+    partners_dir = tmp_path / "partners"
+    partners_dir.mkdir()
+    original = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with patch("imnot.cli.uvicorn.run"):
+            result = runner.invoke(
+                cli,
+                [
+                    "start",
+                    "--host",
+                    "0.0.0.0",
+                    "--admin-key",
+                    "supersecret",
+                    "--db",
+                    str(tmp_path / "test.db"),
+                    "--partners-dir",
+                    str(partners_dir),
+                ],
+            )
+    finally:
+        os.chdir(original)
+
+    assert result.exit_code == 0
+    assert "IMNOT_ADMIN_KEY" not in result.output
+
+
+# ---------------------------------------------------------------------------
 # Log dir defaults to db_path.parent, not CWD
 # ---------------------------------------------------------------------------
 

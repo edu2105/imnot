@@ -135,7 +135,7 @@ async def fire_callback(
         return
 
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.request(callback_method, callback_url, json=payload)
         if resp.is_success:
             logger.info(
