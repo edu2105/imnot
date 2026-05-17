@@ -64,6 +64,11 @@ jobs:
           pip install bandit -q
           bandit -r imnot/ -f screen
 
+      - name: Audit dependencies for CVEs
+        run: |
+          pip install pip-audit -q
+          pip-audit
+
   docker-smoke:
     name: Docker smoke test (read-only /app)
     runs-on: ubuntu-latest
