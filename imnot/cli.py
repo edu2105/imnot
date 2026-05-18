@@ -228,9 +228,7 @@ def start(
             "Set IMNOT_ADMIN_KEY or bind to 127.0.0.1 for non-local deployments."
         )
         click.echo(_warn, err=True)
-        cli_log.warning(
-            "Binding to 0.0.0.0 with no IMNOT_ADMIN_KEY — admin endpoints are unauthenticated"
-        )
+        cli_log.warning("Binding to 0.0.0.0 with no IMNOT_ADMIN_KEY — admin endpoints are unauthenticated")
 
     click.echo(f"Starting imnot on http://{effective_host}:{effective_port}")
     cli_log.info(
