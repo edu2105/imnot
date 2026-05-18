@@ -105,3 +105,14 @@ def test_ui_default_config_when_none_passed(store):
 def test_ui_placeholder_replaced(ui_client):
     r = ui_client.get("/imnot/admin/ui")
     assert b"__IMNOT_THEME__" not in r.content
+
+
+def test_ui_security_headers_present(ui_client):
+    """Admin UI response must include HTTP security headers."""
+    r = ui_client.get("/imnot/admin/ui")
+    assert r.headers.get("x-frame-options") == "DENY"
+    assert r.headers.get("x-content-type-options") == "nosniff"
+    csp = r.headers.get("content-security-policy", "")
+    assert "default-src 'self'" in csp
+    assert "style-src" in csp
+    assert "script-src" in csp

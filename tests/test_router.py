@@ -1077,3 +1077,21 @@ def test_delete_partner_invalid_name_returns_400(tmp_path, store):
     c, _ = _make_client(tmp_path, store)
     r = c.delete("/imnot/admin/partners/../../etc")
     assert r.status_code in (400, 404)  # FastAPI may 404 before our handler on path separators
+
+
+def test_delete_partner_with_symlink_returns_400(tmp_path, store):
+    """delete_partner must refuse to rmtree a directory that contains symlinks."""
+    c, partners_dir = _make_client(tmp_path, store)
+    c.post("/imnot/admin/partners", content=_NEW_PARTNER_YAML)
+
+    # Plant a symlink inside the bookingco partner directory.
+    target = tmp_path / "secret.txt"
+    target.write_text("sensitive")
+    link = partners_dir / "bookingco" / "link_to_secret"
+    link.symlink_to(target)
+
+    r = c.delete("/imnot/admin/partners/bookingco")
+    assert r.status_code == 400
+    assert "symlink" in r.json()["detail"].lower()
+    # Directory must still exist — rmtree was NOT called.
+    assert (partners_dir / "bookingco").exists()
