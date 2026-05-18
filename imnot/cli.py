@@ -221,7 +221,7 @@ def start(
     effective_admin_key = admin_key or None
     pid_path = db_path.with_suffix(".pid")
 
-    if effective_host == "0.0.0.0" and not effective_admin_key:
+    if effective_host == "0.0.0.0" and not effective_admin_key:  # nosec B104
         _warn = (
             "WARNING: imnot is binding to 0.0.0.0 (all interfaces) with no IMNOT_ADMIN_KEY set. "
             "Admin endpoints are unauthenticated and reachable from the network. "
