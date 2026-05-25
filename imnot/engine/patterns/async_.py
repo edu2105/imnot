@@ -24,6 +24,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
 from imnot.engine.session_store import SessionStore
+from imnot.engine.validator import validate_request
 from imnot.loader.yaml_loader import DatapointDef, EndpointDef
 
 
@@ -62,6 +63,7 @@ def _make_submit_handler(
     id_header_value: str | None = endpoint.response.get("id_header_value")
     id_body_field: str | None = endpoint.response.get("id_body_field")
     static_body: dict[str, Any] = endpoint.response.get("body") or {}
+    validate_rules = endpoint.validate
 
     if not (id_header and id_header_value) and not id_body_field:
         raise ValueError(
@@ -70,6 +72,17 @@ def _make_submit_handler(
         )
 
     async def handler(request: Request) -> Response:
+        if validate_rules is not None:
+            body: Any = None
+            if validate_rules.get("body"):
+                try:
+                    body = await request.json()
+                except Exception:
+                    body = None
+            errors = validate_request(validate_rules, body, request.query_params, request.headers)
+            if errors:
+                return JSONResponse(status_code=422, content={"detail": errors})
+
         session_id: str | None = request.headers.get("X-Imnot-Session")
         async_uuid = store.register_async_request(
             partner=partner,
@@ -103,10 +116,21 @@ def _make_static_handler(
     status_code: int = endpoint.response.get("status", 200)
     extra_headers: dict[str, str] = endpoint.response.get("headers") or {}
     static_body: dict[str, Any] | None = endpoint.response.get("body")
+    validate_rules = endpoint.validate
 
     if static_body is not None:
 
         async def handler(request: Request) -> Response:
+            if validate_rules is not None:
+                body: Any = None
+                if validate_rules.get("body"):
+                    try:
+                        body = await request.json()
+                    except Exception:
+                        body = None
+                errors = validate_request(validate_rules, body, request.query_params, request.headers)
+                if errors:
+                    return JSONResponse(status_code=422, content={"detail": errors})
             return JSONResponse(
                 status_code=status_code,
                 content=static_body,
@@ -115,6 +139,10 @@ def _make_static_handler(
     else:
 
         async def handler(request: Request) -> Response:
+            if validate_rules is not None:
+                errors = validate_request(validate_rules, None, request.query_params, request.headers)
+                if errors:
+                    return JSONResponse(status_code=422, content={"detail": errors})
             return Response(status_code=status_code, headers=extra_headers)
 
     handler.__name__ = f"polling_static_{partner}_{datapoint.name}_{endpoint.step}"
@@ -134,8 +162,20 @@ def _make_fetch_handler(
 ) -> Callable:
     dp_name = datapoint.name
     status_code: int = endpoint.response.get("status", 200)
+    validate_rules = endpoint.validate
 
     async def handler(request: Request) -> Response:
+        if validate_rules is not None:
+            body: Any = None
+            if validate_rules.get("body"):
+                try:
+                    body = await request.json()
+                except Exception:
+                    body = None
+            errors = validate_request(validate_rules, body, request.query_params, request.headers)
+            if errors:
+                return JSONResponse(status_code=422, content={"detail": errors})
+
         async_uuid: str | None = request.path_params.get("id")
         row = store.get_async_request(async_uuid)
         if row is None:

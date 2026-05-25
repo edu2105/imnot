@@ -473,3 +473,300 @@ def test_trailing_slash_endpoint_reachable_without_slash():
     r = c.get("/api/v2/rates")
     assert r.status_code == 200
     assert r.json() == {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# validate: block — YAML loader
+# ---------------------------------------------------------------------------
+
+_VALIDATE_YAML = """\
+partner: bookingco
+description: Test partner with validation
+datapoints:
+  - name: search
+    description: Search endpoint
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /bookingco/search
+        validate:
+          body:
+            query:
+              required: true
+              type: string
+          query:
+            limit:
+              type: integer
+              min: 1
+              max: 100
+          headers:
+            X-Partner-ID:
+              required: true
+              pattern: "^P-[0-9]+"
+        response:
+          status: 200
+"""
+
+_VALIDATE_UNKNOWN_TOP_KEY_YAML = """\
+partner: bookingco
+description: Test
+datapoints:
+  - name: search
+    description: Search
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /bookingco/search
+        validate:
+          extra_key: {}
+        response:
+          status: 200
+"""
+
+_VALIDATE_UNKNOWN_RULE_ATTR_YAML = """\
+partner: bookingco
+description: Test
+datapoints:
+  - name: search
+    description: Search
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /bookingco/search
+        validate:
+          body:
+            name:
+              required: true
+              unknown_attr: something
+        response:
+          status: 200
+"""
+
+_VALIDATE_UNKNOWN_TYPE_YAML = """\
+partner: bookingco
+description: Test
+datapoints:
+  - name: search
+    description: Search
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /bookingco/search
+        validate:
+          body:
+            name:
+              type: uuid
+        response:
+          status: 200
+"""
+
+_VALIDATE_ABSENT_YAML = """\
+partner: bookingco
+description: Test
+datapoints:
+  - name: search
+    description: Search
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /bookingco/search
+        response:
+          status: 200
+"""
+
+
+def test_validate_block_valid_structure_parses():
+    partner = parse_partner_yaml(_VALIDATE_YAML)
+    ep = partner.datapoints[0].endpoints[0]
+    assert ep.validate is not None
+    assert "body" in ep.validate
+    assert "query" in ep.validate
+    assert "headers" in ep.validate
+
+
+def test_validate_block_unknown_top_key_raises():
+    with pytest.raises(ValueError, match="unknown key"):
+        parse_partner_yaml(_VALIDATE_UNKNOWN_TOP_KEY_YAML)
+
+
+def test_validate_block_unknown_rule_attr_raises():
+    with pytest.raises(ValueError, match="unknown rule attribute"):
+        parse_partner_yaml(_VALIDATE_UNKNOWN_RULE_ATTR_YAML)
+
+
+def test_validate_block_unknown_type_raises():
+    with pytest.raises(ValueError, match="unknown type"):
+        parse_partner_yaml(_VALIDATE_UNKNOWN_TYPE_YAML)
+
+
+def test_validate_absent_gives_none():
+    partner = parse_partner_yaml(_VALIDATE_ABSENT_YAML)
+    ep = partner.datapoints[0].endpoints[0]
+    assert ep.validate is None
+
+
+def test_validate_null_section_is_skipped():
+    yaml_text = """\
+partner: bookingco
+description: Test
+datapoints:
+  - name: search
+    description: Search
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /bookingco/search
+        validate:
+          body: null
+          query:
+            page:
+              required: true
+        response:
+          status: 200
+"""
+    partner = parse_partner_yaml(yaml_text)
+    ep = partner.datapoints[0].endpoints[0]
+    assert ep.validate is not None
+    assert "query" in ep.validate
+    assert ep.validate.get("body") is None
+
+
+# ---------------------------------------------------------------------------
+# validate: block — section value not a dict (L91)
+# ---------------------------------------------------------------------------
+
+
+def test_validate_section_value_not_a_dict_raises():
+    yaml_text = """\
+partner: bookingco
+description: Test
+datapoints:
+  - name: search
+    description: Search
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /bookingco/search
+        validate:
+          body: "flat_string_not_a_dict"
+        response:
+          status: 200
+"""
+    with pytest.raises(ValueError, match="must be a mapping"):
+        parse_partner_yaml(yaml_text)
+
+
+# ---------------------------------------------------------------------------
+# validate: block — rule entry not a dict (L96)
+# ---------------------------------------------------------------------------
+
+
+def test_validate_rule_entry_not_a_dict_raises():
+    yaml_text = """\
+partner: bookingco
+description: Test
+datapoints:
+  - name: search
+    description: Search
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /bookingco/search
+        validate:
+          body:
+            field: "not-a-dict"
+        response:
+          status: 200
+"""
+    with pytest.raises(ValueError, match="rule dict"):
+        parse_partner_yaml(yaml_text)
+
+
+# ---------------------------------------------------------------------------
+# endpoint missing method: (L116)
+# ---------------------------------------------------------------------------
+
+
+def test_endpoint_missing_method_raises():
+    yaml_text = """\
+partner: bookingco
+datapoints:
+  - name: search
+    pattern: fetch
+    endpoints:
+      - path: /bookingco/search
+        response:
+          status: 200
+"""
+    with pytest.raises(ValueError, match="missing 'method'"):
+        parse_partner_yaml(yaml_text)
+
+
+# ---------------------------------------------------------------------------
+# endpoint missing path: (L118)
+# ---------------------------------------------------------------------------
+
+
+def test_endpoint_missing_path_raises():
+    yaml_text = """\
+partner: bookingco
+datapoints:
+  - name: search
+    pattern: fetch
+    endpoints:
+      - method: GET
+        response:
+          status: 200
+"""
+    with pytest.raises(ValueError, match="missing 'path'"):
+        parse_partner_yaml(yaml_text)
+
+
+# ---------------------------------------------------------------------------
+# datapoint missing name: (L138)
+# ---------------------------------------------------------------------------
+
+
+def test_datapoint_missing_name_raises():
+    yaml_text = """\
+partner: bookingco
+datapoints:
+  - pattern: fetch
+    endpoints:
+      - method: GET
+        path: /bookingco/items
+        response:
+          status: 200
+"""
+    with pytest.raises(ValueError, match="missing 'name'"):
+        parse_partner_yaml(yaml_text)
+
+
+# ---------------------------------------------------------------------------
+# datapoint with no endpoints: (L149)
+# ---------------------------------------------------------------------------
+
+
+def test_datapoint_missing_endpoints_raises():
+    yaml_text = """\
+partner: bookingco
+datapoints:
+  - name: search
+    pattern: fetch
+"""
+    with pytest.raises(ValueError, match="no endpoints"):
+        parse_partner_yaml(yaml_text)
+
+
+# ---------------------------------------------------------------------------
+# partner with no datapoints: (L198)
+# ---------------------------------------------------------------------------
+
+
+def test_partner_missing_datapoints_raises():
+    yaml_text = """\
+partner: bookingco
+description: No datapoints here
+"""
+    with pytest.raises(ValueError, match="no datapoints"):
+        parse_partner_yaml(yaml_text)

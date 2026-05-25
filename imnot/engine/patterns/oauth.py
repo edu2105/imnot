@@ -14,9 +14,10 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from fastapi import Response
+from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
+from imnot.engine.validator import validate_request
 from imnot.loader.yaml_loader import EndpointDef
 
 # A static JWT-shaped token returned for every token request.
@@ -26,15 +27,27 @@ _STATIC_ACCESS_TOKEN = (  # nosec B105 — intentional placeholder token for moc
 )
 
 
-def make_oauth_handler(endpoint: EndpointDef) -> Callable[[], Response]:
+def make_oauth_handler(endpoint: EndpointDef) -> Callable:
     """Return a FastAPI route handler for the given oauth EndpointDef."""
 
     response_cfg: dict[str, Any] = endpoint.response
     status_code: int = response_cfg.get("status", 200)
     token_type: str = response_cfg.get("token_type", "Bearer")
     expires_in: int = response_cfg.get("expires_in", 3600)
+    validate_rules = endpoint.validate
 
-    async def handler() -> JSONResponse:
+    async def handler(request: Request) -> Response:
+        if validate_rules is not None:
+            body: Any = None
+            if validate_rules.get("body"):
+                try:
+                    body = await request.json()
+                except Exception:
+                    body = None
+            errors = validate_request(validate_rules, body, request.query_params, request.headers)
+            if errors:
+                return JSONResponse(status_code=422, content={"detail": errors})
+
         return JSONResponse(
             status_code=status_code,
             content={

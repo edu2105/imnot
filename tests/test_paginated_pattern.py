@@ -722,3 +722,26 @@ def test_page_number_session_isolation(store):
 
     assert r_alice.json()["items"][0]["user"] == "alice"
     assert r_bob.json()["items"][0]["user"] == "bob"
+
+
+# ---------------------------------------------------------------------------
+# Validation
+# ---------------------------------------------------------------------------
+
+
+def test_paginated_invalid_query_returns_422(store):
+    app = FastAPI()
+    datapoint = _make_datapoint()
+    endpoint = EndpointDef(
+        method="GET",
+        path="/ratesync/listings",
+        step=None,
+        response={"status": 200},
+        validate={"query": {"format": {"required": True}}},
+    )
+    handler = make_paginated_handler("ratesync", datapoint, endpoint, store, default_limit=10)
+    app.add_api_route("/ratesync/listings", handler, methods=["GET"])
+    c = TestClient(app, raise_server_exceptions=True)
+    r = c.get("/ratesync/listings")
+    assert r.status_code == 422
+    assert any("query.format" in e for e in r.json()["detail"])

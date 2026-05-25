@@ -26,6 +26,7 @@ from fastapi import BackgroundTasks, Request
 from fastapi.responses import JSONResponse, Response
 
 from imnot.engine.session_store import SessionStore
+from imnot.engine.validator import validate_request
 from imnot.loader.yaml_loader import DatapointDef, EndpointDef
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,7 @@ def make_push_handler(
     callback_url_header: str | None = endpoint.response.get("callback_url_header")
     callback_method: str = endpoint.response.get("callback_method", "POST").upper()
     callback_delay: float = float(endpoint.response.get("callback_delay_seconds", 0))
+    validate_rules = endpoint.validate
 
     if callback_url_field and callback_url_header:
         raise ValueError(
@@ -61,12 +63,28 @@ def make_push_handler(
         )
 
     async def handler(request: Request, background_tasks: BackgroundTasks) -> Response:
-        # Extract callback URL from body or header
+        # Parse body unconditionally for push (always has a body when callback_url_field is set)
+        parsed_body: dict[str, Any] | None = None
         if callback_url_field:
             try:
-                body: dict[str, Any] = await request.json()
+                parsed_body = await request.json()
             except Exception:
                 return JSONResponse(status_code=400, content={"detail": "Invalid JSON body"})
+
+        # Validate before extracting callback URL
+        if validate_rules is not None:
+            errors = validate_request(
+                validate_rules,
+                parsed_body,
+                request.query_params,
+                request.headers,
+            )
+            if errors:
+                return JSONResponse(status_code=422, content={"detail": errors})
+
+        # Extract callback URL from body or header
+        if callback_url_field:
+            body: dict[str, Any] = parsed_body or {}
             callback_url: str | None = body.get(callback_url_field)
             if not callback_url:
                 return JSONResponse(

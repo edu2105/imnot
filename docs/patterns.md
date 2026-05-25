@@ -444,6 +444,36 @@ Session isolation (`X-Imnot-Session`) is supported for all three styles — two 
 
 ---
 
+## Request validation
+
+Any endpoint across all six patterns can include a `validate:` block. When present, imnot checks the incoming request against the declared rules and returns `422` with a list of error strings before serving the mock response.
+
+```yaml
+endpoints:
+  - method: POST
+    path: /partner/reservations
+    validate:
+      body:
+        reservation_id:
+          required: true
+          type: string
+        nights:
+          required: true
+          type: integer
+          min: 1
+          max: 365
+      headers:
+        X-Partner-ID:
+          required: true
+          pattern: '^P-[0-9]+'
+    response:
+      status: 202
+```
+
+See [partners/README.md](../partners/README.md#request-validation) for the full rule reference.
+
+---
+
 ## Session isolation
 
 Any `fetch`, `polling`, or `paginated` endpoint supports per-test session isolation via `X-Imnot-Session`.

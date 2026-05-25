@@ -313,3 +313,204 @@ async def test_fetch_session_header_but_no_session_payload_returns_404(fetch_han
 
     response = await fetch_handler(_request_with_id(async_uuid, session_id="ghost-session"))
     assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Validation — submit, static, fetch
+# ---------------------------------------------------------------------------
+
+
+def _rich_request(
+    body: bytes = b"",
+    query_string: bytes = b"",
+    headers: list[tuple[bytes, bytes]] | None = None,
+    path_params: dict | None = None,
+) -> Request:
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/jobs",
+        "query_string": query_string,
+        "headers": headers or [],
+    }
+    if path_params:
+        scope["path_params"] = path_params
+
+    async def receive():
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    return Request(scope, receive=receive)
+
+
+@pytest.mark.asyncio
+async def test_submit_invalid_body_returns_422(store):
+    ep = EndpointDef(
+        method="POST",
+        path="/jobs",
+        step=1,
+        response={
+            "status": 202,
+            "generates_id": True,
+            "id_header": "Location",
+            "id_header_value": "/jobs/{id}",
+        },
+        validate={"body": {"payload_type": {"required": True}}},
+    )
+    handler = make_async_handlers("partner", _make_datapoint([ep]), store)[1]
+    response = await handler(_rich_request(body=b"{}"))
+    assert response.status_code == 422
+    import json
+
+    body = json.loads(response.body)
+    assert any("payload_type" in e for e in body["detail"])
+
+
+@pytest.mark.asyncio
+async def test_static_step_invalid_query_returns_422(store):
+    ep = EndpointDef(
+        method="GET",
+        path="/jobs/{id}/status",
+        step=2,
+        response={"status": 200, "body": {"status": "COMPLETED"}},
+        validate={"query": {"format": {"required": True}}},
+    )
+    handler = make_async_handlers("partner", _make_datapoint([ep]), store)[2]
+    response = await handler(_rich_request(query_string=b""))
+    assert response.status_code == 422
+    import json
+
+    body = json.loads(response.body)
+    assert any("query.format" in e for e in body["detail"])
+
+
+@pytest.mark.asyncio
+async def test_fetch_step_invalid_header_returns_422(store):
+    ep = EndpointDef(
+        method="GET",
+        path="/jobs/{id}",
+        step=3,
+        response={"status": 200, "returns_payload": True},
+        validate={"headers": {"X-Correlation-ID": {"required": True}}},
+    )
+    handler = make_async_handlers("partner", _make_datapoint([ep]), store)[3]
+    async_uuid = store.register_async_request("partner", "job", session_id=None)
+    response = await handler(_rich_request(path_params={"id": async_uuid}))
+    assert response.status_code == 422
+    import json
+
+    body = json.loads(response.body)
+    assert any("X-Correlation-ID" in e for e in body["detail"])
+
+
+# ---------------------------------------------------------------------------
+# generates_id missing id delivery config — ValueError at startup (L69)
+# ---------------------------------------------------------------------------
+
+
+def test_submit_generates_id_without_delivery_config_raises(store):
+    ep = EndpointDef(
+        method="POST",
+        path="/jobs",
+        step=1,
+        response={"status": 202, "generates_id": True},
+    )
+    with pytest.raises(ValueError, match="generates_id"):
+        make_async_handlers("partner", _make_datapoint([ep]), store)
+
+
+# ---------------------------------------------------------------------------
+# Malformed JSON body — submit step (L80-81)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_submit_malformed_json_body_fires_required_error(store):
+    import json as _json
+
+    ep = EndpointDef(
+        method="POST",
+        path="/jobs",
+        step=1,
+        response={
+            "status": 202,
+            "generates_id": True,
+            "id_header": "Location",
+            "id_header_value": "/jobs/{id}",
+        },
+        validate={"body": {"payload_type": {"required": True}}},
+    )
+    handler = make_async_handlers("partner", _make_datapoint([ep]), store)[1]
+    response = await handler(_rich_request(body=b"not-valid-json{{{"))
+    assert response.status_code == 422
+    body = _json.loads(response.body)
+    assert any("payload_type" in e for e in body["detail"])
+
+
+# ---------------------------------------------------------------------------
+# Malformed JSON body — static step with body (L127-130)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_static_step_malformed_json_body_fires_required_error(store):
+    import json as _json
+
+    ep = EndpointDef(
+        method="POST",
+        path="/jobs/{id}/confirm",
+        step=2,
+        response={"status": 200, "body": {"confirmed": True}},
+        validate={"body": {"confirm_token": {"required": True}}},
+    )
+    handler = make_async_handlers("partner", _make_datapoint([ep]), store)[2]
+    response = await handler(_rich_request(body=b"not-valid-json{{{"))
+    assert response.status_code == 422
+    body = _json.loads(response.body)
+    assert any("confirm_token" in e for e in body["detail"])
+
+
+# ---------------------------------------------------------------------------
+# Static step without body — validate fires (L143-145)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_static_step_no_body_invalid_query_returns_422(store):
+    import json as _json
+
+    ep = EndpointDef(
+        method="HEAD",
+        path="/jobs/{id}",
+        step=2,
+        response={"status": 201, "headers": {"Status": "COMPLETED"}},
+        validate={"query": {"format": {"required": True}}},
+    )
+    handler = make_async_handlers("partner", _make_datapoint([ep]), store)[2]
+    response = await handler(_rich_request(query_string=b""))
+    assert response.status_code == 422
+    body = _json.loads(response.body)
+    assert any("query.format" in e for e in body["detail"])
+
+
+# ---------------------------------------------------------------------------
+# Malformed JSON body — fetch step (L171-174)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_fetch_step_malformed_json_body_fires_required_error(store):
+    import json as _json
+
+    ep = EndpointDef(
+        method="POST",
+        path="/jobs/{id}",
+        step=3,
+        response={"status": 200, "returns_payload": True},
+        validate={"body": {"fetch_token": {"required": True}}},
+    )
+    handler = make_async_handlers("partner", _make_datapoint([ep]), store)[3]
+    async_uuid = store.register_async_request("partner", "job", session_id=None)
+    response = await handler(_rich_request(body=b"not-valid-json{{{", path_params={"id": async_uuid}))
+    assert response.status_code == 422
+    body = _json.loads(response.body)
+    assert any("fetch_token" in e for e in body["detail"])

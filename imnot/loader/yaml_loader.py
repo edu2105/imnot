@@ -35,6 +35,10 @@ _PAGINATION_VALID_KEYS = {
     "size_param",
 }
 
+_VALIDATE_VALID_KEYS = {"body", "query", "headers"}
+_RULE_VALID_KEYS = {"required", "type", "allowed", "pattern", "min", "max"}
+_VALID_RULE_TYPES = {"string", "integer", "number", "boolean", "array", "object"}
+
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -47,6 +51,7 @@ class EndpointDef:
     path: str  # e.g. /staylink/reservations/{uuid}
     step: int | None  # polling step number (1/2/3); None for oauth/static/fetch
     response: dict[str, Any]  # raw response config from YAML
+    validate: dict[str, Any] | None = None  # raw validate block; None when absent
 
 
 @dataclass
@@ -71,6 +76,38 @@ class PartnerDef:
 # ---------------------------------------------------------------------------
 
 
+def _validate_validate_block(validate: dict[str, Any], path_hint: str) -> None:
+    unknown_top = set(validate.keys()) - _VALIDATE_VALID_KEYS
+    if unknown_top:
+        raise ValueError(
+            f"Endpoint {path_hint}: unknown key(s) under 'validate:': {sorted(unknown_top)}. "
+            f"Allowed: {sorted(_VALIDATE_VALID_KEYS)}"
+        )
+    for section in _VALIDATE_VALID_KEYS:
+        section_rules = validate.get(section)
+        if section_rules is None:
+            continue
+        if not isinstance(section_rules, dict):
+            raise ValueError(
+                f"Endpoint {path_hint}: 'validate.{section}' must be a mapping of field names to rule dicts"
+            )
+        for field_name, field_rules in section_rules.items():
+            if not isinstance(field_rules, dict):
+                raise ValueError(f"Endpoint {path_hint}: 'validate.{section}.{field_name}' must be a rule dict")
+            unknown_rule_keys = set(field_rules.keys()) - _RULE_VALID_KEYS
+            if unknown_rule_keys:
+                raise ValueError(
+                    f"Endpoint {path_hint}: unknown rule attribute(s) for '{section}.{field_name}': "
+                    f"{sorted(unknown_rule_keys)}. Allowed: {sorted(_RULE_VALID_KEYS)}"
+                )
+            rule_type = field_rules.get("type")
+            if rule_type is not None and rule_type not in _VALID_RULE_TYPES:
+                raise ValueError(
+                    f"Endpoint {path_hint}: unknown type '{rule_type}' for '{section}.{field_name}'. "
+                    f"Allowed: {sorted(_VALID_RULE_TYPES)}"
+                )
+
+
 def _parse_endpoint(raw: dict[str, Any]) -> EndpointDef:
     method = raw.get("method")
     path = raw.get("path")
@@ -80,11 +117,16 @@ def _parse_endpoint(raw: dict[str, Any]) -> EndpointDef:
     if not path:
         raise ValueError(f"Endpoint is missing 'path': {raw}")
 
+    raw_validate = raw.get("validate")
+    if raw_validate is not None:
+        _validate_validate_block(raw_validate, f"{method.upper()} {path}")
+
     return EndpointDef(
         method=method.upper(),
         path=path.rstrip("/") or "/",
         step=raw.get("step"),  # optional; only polling endpoints carry this
         response=raw.get("response") or {},
+        validate=raw_validate,
     )
 
 
