@@ -65,6 +65,13 @@ class RunState:
 _active_runs: dict[str, RunState] = {}
 
 
+def compute_total_requests(config: dict) -> int:
+    rate = float(config["rate_per_second"])
+    if config.get("total_count") is not None:
+        return int(config["total_count"])
+    return math.ceil(float(config["duration_seconds"]) * rate)
+
+
 class StressStore:
     def __init__(self, db_path: Path = DEFAULT_DB_PATH) -> None:
         self.db_path = db_path
@@ -279,17 +286,14 @@ async def run_stress(
             vary_values = [str(v) for v in raw_vary]
 
         rate = float(config["rate_per_second"])
-        if config.get("total_count") is not None:
-            total_requests = int(config["total_count"])
-        else:
-            total_requests = math.ceil(float(config["duration_seconds"]) * rate)
+        total_requests = compute_total_requests(config)
 
         interval = 1.0 / rate
         max_concurrent = min(int(rate * 5), 500)
         semaphore = asyncio.Semaphore(max_concurrent)
         task_handles: list[asyncio.Task] = []
 
-        limits = httpx.Limits(max_connections=200, max_keepalive_connections=100)
+        limits = httpx.Limits(max_connections=500, max_keepalive_connections=100)
         async with httpx.AsyncClient(limits=limits, timeout=10.0) as client:
             for i in range(total_requests):
                 if state.cancel_event.is_set():

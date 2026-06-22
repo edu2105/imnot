@@ -3,14 +3,20 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from imnot.engine.session_store import SessionStore
-from imnot.engine.stress import StressStore, _active_runs, _new_id, run_stress
+from imnot.engine.stress import StressStore, _active_runs, _new_id, compute_total_requests, run_stress
 
 logger = logging.getLogger(__name__)
+_http_logger = logging.getLogger("imnot.http")
+
+MIN_RATE_PER_SECOND = 0.01
+MAX_RATE_PER_SECOND = 1000.0
+MAX_TOTAL_REQUESTS = 100_000
 
 
 def register_stress_routes(app: FastAPI, store: SessionStore, stress_store: StressStore) -> None:
@@ -30,9 +36,38 @@ def register_stress_routes(app: FastAPI, store: SessionStore, stress_store: Stre
                 content={"detail": "Exactly one of total_count or duration_seconds must be provided"},
             )
 
-        rate = config.get("rate_per_second")
-        if not rate or float(rate) <= 0:
+        try:
+            rate = float(config.get("rate_per_second"))
+            if total_count is not None:
+                total_count = int(total_count)
+            if duration_seconds is not None:
+                duration_seconds = float(duration_seconds)
+        except (TypeError, ValueError):
+            return JSONResponse(
+                status_code=422,
+                content={"detail": "rate_per_second, total_count, and duration_seconds must be numbers"},
+            )
+
+        if rate <= 0:
             return JSONResponse(status_code=422, content={"detail": "rate_per_second must be a positive number"})
+        if not (MIN_RATE_PER_SECOND <= rate <= MAX_RATE_PER_SECOND):
+            return JSONResponse(
+                status_code=422,
+                content={"detail": f"rate_per_second must be between {MIN_RATE_PER_SECOND} and {MAX_RATE_PER_SECOND}"},
+            )
+        if total_count is not None and total_count <= 0:
+            return JSONResponse(status_code=422, content={"detail": "total_count must be a positive number"})
+        if duration_seconds is not None and duration_seconds <= 0:
+            return JSONResponse(status_code=422, content={"detail": "duration_seconds must be a positive number"})
+
+        total_requests = compute_total_requests(
+            {"rate_per_second": rate, "total_count": total_count, "duration_seconds": duration_seconds}
+        )
+        if total_requests > MAX_TOTAL_REQUESTS:
+            return JSONResponse(
+                status_code=422,
+                content={"detail": f"Total requests ({total_requests}) exceeds the maximum of {MAX_TOTAL_REQUESTS}"},
+            )
 
         if mode == "partner":
             partner = config.get("partner")
@@ -48,13 +83,27 @@ def register_stress_routes(app: FastAPI, store: SessionStore, stress_store: Stre
                     status_code=422,
                     content={"detail": f"No global payload uploaded for {partner}/{datapoint}"},
                 )
+            target_desc = f"{partner}/{datapoint}"
         else:
             target_url = config.get("target_url")
             if not target_url:
                 return JSONResponse(status_code=422, content={"detail": "target_url is required in standalone mode"})
+            if urlparse(target_url).scheme not in ("http", "https"):
+                return JSONResponse(status_code=422, content={"detail": "target_url must use the http or https scheme"})
+            target_desc = target_url
 
         run_id = _new_id()
         stress_store.create_run(run_id, config)
+        client_host = request.client.host if request.client else "unknown"
+        _http_logger.info(
+            "Stress run %s started: mode=%s target=%s rate=%s total=%s client=%s",
+            run_id,
+            mode,
+            target_desc,
+            rate,
+            total_requests,
+            client_host,
+        )
         asyncio.create_task(run_stress(run_id, config, store, stress_store))
         return JSONResponse(status_code=201, content={"run_id": run_id, "status": "pending"})
 

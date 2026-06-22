@@ -446,6 +446,107 @@ def test_post_run_standalone_missing_target_url(app_client: TestClient):
     assert "target_url" in resp.json()["detail"]
 
 
+def test_post_run_rate_above_ceiling(app_client: TestClient):
+    resp = app_client.post(
+        "/imnot/admin/stress/run",
+        json={"mode": "standalone", "target_url": "http://x.com", "rate_per_second": 5000, "total_count": 10},
+    )
+    assert resp.status_code == 422
+    assert "rate_per_second" in resp.json()["detail"]
+
+
+def test_post_run_rate_below_floor(app_client: TestClient):
+    resp = app_client.post(
+        "/imnot/admin/stress/run",
+        json={"mode": "standalone", "target_url": "http://x.com", "rate_per_second": 0.0001, "total_count": 10},
+    )
+    assert resp.status_code == 422
+    assert "rate_per_second" in resp.json()["detail"]
+
+
+def test_post_run_total_count_above_ceiling(app_client: TestClient):
+    resp = app_client.post(
+        "/imnot/admin/stress/run",
+        json={"mode": "standalone", "target_url": "http://x.com", "rate_per_second": 10, "total_count": 200_000},
+    )
+    assert resp.status_code == 422
+    assert "exceeds the maximum" in resp.json()["detail"]
+
+
+def test_post_run_duration_implied_total_above_ceiling(app_client: TestClient):
+    resp = app_client.post(
+        "/imnot/admin/stress/run",
+        json={"mode": "standalone", "target_url": "http://x.com", "rate_per_second": 100, "duration_seconds": 2000},
+    )
+    assert resp.status_code == 422
+    assert "exceeds the maximum" in resp.json()["detail"]
+
+
+def test_post_run_invalid_target_url_scheme(app_client: TestClient):
+    resp = app_client.post(
+        "/imnot/admin/stress/run",
+        json={"mode": "standalone", "target_url": "file:///etc/passwd", "rate_per_second": 10, "total_count": 5},
+    )
+    assert resp.status_code == 422
+    assert "scheme" in resp.json()["detail"]
+
+
+def test_post_run_non_numeric_total_count_returns_422(app_client: TestClient):
+    resp = app_client.post(
+        "/imnot/admin/stress/run",
+        json={"mode": "standalone", "target_url": "http://x.com", "rate_per_second": 10, "total_count": "abc"},
+    )
+    assert resp.status_code == 422
+    assert "numbers" in resp.json()["detail"]
+
+
+def test_post_run_negative_total_count_returns_422(app_client: TestClient):
+    resp = app_client.post(
+        "/imnot/admin/stress/run",
+        json={"mode": "standalone", "target_url": "http://x.com", "rate_per_second": 10, "total_count": -5},
+    )
+    assert resp.status_code == 422
+    assert "total_count" in resp.json()["detail"]
+
+
+def test_post_run_negative_duration_seconds_returns_422(app_client: TestClient):
+    resp = app_client.post(
+        "/imnot/admin/stress/run",
+        json={"mode": "standalone", "target_url": "http://x.com", "rate_per_second": 10, "duration_seconds": -100},
+    )
+    assert resp.status_code == 422
+    assert "duration_seconds" in resp.json()["detail"]
+
+
+def test_post_run_logs_audit_line_on_success(app_client: TestClient, caplog: pytest.LogCaptureFixture):
+    with patch("imnot.engine.stress_router.asyncio.create_task"):
+        with caplog.at_level("INFO", logger="imnot.http"):
+            resp = app_client.post(
+                "/imnot/admin/stress/run",
+                json={
+                    "mode": "standalone",
+                    "target_url": "http://example.com/hook",
+                    "rate_per_second": 10,
+                    "total_count": 5,
+                },
+            )
+    assert resp.status_code == 201
+    run_id = resp.json()["run_id"]
+    matching = [r for r in caplog.records if r.name == "imnot.http" and run_id in r.getMessage()]
+    assert matching, "expected an audit log record on the imnot.http logger for the new run"
+    assert "started" in matching[0].getMessage()
+
+
+def test_post_run_ceiling_exceeded_never_creates_task(app_client: TestClient):
+    with patch("imnot.engine.stress_router.asyncio.create_task") as mock_create_task:
+        resp = app_client.post(
+            "/imnot/admin/stress/run",
+            json={"mode": "standalone", "target_url": "http://x.com", "rate_per_second": 5000, "total_count": 10},
+        )
+    assert resp.status_code == 422
+    mock_create_task.assert_not_called()
+
+
 def test_post_template_invalid_json(app_client: TestClient):
     resp = app_client.post(
         "/imnot/admin/stress/templates",
