@@ -20,9 +20,10 @@ from __future__ import annotations
 import json
 from typing import Any, Callable
 
-from fastapi import Response
+from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
+from imnot.engine.validator import validate_request
 from imnot.loader.yaml_loader import EndpointDef
 
 
@@ -31,26 +32,41 @@ def make_static_handler(
     dp_name: str,
     endpoint: EndpointDef,
     configs: dict[tuple, dict[str, Any]],
-) -> Callable[[], Response]:
+) -> Callable:
     """Return a FastAPI route handler for the given static EndpointDef.
 
     *configs* is a mutable dict shared with the router's reload machinery.
     The handler reads its response config from *configs* on every request so
     that a YAML edit followed by ``POST /imnot/admin/reload`` takes effect
     immediately without restarting the server.
+
+    Validation rules are closure-captured at construction time and are not
+    hot-reloadable (a restart is required to pick up validate: changes).
     """
     key = (partner_name, dp_name, endpoint.method.upper(), endpoint.path)
     configs[key] = endpoint.response
+    validate_rules = endpoint.validate
 
-    async def handler() -> JSONResponse:
+    async def handler(request: Request) -> Response:
+        if validate_rules is not None:
+            body: Any = None
+            if validate_rules.get("body"):
+                try:
+                    body = await request.json()
+                except Exception:
+                    body = None
+            errors = validate_request(validate_rules, body, request.query_params, request.headers)
+            if errors:
+                return JSONResponse(status_code=422, content={"detail": errors})
+
         cfg = configs[key]
-        body = cfg.get("body") or {}
-        if isinstance(body, str):
+        body_val = cfg.get("body") or {}
+        if isinstance(body_val, str):
             try:
-                body = json.loads(body)
+                body_val = json.loads(body_val)
             except (ValueError, TypeError):
                 pass
-        return JSONResponse(status_code=cfg.get("status", 200), content=body)
+        return JSONResponse(status_code=cfg.get("status", 200), content=body_val)
 
     handler.__name__ = f"static_{endpoint.method}_{endpoint.path.replace('/', '_').strip('_')}"
 

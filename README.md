@@ -18,6 +18,7 @@
 
 - **Zero code.** One YAML file per external API. No JVM, no framework, no boilerplate.
 - **Stateful, not just stubbed.** OAuth, polling, callbacks, paginated lists, and per-test session isolation — all modeled in YAML.
+- **Validation-aware.** Declare field rules in YAML — imnot rejects malformed requests with realistic 422 errors before returning a mock response.
 - **Ships with your tests.** Partner definitions are version-controlled alongside the integration they test and run anywhere Docker runs.
 
 ---

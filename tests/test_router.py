@@ -1095,3 +1095,62 @@ def test_delete_partner_with_symlink_returns_400(tmp_path, store):
     assert "symlink" in r.json()["detail"].lower()
     # Directory must still exist — rmtree was NOT called.
     assert (partners_dir / "bookingco").exists()
+
+
+# ---------------------------------------------------------------------------
+# End-to-end: validate: block via tmp_path YAML
+# ---------------------------------------------------------------------------
+
+
+_VALIDATE_E2E_YAML = """\
+partner: staylink2
+description: Validation e2e test partner
+datapoints:
+  - name: search
+    description: Search endpoint
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /staylink2/search
+        validate:
+          query:
+            format:
+              required: true
+              allowed:
+                - json
+                - xml
+        response:
+          status: 200
+"""
+
+
+@pytest.fixture
+def validate_e2e_client(tmp_path, store):
+    partner_dir = tmp_path / "staylink2"
+    partner_dir.mkdir()
+    (partner_dir / "partner.yaml").write_text(_VALIDATE_E2E_YAML)
+    app = FastAPI()
+    partners = load_partners(tmp_path)
+    register_routes(app, partners, store)
+    store.store_global_payload("staylink2", "search", {"results": []})
+    return TestClient(app, raise_server_exceptions=True), store
+
+
+def test_e2e_valid_request_passes(validate_e2e_client):
+    c, _ = validate_e2e_client
+    r = c.get("/staylink2/search?format=json")
+    assert r.status_code == 200
+
+
+def test_e2e_invalid_request_returns_422(validate_e2e_client):
+    c, _ = validate_e2e_client
+    r = c.get("/staylink2/search")
+    assert r.status_code == 422
+    assert any("format" in e for e in r.json()["detail"])
+
+
+def test_e2e_disallowed_value_returns_422(validate_e2e_client):
+    c, _ = validate_e2e_client
+    r = c.get("/staylink2/search?format=csv")
+    assert r.status_code == 422
+    assert any("must be one of" in e for e in r.json()["detail"])

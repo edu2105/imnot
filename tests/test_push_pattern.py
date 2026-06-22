@@ -420,3 +420,74 @@ def test_callback_retrigger_route_exists(store, tmp_path):
     client = _build_client(_BODY_FIELD_YAML, store, tmp_path)
     r = client.post("/imnot/admin/pushpartner/notification/callback/some-id/retrigger")
     assert r.status_code == 404  # route exists, ID just unknown
+
+
+# ---------------------------------------------------------------------------
+# Validation
+# ---------------------------------------------------------------------------
+
+
+_VALIDATED_YAML = """\
+partner: pushpartner
+description: Push test partner with validation
+datapoints:
+  - name: notification
+    description: Webhook notification
+    pattern: callback
+    endpoints:
+      - method: POST
+        path: /pushpartner/notify
+        validate:
+          body:
+            event_type:
+              required: true
+        response:
+          status: 202
+          callback_url_field: callbackUrl
+"""
+
+
+def test_push_invalid_body_returns_422_before_callback(store, tmp_path):
+    client = _build_client(_VALIDATED_YAML, store, tmp_path)
+    r = client.post("/pushpartner/notify", json={"callbackUrl": "http://consumer/hook"})
+    assert r.status_code == 422
+    assert any("event_type" in e for e in r.json()["detail"])
+
+
+# ---------------------------------------------------------------------------
+# fire_callback — non-2xx response (L165-169)
+# ---------------------------------------------------------------------------
+
+
+def test_callback_non_2xx_response_run_still_completes(store, tmp_path):
+    """A non-2xx response from the callback target is logged but submit still returns 202."""
+    client = _build_client(_BODY_FIELD_YAML, store, tmp_path)
+    patcher, mock_client = _mock_httpx(success=False)
+    store.store_global_payload("pushpartner", "notification", {"event": "ready"})
+    with patcher:
+        r = client.post("/pushpartner/notify", json={"callbackUrl": CALLBACK_URL})
+    assert r.status_code == 202
+    mock_client.request.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# fire_callback — transport exception (L170-171)
+# ---------------------------------------------------------------------------
+
+
+def test_callback_transport_exception_run_still_completes(store, tmp_path):
+    """An httpx transport exception is caught; the submit response is still 202."""
+    import httpx
+
+    client = _build_client(_BODY_FIELD_YAML, store, tmp_path)
+    store.store_global_payload("pushpartner", "notification", {"event": "ready"})
+
+    mock_client = AsyncMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client.request = AsyncMock(side_effect=httpx.TransportError("connection refused"))
+
+    with patch("imnot.engine.patterns.push.httpx.AsyncClient", return_value=mock_client):
+        r = client.post("/pushpartner/notify", json={"callbackUrl": CALLBACK_URL})
+
+    assert r.status_code == 202

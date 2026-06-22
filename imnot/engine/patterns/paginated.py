@@ -6,6 +6,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
 from imnot.engine.session_store import SessionStore, _now
+from imnot.engine.validator import validate_request
 from imnot.loader.yaml_loader import DatapointDef, EndpointDef
 
 
@@ -21,8 +22,14 @@ def make_paginated_handler(
     status_code: int = endpoint.response.get("status", 200)
     if pagination_ref is None:
         pagination_ref = [datapoint.pagination or {}]
+    validate_rules = endpoint.validate
 
     async def handler(request: Request) -> Response:
+        if validate_rules is not None:
+            errors = validate_request(validate_rules, None, request.query_params, request.headers)
+            if errors:
+                return JSONResponse(status_code=422, content={"detail": errors})
+
         pagination = pagination_ref[0]
         style = pagination.get("style", "offset_limit")
 

@@ -77,6 +77,13 @@ endpoints:
     response:               # response configuration (fields vary by pattern)
       status: <int>
       ...
+    validate:               # optional; see Request validation section
+      body:
+        <field>: {required: true, type: string}
+      query:
+        <param>: {required: true, type: integer, min: 1}
+      headers:
+        <header>: {required: true, pattern: '^prefix-'}
 ```
 
 | Field | Required | Notes |
@@ -85,6 +92,7 @@ endpoints:
 | `path` | Yes | Leading `/` required. Use `{id}` for dynamic segments |
 | `step` | Polling only | Identifies the step number within the polling sequence |
 | `response` | Yes | At minimum must contain `status` |
+| `validate` | No | Request validation rules — see [Request validation](#request-validation) section |
 
 ---
 
@@ -660,6 +668,101 @@ Response:
 
 ---
 
+## Request validation
+
+Any endpoint can declare a `validate:` block. imnot checks the request at the configured endpoint before returning the mock response; any violation produces a `422` with a list of error strings — no mock response is returned.
+
+Validation is **opt-in**: absence of `validate:` means no validation is applied.
+
+### Structure
+
+```yaml
+validate:
+  body:                     # checks JSON request body fields (parsed as dict)
+    <field-name>:
+      required: true        # missing field → error
+      type: string          # type mismatch → error
+      allowed: [a, b, c]   # value not in list → error
+      pattern: '^[A-Z]+'   # string not matching regex → error
+      min: 1               # numeric value below min → error
+      max: 100             # numeric value above max → error
+  query:                    # checks URL query parameters (always strings; coerced for type checks)
+    <param-name>:
+      <same rule attributes as body>
+  headers:                  # checks request headers (always strings; coerced for type checks)
+    <header-name>:
+      <same rule attributes as body>
+```
+
+### Rule attributes
+
+| Attribute | Applies to | Description |
+|-----------|-----------|-------------|
+| `required` | body / query / headers | `true` → missing field is an error. Default: `false` |
+| `type` | body / query / headers | Expected type: `string`, `integer`, `number`, `boolean`, `array`, `object`. Query and header values (always strings) are coerced before the type check |
+| `allowed` | body / query / headers | List of permitted values. Value not in the list → error |
+| `pattern` | string fields | Python-style regex. Applied only when value is a string; non-strings produce a type error first |
+| `min` | numeric fields | Minimum value (inclusive) |
+| `max` | numeric fields | Maximum value (inclusive) |
+
+All violations are collected before returning — the `detail` list contains every error found, not just the first one.
+
+### 422 response shape
+
+```json
+{
+  "detail": [
+    "body.reservation_id: required",
+    "body.nights: must be at least 1",
+    "headers.X-Partner-ID: does not match pattern '^P-[0-9]+'"
+  ]
+}
+```
+
+Error message format: `"<section>.<field>: <reason>"` where `section` is `body`, `query`, or `headers`.
+
+### Example
+
+```yaml
+- name: reservation
+  pattern: fetch
+  endpoints:
+    - method: POST
+      path: /partner/reservations
+      validate:
+        body:
+          reservation_id:
+            required: true
+            type: string
+          nights:
+            required: true
+            type: integer
+            min: 1
+            max: 365
+          status:
+            type: string
+            allowed: [pending, confirmed, cancelled]
+        query:
+          currency:
+            type: string
+            allowed: [USD, EUR, GBP]
+        headers:
+          X-Partner-ID:
+            required: true
+            pattern: '^P-[0-9]+'
+      response:
+        status: 200
+```
+
+### Notes
+
+- `validate:` is per-endpoint, not per-datapoint. Different endpoints within a polling datapoint (submit POST vs. fetch GET) can have independent rule sets.
+- `static` endpoints support `validate:`. If validation rules change, a server restart is required — `POST /imnot/admin/reload` updates the response body only.
+- Unknown top-level keys under `validate:` (anything other than `body`, `query`, `headers`) raise a `ValueError` at startup.
+- Unknown rule attributes under a field raise a `ValueError` at startup.
+
+---
+
 ## Auto-generated admin endpoints
 
 For every `fetch`, `polling`, `callback`, or `paginated` datapoint, imnot automatically registers these
@@ -710,6 +813,8 @@ runs in a container and you cannot exec in to run the CLI. See the main README f
 - [ ] All `response` blocks are nested inside their endpoint, not at the datapoint level
 - [ ] No two endpoints across the whole file share the same `method` + `path` combination
 - [ ] No endpoint in this file shares `method` + `path` with an endpoint in any other partner file — imnot enforces this at startup and will refuse to start if a conflict is detected
+- [ ] If `validate:` is declared on an endpoint, only `body`, `query`, and `headers` are valid top-level keys — unknown keys raise an error at startup
+- [ ] Field rules under `validate:` use only recognized attributes: `required`, `type`, `allowed`, `pattern`, `min`, `max` — unknown attributes raise an error at startup
 - [ ] After saving, call `POST /imnot/admin/reload` or restart the server to pick up changes
 
 ---

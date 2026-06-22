@@ -126,3 +126,83 @@ def test_two_sessions_are_isolated(client):
     s2 = store.store_session_payload("leanpms", "charges", {"user": "bob"})
     assert c.get("/api/v2/charges", headers={"X-Imnot-Session": s1}).json() == {"user": "alice"}
     assert c.get("/api/v2/charges", headers={"X-Imnot-Session": s2}).json() == {"user": "bob"}
+
+
+# ---------------------------------------------------------------------------
+# Validation
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def validated_client(store):
+    app = FastAPI()
+    datapoint = _make_datapoint()
+    endpoint = EndpointDef(
+        method="GET",
+        path="/api/v2/charges",
+        step=None,
+        response={"status": 200},
+        validate={"body": {"reservation_id": {"required": True}}},
+    )
+    handler = make_fetch_handler("leanpms", datapoint, endpoint, store)
+    app.add_api_route("/api/v2/charges", handler, methods=["GET"])
+    return TestClient(app, raise_server_exceptions=True), store
+
+
+@pytest.fixture
+def query_validated_client(store):
+    app = FastAPI()
+    datapoint = _make_datapoint()
+    endpoint = EndpointDef(
+        method="GET",
+        path="/api/v2/charges",
+        step=None,
+        response={"status": 200},
+        validate={"query": {"format": {"required": True}}},
+    )
+    handler = make_fetch_handler("leanpms", datapoint, endpoint, store)
+    app.add_api_route("/api/v2/charges", handler, methods=["GET"])
+    return TestClient(app, raise_server_exceptions=True), store
+
+
+def test_fetch_valid_body_passes_validation(validated_client):
+    c, store = validated_client
+    store.store_global_payload("leanpms", "charges", {"amount": 100})
+    r = c.request("GET", "/api/v2/charges", json={"reservation_id": "R-001"})
+    assert r.status_code == 200
+
+
+def test_fetch_invalid_body_returns_422(validated_client):
+    c, _ = validated_client
+    r = c.request("GET", "/api/v2/charges", json={})
+    assert r.status_code == 422
+    assert any("reservation_id" in e for e in r.json()["detail"])
+
+
+def test_fetch_missing_required_query_returns_422(query_validated_client):
+    c, _ = query_validated_client
+    r = c.get("/api/v2/charges")
+    assert r.status_code == 422
+    assert any("query.format" in e for e in r.json()["detail"])
+
+
+def test_fetch_malformed_json_body_treated_as_none_fires_required_error(store):
+    app = FastAPI()
+    datapoint = _make_datapoint()
+    endpoint = EndpointDef(
+        method="POST",
+        path="/api/v2/charges",
+        step=None,
+        response={"status": 200},
+        validate={"body": {"reservation_id": {"required": True}}},
+    )
+    handler = make_fetch_handler("leanpms", datapoint, endpoint, store)
+    app.add_api_route("/api/v2/charges", handler, methods=["POST"])
+    c = TestClient(app, raise_server_exceptions=True)
+    r = c.post(
+        "/api/v2/charges",
+        content=b"not-valid-json",
+        headers={"Content-Type": "application/json"},
+    )
+    assert r.status_code == 422
+    assert any("reservation_id" in e for e in r.json()["detail"])
