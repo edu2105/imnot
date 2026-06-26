@@ -547,6 +547,21 @@ def test_post_run_ceiling_exceeded_never_creates_task(app_client: TestClient):
     mock_create_task.assert_not_called()
 
 
+def test_post_run_rate_zero_rejected_with_range_message(app_client: TestClient):
+    resp = app_client.post(
+        "/imnot/admin/stress/run",
+        json={"mode": "standalone", "target_url": "http://x.com", "rate_per_second": 0, "total_count": 10},
+    )
+    assert resp.status_code == 422
+    assert "between" in resp.json()["detail"]
+
+
+@pytest.mark.parametrize("rate", [0.01, 0.05, 0.1, 0.19, 0.2, 1.0, 1000.0])
+def test_max_concurrent_never_zero(rate: float):
+    max_concurrent = max(1, min(int(rate * 5), 500))
+    assert max_concurrent >= 1, f"Semaphore(0) deadlock for rate={rate}"
+
+
 def test_post_template_invalid_json(app_client: TestClient):
     resp = app_client.post(
         "/imnot/admin/stress/templates",

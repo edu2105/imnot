@@ -48,8 +48,6 @@ def register_stress_routes(app: FastAPI, store: SessionStore, stress_store: Stre
                 content={"detail": "rate_per_second, total_count, and duration_seconds must be numbers"},
             )
 
-        if rate <= 0:
-            return JSONResponse(status_code=422, content={"detail": "rate_per_second must be a positive number"})
         if not (MIN_RATE_PER_SECOND <= rate <= MAX_RATE_PER_SECOND):
             return JSONResponse(
                 status_code=422,

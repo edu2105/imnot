@@ -289,7 +289,7 @@ async def run_stress(
         total_requests = compute_total_requests(config)
 
         interval = 1.0 / rate
-        max_concurrent = min(int(rate * 5), 500)
+        max_concurrent = max(1, min(int(rate * 5), 500))
         semaphore = asyncio.Semaphore(max_concurrent)
         task_handles: list[asyncio.Task] = []
 
