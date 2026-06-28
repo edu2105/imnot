@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -535,6 +535,24 @@ def test_post_run_logs_audit_line_on_success(app_client: TestClient, caplog: pyt
     matching = [r for r in caplog.records if r.name == "imnot.http" and run_id in r.getMessage()]
     assert matching, "expected an audit log record on the imnot.http logger for the new run"
     assert "started" in matching[0].getMessage()
+
+
+def test_post_run_audit_log_unknown_client(app_client: TestClient, caplog: pytest.LogCaptureFixture):
+    with patch("starlette.requests.Request.client", new_callable=PropertyMock, return_value=None):
+        with patch("imnot.engine.stress_router.asyncio.create_task"):
+            with caplog.at_level("INFO", logger="imnot.http"):
+                resp = app_client.post(
+                    "/imnot/admin/stress/run",
+                    json={
+                        "mode": "standalone",
+                        "target_url": "http://example.com/hook",
+                        "rate_per_second": 10,
+                        "total_count": 5,
+                    },
+                )
+    assert resp.status_code == 201
+    matching = [r for r in caplog.records if r.name == "imnot.http"]
+    assert any("unknown" in r.getMessage() for r in matching)
 
 
 def test_post_run_ceiling_exceeded_never_creates_task(app_client: TestClient):
