@@ -797,6 +797,11 @@ img, svg {
   opacity: 1;
 }
 
+.field-tip.tip-align-right::after {
+  left: auto;
+  right: 0;
+}
+
 .form-input {
   width: 10rem;
   padding: 0.5rem 0.75rem;
@@ -3078,7 +3083,7 @@ img, svg {
           + '<input id="b-dp-' + i + '-status" type="number" class="form-input" value="200" min="100" max="599" oninput="_builderMarkDirty();builderUpdatePreview()" />'
           + '</div>'
           + '<div class="form-group">'
-          + '<label class="form-label" for="b-dp-' + i + '-rpm">requests_per_minute<span class="field-tip" data-tip="Optional rate limit ceiling enforced with a token bucket. Leave blank for unlimited. Exceeding it returns 429 with a Retry-After header.">i</span></label>'
+          + '<label class="form-label" for="b-dp-' + i + '-rpm">requests_per_minute<span class="field-tip tip-align-right" data-tip="Optional rate limit ceiling enforced with a token bucket. Leave blank for unlimited. Exceeding it returns 429 with a Retry-After header.">i</span></label>'
           + '<input id="b-dp-' + i + '-rpm" type="number" class="form-input" placeholder="unlimited" min="1" oninput="_builderMarkDirty();builderUpdatePreview()" />'
           + '<span class="field-error" id="b-dp-' + i + '-rpm-err"></span>'
           + '</div>'
