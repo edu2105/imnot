@@ -36,6 +36,7 @@ from imnot.engine.patterns.oauth import make_oauth_handler
 from imnot.engine.patterns.paginated import make_paginated_handler
 from imnot.engine.patterns.push import fire_callback, make_push_handler
 from imnot.engine.patterns.static import make_static_handler
+from imnot.engine.rate_limiter import RateLimiter
 from imnot.engine.session_store import SessionStore
 from imnot.engine.stress_router import register_stress_routes
 from imnot.loader.yaml_loader import DatapointDef, EndpointDef, PartnerDef, load_partners
@@ -94,6 +95,7 @@ def register_routes(
     app.state.registered_routes = registered_routes
     app.state.registered_admin_dps = registered_admin_dps
     app.state.default_limit = default_limit
+    app.state.rate_limiter = RateLimiter()
 
     if admin_key:
         _register_admin_auth_middleware(app, admin_key)
@@ -107,7 +109,15 @@ def register_routes(
     for partner in partners:
         for datapoint in partner.datapoints:
             _register_consumer_routes(
-                app, partner, datapoint, store, configs, paginated_config_refs, registered_routes, default_limit
+                app,
+                partner,
+                datapoint,
+                store,
+                configs,
+                paginated_config_refs,
+                registered_routes,
+                app.state.rate_limiter,
+                default_limit,
             )
             if datapoint.pattern in _PAYLOAD_PATTERNS:
                 _register_admin_routes(app, partner, datapoint, store)
@@ -182,6 +192,7 @@ def _register_consumer_routes(
     configs: dict[tuple, dict[str, Any]],
     paginated_config_refs: dict[tuple, list],
     registered_routes: dict[tuple[str, str], str],
+    limiter: RateLimiter,
     default_limit: int = 50,
 ) -> None:
     owner = f"{partner.partner}/{datapoint.name}"
@@ -211,7 +222,7 @@ def _register_consumer_routes(
     elif datapoint.pattern == "fetch":
         for endpoint in datapoint.endpoints:
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
-            handler = make_fetch_handler(partner.partner, datapoint, endpoint, store)
+            handler = make_fetch_handler(partner.partner, datapoint, endpoint, store, limiter)
             _add(endpoint.path, handler, endpoint.method)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered fetch route %s %s", endpoint.method, endpoint.path)
@@ -472,7 +483,15 @@ def _register_infra_routes(
             return {
                 "name": dp.name,
                 "pattern": dp.pattern,
-                "endpoints": [{"method": ep.method, "path": ep.path, "step": ep.step} for ep in dp.endpoints],
+                "endpoints": [
+                    {
+                        "method": ep.method,
+                        "path": ep.path,
+                        "step": ep.step,
+                        "requests_per_minute": ep.rate_limit.get("requests_per_minute") if ep.rate_limit else None,
+                    }
+                    for ep in dp.endpoints
+                ],
                 "callback_delay_seconds": callback_delay,
                 "callback_url_field": callback_url_field,
                 "callback_url_header": callback_url_header,
@@ -554,6 +573,7 @@ def _register_infra_routes(
                             configs,
                             paginated_config_refs,
                             registered,
+                            request.app.state.rate_limiter,
                             request.app.state.default_limit,
                         )
                         for ep in new_eps:
@@ -644,6 +664,7 @@ def _register_infra_routes(
                         configs_,
                         paginated_config_refs_,
                         registered_,
+                        request.app.state.rate_limiter,
                         request.app.state.default_limit,
                     )
                     for ep in new_eps:

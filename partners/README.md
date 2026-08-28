@@ -93,6 +93,7 @@ endpoints:
 | `step` | Polling only | Identifies the step number within the polling sequence |
 | `response` | Yes | At minimum must contain `status` |
 | `validate` | No | Request validation rules — see [Request validation](#request-validation) section |
+| `rate_limit` | No | Requests-per-minute ceiling — `fetch` pattern only, see [Rate limiting](#rate-limiting) section |
 
 ---
 
@@ -763,6 +764,54 @@ Error message format: `"<section>.<field>: <reason>"` where `section` is `body`,
 
 ---
 
+## Rate limiting
+
+`fetch`-pattern endpoints can declare a `rate_limit:` block. imnot enforces a requests-per-minute ceiling with a token bucket; once exceeded, it returns `429` with a `Retry-After` header instead of the mock response — checked before `validate:` and before any payload/session work.
+
+Rate limiting is **opt-in**: absence of `rate_limit:` means no limit is applied.
+
+### Structure
+
+```yaml
+rate_limit:
+  requests_per_minute: <positive integer>
+```
+
+`requests_per_minute` is the only recognized key. The bucket is shared across all callers of the endpoint — the key is `(partner, datapoint, method, path)`, not the caller's session — the same way a real partner enforces a ceiling per API credential, not per individual test.
+
+### 429 response shape
+
+```json
+{
+  "detail": "Rate limit exceeded: 60 requests per minute"
+}
+```
+
+The response also includes a `Retry-After` header (seconds, integer) telling the caller how long to wait before the bucket refills enough to allow another request.
+
+### Example
+
+```yaml
+- name: quotes
+  pattern: fetch
+  endpoints:
+    - method: GET
+      path: /partner/quotes
+      rate_limit:
+        requests_per_minute: 60
+      response:
+        status: 200
+```
+
+### Notes
+
+- **v1 scope: `fetch` pattern only.** Declaring `rate_limit:` on any other pattern (`oauth`, `static`, `polling`, `callback`, `paginated`) raises a `ValueError` at startup.
+- Bucket state is in-memory only — it resets on every server restart (including `--reload` dev-mode restarts) and is not shared across multiple imnot instances.
+- `rate_limit:` is not hot-reloadable via `POST /imnot/admin/reload` — changing `requests_per_minute` requires a restart, matching `validate:`.
+- `rate_limit:` is per-endpoint, not per-datapoint, the same as `validate:`.
+
+---
+
 ## Auto-generated admin endpoints
 
 For every `fetch`, `polling`, `callback`, or `paginated` datapoint, imnot automatically registers these
@@ -815,6 +864,8 @@ runs in a container and you cannot exec in to run the CLI. See the main README f
 - [ ] No endpoint in this file shares `method` + `path` with an endpoint in any other partner file — imnot enforces this at startup and will refuse to start if a conflict is detected
 - [ ] If `validate:` is declared on an endpoint, only `body`, `query`, and `headers` are valid top-level keys — unknown keys raise an error at startup
 - [ ] Field rules under `validate:` use only recognized attributes: `required`, `type`, `allowed`, `pattern`, `min`, `max` — unknown attributes raise an error at startup
+- [ ] `rate_limit:` is only declared on `fetch`-pattern endpoints — declaring it on any other pattern raises an error at startup
+- [ ] `rate_limit.requests_per_minute` must be a positive integer; unknown keys under `rate_limit:` raise an error at startup
 - [ ] After saving, call `POST /imnot/admin/reload` or restart the server to pick up changes
 
 ---

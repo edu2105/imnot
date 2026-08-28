@@ -17,11 +17,13 @@ Session behaviour:
 
 from __future__ import annotations
 
+import time
 from typing import Any, Callable
 
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
+from imnot.engine.rate_limiter import RateLimiter
 from imnot.engine.session_store import SessionStore
 from imnot.engine.validator import validate_request
 from imnot.loader.yaml_loader import DatapointDef, EndpointDef
@@ -32,14 +34,28 @@ def make_fetch_handler(
     datapoint: DatapointDef,
     endpoint: EndpointDef,
     store: SessionStore,
+    limiter: RateLimiter,
 ) -> Callable:
     """Return a FastAPI route handler for the given fetch EndpointDef."""
 
     dp_name = datapoint.name
     status_code: int = endpoint.response.get("status", 200)
     validate_rules = endpoint.validate
+    rate_limit = endpoint.rate_limit
+    capacity = rate_limit["requests_per_minute"] if rate_limit is not None else None
+    refill_per_second = capacity / 60 if rate_limit is not None else None
 
     async def handler(request: Request) -> Response:
+        if rate_limit is not None:
+            key = (partner, dp_name, endpoint.method, endpoint.path)
+            allowed, retry_after = limiter.check(key, capacity, refill_per_second, time.time())
+            if not allowed:
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": f"Rate limit exceeded: {capacity} requests per minute"},
+                    headers={"Retry-After": str(retry_after)},
+                )
+
         if validate_rules is not None:
             body: Any = None
             if validate_rules.get("body"):

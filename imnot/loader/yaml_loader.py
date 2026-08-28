@@ -39,6 +39,8 @@ _VALIDATE_VALID_KEYS = {"body", "query", "headers"}
 _RULE_VALID_KEYS = {"required", "type", "allowed", "pattern", "min", "max"}
 _VALID_RULE_TYPES = {"string", "integer", "number", "boolean", "array", "object"}
 
+_RATE_LIMIT_VALID_KEYS = {"requests_per_minute"}
+
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -52,6 +54,7 @@ class EndpointDef:
     step: int | None  # polling step number (1/2/3); None for oauth/static/fetch
     response: dict[str, Any]  # raw response config from YAML
     validate: dict[str, Any] | None = None  # raw validate block; None when absent
+    rate_limit: dict[str, Any] | None = None  # raw rate_limit block; None when absent
 
 
 @dataclass
@@ -108,7 +111,31 @@ def _validate_validate_block(validate: dict[str, Any], path_hint: str) -> None:
                 )
 
 
-def _parse_endpoint(raw: dict[str, Any]) -> EndpointDef:
+def _validate_rate_limit_block(rate_limit: dict[str, Any], path_hint: str, pattern: str) -> None:
+    if pattern != "fetch":
+        raise ValueError(
+            f"Endpoint {path_hint}: 'rate_limit:' is declared on a '{pattern}' pattern endpoint, but "
+            f"'rate_limit:' is only supported on 'fetch' pattern endpoints in the current version"
+        )
+
+    unknown_top = set(rate_limit.keys()) - _RATE_LIMIT_VALID_KEYS
+    if unknown_top:
+        raise ValueError(
+            f"Endpoint {path_hint}: unknown key(s) under 'rate_limit:': {sorted(unknown_top)}. "
+            f"Allowed: {sorted(_RATE_LIMIT_VALID_KEYS)}"
+        )
+
+    if "requests_per_minute" not in rate_limit:
+        raise ValueError(f"Endpoint {path_hint}: 'rate_limit.requests_per_minute' is required")
+
+    value = rate_limit["requests_per_minute"]
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(
+            f"Endpoint {path_hint}: 'rate_limit.requests_per_minute' must be a positive integer (got {value!r})"
+        )
+
+
+def _parse_endpoint(raw: dict[str, Any], pattern: str) -> EndpointDef:
     method = raw.get("method")
     path = raw.get("path")
 
@@ -121,12 +148,17 @@ def _parse_endpoint(raw: dict[str, Any]) -> EndpointDef:
     if raw_validate is not None:
         _validate_validate_block(raw_validate, f"{method.upper()} {path}")
 
+    raw_rate_limit = raw.get("rate_limit")
+    if raw_rate_limit is not None:
+        _validate_rate_limit_block(raw_rate_limit, f"{method.upper()} {path}", pattern)
+
     return EndpointDef(
         method=method.upper(),
         path=path.rstrip("/") or "/",
         step=raw.get("step"),  # optional; only polling endpoints carry this
         response=raw.get("response") or {},
         validate=raw_validate,
+        rate_limit=raw_rate_limit,
     )
 
 
@@ -183,7 +215,7 @@ def _parse_datapoint(raw: dict[str, Any], partner: str) -> DatapointDef:
         name=name,
         description=raw.get("description", ""),
         pattern=pattern,
-        endpoints=[_parse_endpoint(e) for e in raw_endpoints],
+        endpoints=[_parse_endpoint(e, pattern) for e in raw_endpoints],
         pagination=pagination,
     )
 
