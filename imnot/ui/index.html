@@ -3088,6 +3088,7 @@ img, svg {
           + '<span class="field-error" id="b-dp-' + i + '-rpm-err"></span>'
           + '</div>'
           + '</div>'
+          + (_builderMode === 'edit' ? '<p class="acc-note">Changing requests_per_minute on an existing endpoint saves immediately but only takes effect after an imnot restart — the running route keeps its prior limit until then.</p>' : '')
           + '</div>';
       }
       if (pattern === 'polling') {
