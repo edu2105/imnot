@@ -474,6 +474,14 @@ See [partners/README.md](../partners/README.md#request-validation) for the full 
 
 ---
 
+## Rate limiting
+
+`fetch`-pattern endpoints can declare a `rate_limit: {requests_per_minute: N}` block. imnot enforces it with a token bucket and returns `429` with a `Retry-After` header once the ceiling is exceeded, checked before validation and before any payload work.
+
+See [partners/README.md](../partners/README.md#rate-limiting) for the full field reference and v1 scope (`fetch` pattern only).
+
+---
+
 ## Session isolation
 
 Any `fetch`, `polling`, or `paginated` endpoint supports per-test session isolation via `X-Imnot-Session`.

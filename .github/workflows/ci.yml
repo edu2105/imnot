@@ -46,7 +46,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: |
+          pip install --upgrade "setuptools>=83.0.0"
+          pip install -e ".[dev]"
 
       - name: Run tests
         run: pytest --cov=imnot --cov-report=xml

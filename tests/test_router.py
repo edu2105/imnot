@@ -151,6 +151,8 @@ def test_list_partners(client):
         assert "method" in ep
         assert "path" in ep
         assert "step" in ep
+        assert "requests_per_minute" in ep
+        assert ep["requests_per_minute"] is None
     assert reservation["callback_delay_seconds"] is None
 
 
@@ -1154,3 +1156,72 @@ def test_e2e_disallowed_value_returns_422(validate_e2e_client):
     r = c.get("/staylink2/search?format=csv")
     assert r.status_code == 422
     assert any("must be one of" in e for e in r.json()["detail"])
+
+
+# ---------------------------------------------------------------------------
+# End-to-end: rate_limit: block via tmp_path YAML
+# ---------------------------------------------------------------------------
+
+
+_RATE_LIMIT_E2E_YAML = """\
+partner: ratesync2
+description: Rate limit e2e test partner
+datapoints:
+  - name: quotes
+    description: Quotes endpoint (rate limited)
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /ratesync2/quotes
+        rate_limit:
+          requests_per_minute: 1
+        response:
+          status: 200
+  - name: quotes_unlimited
+    description: Quotes endpoint (no limit)
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /ratesync2/quotes-unlimited
+        response:
+          status: 200
+"""
+
+
+@pytest.fixture
+def rate_limit_e2e_client(tmp_path, store):
+    partner_dir = tmp_path / "ratesync2"
+    partner_dir.mkdir()
+    (partner_dir / "partner.yaml").write_text(_RATE_LIMIT_E2E_YAML)
+    app = FastAPI()
+    partners = load_partners(tmp_path)
+    register_routes(app, partners, store)
+    store.store_global_payload("ratesync2", "quotes", {"quotes": []})
+    store.store_global_payload("ratesync2", "quotes_unlimited", {"quotes": []})
+    return TestClient(app, raise_server_exceptions=True), store
+
+
+def test_e2e_rate_limit_drains_then_429(rate_limit_e2e_client):
+    c, _ = rate_limit_e2e_client
+    r1 = c.get("/ratesync2/quotes")
+    assert r1.status_code == 200
+    r2 = c.get("/ratesync2/quotes")
+    assert r2.status_code == 429
+    assert "Retry-After" in r2.headers
+    assert "detail" in r2.json()
+
+
+def test_e2e_admin_partners_exposes_requests_per_minute(rate_limit_e2e_client):
+    c, _ = rate_limit_e2e_client
+    r = c.get("/imnot/admin/partners")
+    body = r.json()
+    partner = next(p for p in body if p["partner"] == "ratesync2")
+    quotes_dp = next(dp for dp in partner["datapoints"] if dp["name"] == "quotes")
+    assert quotes_dp["endpoints"][0]["requests_per_minute"] == 1
+
+
+def test_e2e_endpoint_without_rate_limit_never_429(rate_limit_e2e_client):
+    c, _ = rate_limit_e2e_client
+    for _ in range(20):
+        r = c.get("/ratesync2/quotes-unlimited")
+        assert r.status_code != 429

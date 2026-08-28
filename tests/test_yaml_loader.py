@@ -770,3 +770,162 @@ description: No datapoints here
 """
     with pytest.raises(ValueError, match="no datapoints"):
         parse_partner_yaml(yaml_text)
+
+
+# ---------------------------------------------------------------------------
+# rate_limit: block — YAML loader
+# ---------------------------------------------------------------------------
+
+_RATE_LIMIT_YAML = """\
+partner: ratesync
+description: Test partner with rate limiting
+datapoints:
+  - name: rates
+    description: Rates endpoint
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /ratesync/rates
+        rate_limit:
+          requests_per_minute: 60
+        response:
+          status: 200
+"""
+
+_RATE_LIMIT_MISSING_RPM_YAML = """\
+partner: ratesync
+description: Test
+datapoints:
+  - name: rates
+    description: Rates
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /ratesync/rates
+        rate_limit: {}
+        response:
+          status: 200
+"""
+
+_RATE_LIMIT_ABSENT_YAML = """\
+partner: ratesync
+description: Test
+datapoints:
+  - name: rates
+    description: Rates
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /ratesync/rates
+        response:
+          status: 200
+"""
+
+_RATE_LIMIT_UNKNOWN_KEY_YAML = """\
+partner: ratesync
+description: Test
+datapoints:
+  - name: rates
+    description: Rates
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /ratesync/rates
+        rate_limit:
+          requests_per_second: 1
+        response:
+          status: 200
+"""
+
+
+def _rate_limit_yaml_with_value(value: str) -> str:
+    return f"""\
+partner: ratesync
+description: Test
+datapoints:
+  - name: rates
+    description: Rates
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /ratesync/rates
+        rate_limit:
+          requests_per_minute: {value}
+        response:
+          status: 200
+"""
+
+
+def _rate_limit_yaml_on_pattern(pattern: str) -> str:
+    return f"""\
+partner: ratesync
+description: Test
+datapoints:
+  - name: rates
+    description: Rates
+    pattern: {pattern}
+    endpoints:
+      - method: GET
+        path: /ratesync/rates
+        rate_limit:
+          requests_per_minute: 60
+        response:
+          status: 200
+"""
+
+
+def test_rate_limit_block_valid_structure_parses():
+    partner = parse_partner_yaml(_RATE_LIMIT_YAML)
+    ep = partner.datapoints[0].endpoints[0]
+    assert ep.rate_limit == {"requests_per_minute": 60}
+
+
+def test_rate_limit_missing_requests_per_minute_raises():
+    with pytest.raises(ValueError, match="requests_per_minute"):
+        parse_partner_yaml(_RATE_LIMIT_MISSING_RPM_YAML)
+
+
+def test_rate_limit_zero_requests_per_minute_raises():
+    with pytest.raises(ValueError, match="positive integer"):
+        parse_partner_yaml(_rate_limit_yaml_with_value("0"))
+
+
+def test_rate_limit_negative_requests_per_minute_raises():
+    with pytest.raises(ValueError, match="positive integer"):
+        parse_partner_yaml(_rate_limit_yaml_with_value("-5"))
+
+
+def test_rate_limit_string_requests_per_minute_raises():
+    with pytest.raises(ValueError, match="positive integer"):
+        parse_partner_yaml(_rate_limit_yaml_with_value('"fast"'))
+
+
+def test_rate_limit_float_requests_per_minute_raises():
+    with pytest.raises(ValueError, match="positive integer"):
+        parse_partner_yaml(_rate_limit_yaml_with_value("1.5"))
+
+
+def test_rate_limit_bool_requests_per_minute_raises():
+    with pytest.raises(ValueError, match="positive integer"):
+        parse_partner_yaml(_rate_limit_yaml_with_value("true"))
+
+
+def test_rate_limit_unknown_key_raises():
+    with pytest.raises(ValueError, match="unknown key"):
+        parse_partner_yaml(_RATE_LIMIT_UNKNOWN_KEY_YAML)
+
+
+def test_rate_limit_absent_gives_none():
+    partner = parse_partner_yaml(_RATE_LIMIT_ABSENT_YAML)
+    ep = partner.datapoints[0].endpoints[0]
+    assert ep.rate_limit is None
+
+
+def test_rate_limit_on_static_pattern_raises():
+    with pytest.raises(ValueError, match="only supported on 'fetch'"):
+        parse_partner_yaml(_rate_limit_yaml_on_pattern("static"))
+
+
+def test_rate_limit_on_oauth_pattern_raises():
+    with pytest.raises(ValueError, match="only supported on 'fetch'"):
+        parse_partner_yaml(_rate_limit_yaml_on_pattern("oauth"))

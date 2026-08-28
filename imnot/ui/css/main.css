@@ -408,6 +408,11 @@
   opacity: 1;
 }
 
+.field-tip.tip-align-right::after {
+  left: auto;
+  right: 0;
+}
+
 .form-input {
   width: 10rem;
   padding: 0.5rem 0.75rem;
