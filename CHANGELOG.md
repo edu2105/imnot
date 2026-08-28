@@ -4,7 +4,39 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-## [Unreleased]
+## [1.4.0] - 2026-08-28
+
+### Added
+
+- Add requests_per_minute field to Builder for fetch pattern ([6bf05d5](https://github.com/edu2105/imnot/commit/6bf05d5a9fcd8daf01681338381a7a2ab83d013a))
+- Simulate 429 rate limiting via token bucket, fetch pattern only ([4561df6](https://github.com/edu2105/imnot/commit/4561df6f2d9ebd7edf015089524a069d8b16555f))
+- Opt-in request validation via validate: block ([53b386f](https://github.com/edu2105/imnot/commit/53b386fcaad8d5e99228b46d2d2dd10d57a8a713))
+- Add static schema export and make openapi target ([7c726a3](https://github.com/edu2105/imnot/commit/7c726a3ba90b356b78b73d7e7807a6d90c0b0649))
+- Add cursor and page-number pagination styles ([8fad8a7](https://github.com/edu2105/imnot/commit/8fad8a7dbc9254a52f84aed78c1a2a28690633f1))
+
+### Documentation
+
+- Remove real company names and improve paginated examples ([2728d4e](https://github.com/edu2105/imnot/commit/2728d4ed67a386a01cbd9c3ccae74c62e28f4570))
+
+### Fixed
+
+- Warn when editing rate_limit on an already-registered fetch endpoint ([d4c3ad5](https://github.com/edu2105/imnot/commit/d4c3ad5bced06e1e4befccf1eaf454c412fd6d83))
+- Tooltip overflow on right-edge fields; unblock CI on setuptools CVE ([bdb72aa](https://github.com/edu2105/imnot/commit/bdb72aa9e168403ab2323bba8fa70d7dc4f0ece3))
+- Guard Semaphore against zero and remove redundant rate guard ([5c41ab3](https://github.com/edu2105/imnot/commit/5c41ab335502bc8c6b0fd09cfc33713451376176))
+- Enforce rate/volume ceiling and audit log on run start ([a840f4f](https://github.com/edu2105/imnot/commit/a840f4f61024ff2fe746998381e68bd5cedd912e))
+- Suppress bandit B104 false positive on host comparison ([45ee03e](https://github.com/edu2105/imnot/commit/45ee03e85d472f0698ee478a4294c7388e5b4b24))
+- OWASP quick wins — httpx timeout, security headers, admin key warning, symlink guard (fix #57) ([686f643](https://github.com/edu2105/imnot/commit/686f643f4ec3c6daf85b395b5dbe670d1d012ae9))
+- Remove unused variable and assert script exit code in openapi test ([cb8c227](https://github.com/edu2105/imnot/commit/cb8c2275dea09c97159f02b47ead9452c07f5034))
+- Hot-swap pagination config on edit without restart ([0a424de](https://github.com/edu2105/imnot/commit/0a424de5f5d2e3ae2a2864cd6758ec55cd885444))
+- Pre-fill edit mode for callback/paginated; reset after save ([5de188d](https://github.com/edu2105/imnot/commit/5de188ddca069695265f8af99496c4e3fe79f94a))
+- Default log_dir to logs/ and archived to logs/archived/ ([fb489d9](https://github.com/edu2105/imnot/commit/fb489d9220f60f9f9b08870b3aae158ba9f78a3b))
+
+### Maintenance
+
+- Add uv.lock and pip-audit CVE scan to CI (fix #59) ([665ef62](https://github.com/edu2105/imnot/commit/665ef62b87ba9e033544258d010644e88d1374cb))
+- Update GitHub Actions to Node 24-compatible SHAs (fix #10) ([52ab408](https://github.com/edu2105/imnot/commit/52ab40841e16986cf04b78a55479c7b25eac3b8e))
+
+## [1.3.0] - 2026-05-11
 
 ### Added
 
@@ -16,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Allow POST/PUT/PATCH selection for callback pattern endpoints ([dfb6d1f](https://github.com/edu2105/imnot/commit/dfb6d1fa357e9b983230180586151f81cdf7e93f))
 - Add brand top border to Load Test form panel ([bbeedb1](https://github.com/edu2105/imnot/commit/bbeedb1002b77c5d30c95db5fae68d6c9ff0c120))
 - Template card top accent + security warning in docs ([5019092](https://github.com/edu2105/imnot/commit/501909278be27b7cae0ef45e5a15bc417bf1d5c7))
 - Add divider above templates, use palette red for delete buttons ([9f866e2](https://github.com/edu2105/imnot/commit/9f866e25f6e84790dbf79c6d7cf2cc5737e490c3))
