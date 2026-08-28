@@ -2941,6 +2941,10 @@ img, svg {
             if (singlePath) singlePath.value = eps[0].path || '';
             var singleMethod = document.getElementById('b-dp-' + idx + '-method');
             if (singleMethod && eps[0].method) singleMethod.value = eps[0].method;
+            if (dp.pattern === 'fetch' && eps[0].requests_per_minute != null) {
+              var rpmInp = document.getElementById('b-dp-' + idx + '-rpm');
+              if (rpmInp) rpmInp.value = eps[0].requests_per_minute;
+            }
           }
         }
       });
@@ -3072,6 +3076,11 @@ img, svg {
           + '<div class="form-group">'
           + '<label class="form-label" for="b-dp-' + i + '-status">Status</label>'
           + '<input id="b-dp-' + i + '-status" type="number" class="form-input" value="200" min="100" max="599" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-rpm">requests_per_minute<span class="field-tip" data-tip="Optional rate limit ceiling enforced with a token bucket. Leave blank for unlimited. Exceeding it returns 429 with a Retry-After header.">i</span></label>'
+          + '<input id="b-dp-' + i + '-rpm" type="number" class="form-input" placeholder="unlimited" min="1" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '<span class="field-error" id="b-dp-' + i + '-rpm-err"></span>'
           + '</div>'
           + '</div>'
           + '</div>';
@@ -3464,6 +3473,10 @@ img, svg {
         } else if (dp.pattern === 'fetch') {
           lines.push('      - method: GET');
           lines.push('        path: ' + _yamlStr(dp.path));
+          if (dp.requests_per_minute) {
+            lines.push('        rate_limit:');
+            lines.push('          requests_per_minute: ' + dp.requests_per_minute);
+          }
           lines.push('        response:');
           lines.push('          status: ' + dp.status);
         } else if (dp.pattern === 'polling') {
@@ -3583,6 +3596,18 @@ img, svg {
           } else { if (pathErr3) pathErr3.textContent = ''; }
           dp.path = pathVal3;
           dp.status = parseInt(((document.getElementById('b-dp-' + idx + '-status') || {}).value || '200'), 10) || 200;
+          var rpmRaw = ((document.getElementById('b-dp-' + idx + '-rpm') || {}).value || '').trim();
+          var rpmErr = document.getElementById('b-dp-' + idx + '-rpm-err');
+          if (rpmRaw) {
+            var rpmVal = parseInt(rpmRaw, 10);
+            if (!rpmVal || rpmVal < 1) {
+              if (rpmErr) rpmErr.textContent = 'Must be a positive integer';
+              errors.push('Datapoint ' + dpName + ': requests_per_minute must be a positive integer');
+            } else {
+              if (rpmErr) rpmErr.textContent = '';
+              dp.requests_per_minute = rpmVal;
+            }
+          } else if (rpmErr) { rpmErr.textContent = ''; }
         } else if (pattern === 'polling') {
           var stepsContainer = document.getElementById('b-dp-' + idx + '-steps');
           var stepBlocks = stepsContainer ? stepsContainer.querySelectorAll('.step-block') : [];
