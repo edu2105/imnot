@@ -260,7 +260,9 @@ def _register_consumer_routes(
             ref_key = (partner.partner, datapoint.name, endpoint.method.upper(), endpoint.path)
             pagination_ref: list[dict] = [datapoint.pagination or {}]
             paginated_config_refs[ref_key] = pagination_ref
-            handler = make_paginated_handler(partner.partner, datapoint, endpoint, store, default_limit, pagination_ref)
+            handler = make_paginated_handler(
+                partner.partner, datapoint, endpoint, store, default_limit, pagination_ref, limiter
+            )
             _add(endpoint.path, handler, endpoint.method)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered paginated route %s %s", endpoint.method, endpoint.path)

@@ -434,13 +434,73 @@ Pages are 1-indexed — `page=1` is the first page. `page=0` is clamped to `page
 
 ---
 
+### Style: `page_number_url`
+
+Same page/size slicing as `page_number`, but the envelope reproduces Django REST Framework's `PageNumberPagination` shape — absolute `next`/`previous` URL strings instead of a `hasMore` flag. Requires `next_url_field` and `previous_url_field`. URLs are built from `app.state.base_url`, not the request's `Host` header, so they stay reachable behind Docker/EKS.
+
+```yaml
+- name: listings
+  pattern: paginated
+  endpoints:
+    - method: GET
+      path: /ratesync/listings
+      response:
+        status: 200
+  pagination:
+    style: page_number_url
+    items_field: results
+    total_field: count
+    next_url_field: next
+    previous_url_field: previous
+```
+
+Upload the full dataset:
+```bash
+curl -X POST http://localhost:8000/imnot/admin/ratesync/listings/payload \
+  -H "Content-Type: application/json" \
+  -d '[{"id":1,"name":"Apt A"},{"id":2,"name":"Apt B"},{"id":3,"name":"Apt C"}]'
+```
+
+First page:
+```
+GET /ratesync/listings?page=1&size=2
+```
+```json
+{
+  "count": 3,
+  "next": "http://localhost:8000/ratesync/listings?page=2&size=2",
+  "previous": null,
+  "results": [{"id": 1, "name": "Apt A"}, {"id": 2, "name": "Apt B"}]
+}
+```
+
+Follow `next`:
+```
+GET /ratesync/listings?page=2&size=2
+```
+```json
+{
+  "count": 3,
+  "next": null,
+  "previous": "http://localhost:8000/ratesync/listings?page=1&size=2",
+  "results": [{"id": 3, "name": "Apt C"}]
+}
+```
+
+An optional `total_pages` field reports a fixed page count independent of the uploaded array's
+length: every page returns the full array unsliced, and `has_more`/`next` become a plain
+`page < total_pages` comparison instead of being derived from array length. See
+[partners/README.md#pagination](../partners/README.md#pagination) for the full field reference.
+
+---
+
 Default page size when the size param is absent is configured in `imnot.toml`:
 ```toml
 [pagination]
 default_limit = 50
 ```
 
-Session isolation (`X-Imnot-Session`) is supported for all three styles — two sessions can hold different datasets and page through them independently.
+Session isolation (`X-Imnot-Session`) is supported for all four styles — two sessions can hold different datasets and page through them independently.
 
 ---
 
@@ -478,7 +538,7 @@ See [partners/README.md](../partners/README.md#request-validation) for the full 
 
 `fetch`-pattern endpoints can declare a `rate_limit: {requests_per_minute: N}` block. imnot enforces it with a token bucket and returns `429` with a `Retry-After` header once the ceiling is exceeded, checked before validation and before any payload work.
 
-See [partners/README.md](../partners/README.md#rate-limiting) for the full field reference and v1 scope (`fetch` pattern only).
+See [partners/README.md](../partners/README.md#rate-limiting) for the full field reference and v1 scope (`fetch` pattern, plus `paginated` endpoints using `pagination.style: page_number_url` — see partners/README.md for the full scope note).
 
 ---
 
