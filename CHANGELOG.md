@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [1.5.0] - 2026-08-29
+
+### Added
+
+- Add total_pages field to page_number_url style ([8ac1c8a](https://github.com/edu2105/imnot/commit/8ac1c8a417a3bea78107170ee9ae5430d97b6718))
+- Add page_number_url style for DRF-style pagination ([d56323f](https://github.com/edu2105/imnot/commit/d56323f72a557fd374dbb3a9e85cf8ea42769b9f))
+
+### Fixed
+
+- Warn that page_number_url rate_limit edits need a restart ([b7624ac](https://github.com/edu2105/imnot/commit/b7624acc287f8489fa2b00054b2804495c274d3d))
+
 ## [1.4.0] - 2026-08-28
 
 ### Added
@@ -20,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Bump pinned pypa/gh-action-pypi-publish to v1.14.2 ([d3aa8c7](https://github.com/edu2105/imnot/commit/d3aa8c7efa413e32227570a6bc04bf4a07c16711))
 - Warn when editing rate_limit on an already-registered fetch endpoint ([d4c3ad5](https://github.com/edu2105/imnot/commit/d4c3ad5bced06e1e4befccf1eaf454c412fd6d83))
 - Tooltip overflow on right-edge fields; unblock CI on setuptools CVE ([bdb72aa](https://github.com/edu2105/imnot/commit/bdb72aa9e168403ab2323bba8fa70d7dc4f0ece3))
 - Guard Semaphore against zero and remove redundant rate guard ([5c41ab3](https://github.com/edu2105/imnot/commit/5c41ab335502bc8c6b0fd09cfc33713451376176))
