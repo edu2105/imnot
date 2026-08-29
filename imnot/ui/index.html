@@ -3248,6 +3248,7 @@ img, svg {
           + '<label class="form-label" for="b-dp-' + i + '-pg-page-url-rpm">requests_per_minute<span class="field-tip tip-align-right" data-tip="Optional rate limit ceiling enforced with a token bucket. Leave blank for unlimited. Exceeding it returns 429 with a Retry-After header.">i</span></label>'
           + '<input id="b-dp-' + i + '-pg-page-url-rpm" type="number" class="form-input" placeholder="unlimited" min="1" oninput="_builderMarkDirty();builderUpdatePreview()" />'
           + '<span class="field-error" id="b-dp-' + i + '-pg-page-url-rpm-err"></span>'
+          + (_builderMode === 'edit' ? '<p class="acc-note">Changing requests_per_minute on an existing endpoint saves immediately but only takes effect after an imnot restart — the running route keeps its prior limit until then.</p>' : '')
           + '</div>'
           + '<div class="form-group">'
           + '<label class="form-label" for="b-dp-' + i + '-pg-page-url-total-pages">total_pages<span class="field-tip" data-tip="Optional. Pretend the partner reports exactly N total pages, independent of how much sample data is uploaded — has_more/next become page < total_pages instead of being derived from the array length. Leave blank to use the real array length.">i</span></label>'
