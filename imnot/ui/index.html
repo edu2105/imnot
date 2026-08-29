@@ -2947,6 +2947,8 @@ img, svg {
             if (ppuInp) ppuInp.value = pg.page_param || '';
             var spuInp = document.getElementById('b-dp-' + idx + '-pg-page-url-size-param');
             if (spuInp) spuInp.value = pg.size_param || '';
+            var tpInp = document.getElementById('b-dp-' + idx + '-pg-page-url-total-pages');
+            if (tpInp) tpInp.value = pg.total_pages || '';
             if (eps.length > 0 && eps[0].requests_per_minute != null) {
               var pgUrlRpmInp = document.getElementById('b-dp-' + idx + '-pg-page-url-rpm');
               if (pgUrlRpmInp) pgUrlRpmInp.value = eps[0].requests_per_minute;
@@ -3247,6 +3249,11 @@ img, svg {
           + '<input id="b-dp-' + i + '-pg-page-url-rpm" type="number" class="form-input" placeholder="unlimited" min="1" oninput="_builderMarkDirty();builderUpdatePreview()" />'
           + '<span class="field-error" id="b-dp-' + i + '-pg-page-url-rpm-err"></span>'
           + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-pg-page-url-total-pages">total_pages<span class="field-tip" data-tip="Optional. Pretend the partner reports exactly N total pages, independent of how much sample data is uploaded — has_more/next become page < total_pages instead of being derived from the array length. Leave blank to use the real array length.">i</span></label>'
+          + '<input id="b-dp-' + i + '-pg-page-url-total-pages" type="number" class="form-input" placeholder="derived from array length" min="1" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '<span class="field-error" id="b-dp-' + i + '-pg-page-url-total-pages-err"></span>'
+          + '</div>'
           + '</div>'
           + '</div>';
       }
@@ -3506,6 +3513,7 @@ img, svg {
             lines.push('      previous_url_field: ' + _yamlStr(dp.previous_url_field || ''));
             if (dp.pg_page_url_page_param) lines.push('      page_param: ' + _yamlStr(dp.pg_page_url_page_param));
             if (dp.pg_page_url_size_param) lines.push('      size_param: ' + _yamlStr(dp.pg_page_url_size_param));
+            if (dp.pg_page_url_total_pages) lines.push('      total_pages: ' + dp.pg_page_url_total_pages);
           }
           return;
         }
@@ -3792,6 +3800,18 @@ img, svg {
                 dp.requests_per_minute = pgUrlRpmVal;
               }
             } else if (pgUrlRpmErr) { pgUrlRpmErr.textContent = ''; }
+            var pgUrlTotalPagesRaw = ((document.getElementById('b-dp-' + idx + '-pg-page-url-total-pages') || {}).value || '').trim();
+            var pgUrlTotalPagesErr = document.getElementById('b-dp-' + idx + '-pg-page-url-total-pages-err');
+            if (pgUrlTotalPagesRaw) {
+              var pgUrlTotalPagesVal = parseInt(pgUrlTotalPagesRaw, 10);
+              if (!pgUrlTotalPagesVal || pgUrlTotalPagesVal < 1) {
+                if (pgUrlTotalPagesErr) pgUrlTotalPagesErr.textContent = 'Must be a positive integer';
+                errors.push('Datapoint ' + dpName + ': total_pages must be a positive integer');
+              } else {
+                if (pgUrlTotalPagesErr) pgUrlTotalPagesErr.textContent = '';
+                dp.pg_page_url_total_pages = pgUrlTotalPagesVal;
+              }
+            } else if (pgUrlTotalPagesErr) { pgUrlTotalPagesErr.textContent = ''; }
           }
         }
 

@@ -490,6 +490,7 @@ can hold independent datasets.
 | `size_param` | No | `page_number`, `page_number_url` | Query parameter name for the page size (default `"size"`) |
 | `next_url_field` | Yes (`page_number_url` only) | `page_number_url` | Top-level response key for the absolute URL to the next page (null on last page) |
 | `previous_url_field` | Yes (`page_number_url` only) | `page_number_url` | Top-level response key for the absolute URL to the previous page (null on first page) |
+| `total_pages` | No | `page_number_url` | Report a fixed total page count independent of the uploaded array length; `has_more`/`next` become `page < total_pages` instead of being derived from array length. Recognized (inert) on other styles. |
 
 **Query parameters — `offset_limit` style:**
 
@@ -731,6 +732,24 @@ Response (last page — `next` is now `null`, `previous` points back at page 1):
 }
 ```
 
+**Fixed page count independent of uploaded data (`total_pages`):**
+
+```yaml
+  pagination:
+    style: page_number_url
+    items_field: results
+    next_url_field: next
+    previous_url_field: previous
+    total_pages: 5
+```
+
+With `total_pages: 5`, every request (page 1 through page 5) returns the full uploaded array as
+`results`, and `next` stays populated through page 4, becoming `null` only at `page=5` —
+regardless of how many items were actually uploaded. Useful for testing "does my consumer stop
+after N pages" without uploading N pages of realistic data. Requests for `page=6` and beyond are
+tolerated the same as any other out-of-range page (full array still returned, `next: null`, no
+error).
+
 ---
 
 ## Request validation
@@ -922,7 +941,7 @@ runs in a container and you cannot exec in to run the CLI. See the main README f
 - [ ] Every `paginated` datapoint has a `pagination:` block with `style` (`offset_limit`, `cursor`, `page_number`, or `page_number_url`) and `items_field` set
 - [ ] If `style: cursor`, `cursor_field` is also set in the `pagination:` block
 - [ ] If `style: page_number_url`, `next_url_field` and `previous_url_field` are both set in the `pagination:` block
-- [ ] The `pagination:` block contains only recognized keys: `style`, `items_field`, `total_field`, `has_more_field`, `next_offset_field`, `cursor_field`, `cursor_ttl_seconds`, `page_param`, `size_param`, `next_url_field`, `previous_url_field`
+- [ ] The `pagination:` block contains only recognized keys: `style`, `items_field`, `total_field`, `has_more_field`, `next_offset_field`, `cursor_field`, `cursor_ttl_seconds`, `page_param`, `size_param`, `next_url_field`, `previous_url_field`, `total_pages`
 - [ ] The payload uploaded for a `paginated` datapoint is a JSON array (not an object)
 - [ ] All `response` blocks are nested inside their endpoint, not at the datapoint level
 - [ ] No two endpoints across the whole file share the same `method` + `path` combination

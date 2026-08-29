@@ -35,6 +35,7 @@ _PAGINATION_VALID_KEYS = {
     "size_param",
     "next_url_field",
     "previous_url_field",
+    "total_pages",
 }
 
 _VALIDATE_VALID_KEYS = {"body", "query", "headers"}
@@ -224,6 +225,13 @@ def _parse_datapoint(raw: dict[str, Any], partner: str) -> DatapointDef:
                 f"Datapoint '{name}' in partner '{partner}': 'pagination.next_url_field' and "
                 f"'pagination.previous_url_field' are both required for style 'page_number_url'"
             )
+        if "total_pages" in raw_pagination:
+            total_pages = raw_pagination["total_pages"]
+            if isinstance(total_pages, bool) or not isinstance(total_pages, int) or total_pages <= 0:
+                raise ValueError(
+                    f"Datapoint '{name}' in partner '{partner}': 'pagination.total_pages' must be a "
+                    f"positive integer (got {total_pages!r})"
+                )
         pagination = raw_pagination
 
     return DatapointDef(

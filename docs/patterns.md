@@ -487,6 +487,11 @@ GET /ratesync/listings?page=2&size=2
 }
 ```
 
+An optional `total_pages` field reports a fixed page count independent of the uploaded array's
+length: every page returns the full array unsliced, and `has_more`/`next` become a plain
+`page < total_pages` comparison instead of being derived from array length. See
+[partners/README.md#pagination](../partners/README.md#pagination) for the full field reference.
+
 ---
 
 Default page size when the size param is absent is configured in `imnot.toml`:

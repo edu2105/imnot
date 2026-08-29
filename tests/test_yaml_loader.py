@@ -491,6 +491,71 @@ def test_paginated_page_number_url_missing_both_url_fields(tmp_path):
     assert result == []
 
 
+def _paginated_total_pages_yaml(style: str, value: str) -> str:
+    extra_fields = ""
+    if style == "page_number_url":
+        extra_fields = "      next_url_field: next\n      previous_url_field: previous\n"
+    return (
+        "partner: ratesync\n"
+        "datapoints:\n"
+        "  - name: listing\n"
+        "    pattern: paginated\n"
+        "    endpoints:\n"
+        "      - method: GET\n"
+        "        path: /ratesync/listings\n"
+        "        response:\n"
+        "          status: 200\n"
+        "    pagination:\n"
+        f"      style: {style}\n"
+        "      items_field: results\n"
+        f"{extra_fields}"
+        f"      total_pages: {value}\n"
+    )
+
+
+def test_paginated_page_number_url_total_pages_valid():
+    partner = parse_partner_yaml(_paginated_total_pages_yaml("page_number_url", "5"))
+    dp = partner.datapoints[0]
+    assert dp.pagination["total_pages"] == 5
+
+
+def test_paginated_total_pages_zero_raises():
+    with pytest.raises(ValueError, match="positive integer"):
+        parse_partner_yaml(_paginated_total_pages_yaml("page_number_url", "0"))
+
+
+def test_paginated_total_pages_negative_raises():
+    with pytest.raises(ValueError, match="positive integer"):
+        parse_partner_yaml(_paginated_total_pages_yaml("page_number_url", "-1"))
+
+
+def test_paginated_total_pages_string_raises():
+    with pytest.raises(ValueError, match="positive integer"):
+        parse_partner_yaml(_paginated_total_pages_yaml("page_number_url", '"five"'))
+
+
+def test_paginated_total_pages_float_raises():
+    with pytest.raises(ValueError, match="positive integer"):
+        parse_partner_yaml(_paginated_total_pages_yaml("page_number_url", "2.5"))
+
+
+def test_paginated_total_pages_bool_raises():
+    with pytest.raises(ValueError, match="positive integer"):
+        parse_partner_yaml(_paginated_total_pages_yaml("page_number_url", "true"))
+
+
+def test_paginated_total_pages_tolerated_on_offset_limit_style():
+    partner = parse_partner_yaml(_paginated_total_pages_yaml("offset_limit", "3"))
+    dp = partner.datapoints[0]
+    assert dp.pagination["total_pages"] == 3
+
+
+def test_paginated_total_pages_tolerated_on_page_number_style():
+    partner = parse_partner_yaml(_paginated_total_pages_yaml("page_number", "3"))
+    dp = partner.datapoints[0]
+    assert dp.pagination["total_pages"] == 3
+
+
 def test_non_paginated_datapoint_has_none_pagination(tmp_path):
     partner_dir = tmp_path / "bookingco"
     partner_dir.mkdir()

@@ -82,6 +82,7 @@ def _make_page_number_url_datapoint(
     total_field: str | None = None,
     next_url_field: str = "next",
     previous_url_field: str = "previous",
+    total_pages: int | None = None,
 ) -> DatapointDef:
     pagination: dict = {
         "style": "page_number_url",
@@ -93,6 +94,8 @@ def _make_page_number_url_datapoint(
     }
     if total_field:
         pagination["total_field"] = total_field
+    if total_pages is not None:
+        pagination["total_pages"] = total_pages
     return DatapointDef(name=name, description="", pattern="paginated", endpoints=[], pagination=pagination)
 
 
@@ -905,6 +908,94 @@ def test_page_number_url_no_rate_limit_when_not_configured(page_url_client):
     for _ in range(20):
         r = c.get("/staylink/listings?page=1")
         assert r.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Page-number-url handler — total_pages
+# ---------------------------------------------------------------------------
+
+
+def test_page_number_url_total_pages_full_array_every_page(store):
+    app = FastAPI()
+    app.state.base_url = "http://localhost:8000"
+    dp = _make_page_number_url_datapoint(total_pages=5)
+    handler = make_paginated_handler("staylink", dp, _make_endpoint(), store, default_limit=3)
+    app.add_api_route("/staylink/listings", handler, methods=["GET"])
+    c = TestClient(app)
+    store.store_global_payload("staylink", "listing", _ten_items())
+
+    body1 = c.get("/staylink/listings?page=1&size=3").json()
+    body2 = c.get("/staylink/listings?page=2&size=3").json()
+
+    assert len(body1["items"]) == len(_ten_items())
+    assert len(body2["items"]) == len(_ten_items())
+    assert body1["items"] == _ten_items()
+    assert body2["items"] == _ten_items()
+
+
+def test_page_number_url_total_pages_has_more_ignores_array_length(store):
+    app = FastAPI()
+    app.state.base_url = "http://localhost:8000"
+    dp = _make_page_number_url_datapoint(total_pages=5)
+    handler = make_paginated_handler("staylink", dp, _make_endpoint(), store, default_limit=3)
+    app.add_api_route("/staylink/listings", handler, methods=["GET"])
+    c = TestClient(app)
+    store.store_global_payload("staylink", "listing", [{"id": 0}, {"id": 1}])
+
+    r = c.get("/staylink/listings?page=1")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["next"] is not None
+    assert "page=2" in body["next"]
+
+
+def test_page_number_url_total_pages_next_null_at_last_page(store):
+    app = FastAPI()
+    app.state.base_url = "http://localhost:8000"
+    dp = _make_page_number_url_datapoint(total_pages=3)
+    handler = make_paginated_handler("staylink", dp, _make_endpoint(), store, default_limit=3)
+    app.add_api_route("/staylink/listings", handler, methods=["GET"])
+    c = TestClient(app)
+    store.store_global_payload("staylink", "listing", _ten_items())
+
+    r = c.get("/staylink/listings?page=3")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["next"] is None
+    assert body["previous"] is not None
+    assert "page=2" in body["previous"]
+
+
+def test_page_number_url_total_pages_tolerant_beyond_total_pages(store):
+    app = FastAPI()
+    app.state.base_url = "http://localhost:8000"
+    dp = _make_page_number_url_datapoint(total_pages=3)
+    handler = make_paginated_handler("staylink", dp, _make_endpoint(), store, default_limit=3)
+    app.add_api_route("/staylink/listings", handler, methods=["GET"])
+    c = TestClient(app)
+    store.store_global_payload("staylink", "listing", _ten_items())
+
+    r = c.get("/staylink/listings?page=100")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["next"] is None
+    assert body["previous"] is not None
+    assert body["items"] == _ten_items()
+
+
+def test_page_number_url_total_pages_total_field_independent(store):
+    app = FastAPI()
+    app.state.base_url = "http://localhost:8000"
+    dp = _make_page_number_url_datapoint(total_field="total", total_pages=10)
+    handler = make_paginated_handler("staylink", dp, _make_endpoint(), store, default_limit=3)
+    app.add_api_route("/staylink/listings", handler, methods=["GET"])
+    c = TestClient(app)
+    items = [{"id": i} for i in range(4)]
+    store.store_global_payload("staylink", "listing", items)
+
+    r = c.get("/staylink/listings?page=1")
+    assert r.status_code == 200
+    assert r.json()["total"] == 4
 
 
 # ---------------------------------------------------------------------------

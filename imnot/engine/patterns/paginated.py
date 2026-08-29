@@ -256,8 +256,15 @@ def _page_number_url(
     previous_url_field: str = pagination["previous_url_field"]
     page_param: str = pagination.get("page_param", "page")
     size_param: str = pagination.get("size_param", "size")
+    total_pages: int | None = pagination.get("total_pages")
 
     page, size, offset, slice_, total, has_more = _slice_by_page(request, payload, pagination, default_limit)
+
+    if total_pages is not None:
+        items = payload
+        has_more = page < total_pages
+    else:
+        items = slice_
 
     def _build_url(target_page: int) -> str:
         base_url = str(request.app.state.base_url).rstrip("/")
@@ -267,7 +274,7 @@ def _page_number_url(
         return f"{base_url}{request.url.path}?{urlencode(query)}"
 
     body: dict[str, Any] = {
-        items_field: slice_,
+        items_field: items,
         next_url_field: _build_url(page + 1) if has_more else None,
         previous_url_field: _build_url(page - 1) if page > 1 else None,
     }
