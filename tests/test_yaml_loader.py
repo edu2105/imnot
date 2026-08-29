@@ -398,6 +398,99 @@ def test_paginated_unknown_key_in_pagination_block(tmp_path):
     assert result == []
 
 
+def test_paginated_page_number_url_style_valid(tmp_path):
+    partner_dir = tmp_path / "ratesync"
+    partner_dir.mkdir()
+    (partner_dir / "partner.yaml").write_text(
+        "partner: ratesync\n"
+        "datapoints:\n"
+        "  - name: listing\n"
+        "    pattern: paginated\n"
+        "    endpoints:\n"
+        "      - method: GET\n"
+        "        path: /ratesync/listings\n"
+        "        response:\n"
+        "          status: 200\n"
+        "    pagination:\n"
+        "      style: page_number_url\n"
+        "      items_field: results\n"
+        "      next_url_field: next\n"
+        "      previous_url_field: previous\n"
+    )
+    result = load_partners(tmp_path)
+    assert len(result) == 1
+    dp = result[0].datapoints[0]
+    assert dp.pagination["style"] == "page_number_url"
+    assert dp.pagination["items_field"] == "results"
+    assert dp.pagination["next_url_field"] == "next"
+    assert dp.pagination["previous_url_field"] == "previous"
+
+
+def test_paginated_page_number_url_missing_next_url_field(tmp_path):
+    partner_dir = tmp_path / "ratesync"
+    partner_dir.mkdir()
+    (partner_dir / "partner.yaml").write_text(
+        "partner: ratesync\n"
+        "datapoints:\n"
+        "  - name: listing\n"
+        "    pattern: paginated\n"
+        "    endpoints:\n"
+        "      - method: GET\n"
+        "        path: /ratesync/listings\n"
+        "        response:\n"
+        "          status: 200\n"
+        "    pagination:\n"
+        "      style: page_number_url\n"
+        "      items_field: results\n"
+        "      previous_url_field: previous\n"
+    )
+    result = load_partners(tmp_path)
+    assert result == []
+
+
+def test_paginated_page_number_url_missing_previous_url_field(tmp_path):
+    partner_dir = tmp_path / "ratesync"
+    partner_dir.mkdir()
+    (partner_dir / "partner.yaml").write_text(
+        "partner: ratesync\n"
+        "datapoints:\n"
+        "  - name: listing\n"
+        "    pattern: paginated\n"
+        "    endpoints:\n"
+        "      - method: GET\n"
+        "        path: /ratesync/listings\n"
+        "        response:\n"
+        "          status: 200\n"
+        "    pagination:\n"
+        "      style: page_number_url\n"
+        "      items_field: results\n"
+        "      next_url_field: next\n"
+    )
+    result = load_partners(tmp_path)
+    assert result == []
+
+
+def test_paginated_page_number_url_missing_both_url_fields(tmp_path):
+    partner_dir = tmp_path / "ratesync"
+    partner_dir.mkdir()
+    (partner_dir / "partner.yaml").write_text(
+        "partner: ratesync\n"
+        "datapoints:\n"
+        "  - name: listing\n"
+        "    pattern: paginated\n"
+        "    endpoints:\n"
+        "      - method: GET\n"
+        "        path: /ratesync/listings\n"
+        "        response:\n"
+        "          status: 200\n"
+        "    pagination:\n"
+        "      style: page_number_url\n"
+        "      items_field: results\n"
+    )
+    result = load_partners(tmp_path)
+    assert result == []
+
+
 def test_non_paginated_datapoint_has_none_pagination(tmp_path):
     partner_dir = tmp_path / "bookingco"
     partner_dir.mkdir()
@@ -929,3 +1022,55 @@ def test_rate_limit_on_static_pattern_raises():
 def test_rate_limit_on_oauth_pattern_raises():
     with pytest.raises(ValueError, match="only supported on 'fetch'"):
         parse_partner_yaml(_rate_limit_yaml_on_pattern("oauth"))
+
+
+# ---------------------------------------------------------------------------
+# rate_limit: block — paginated pattern, page_number_url exception
+# ---------------------------------------------------------------------------
+
+
+def _rate_limit_yaml_on_paginated_style(style: str) -> str:
+    extra_fields = ""
+    if style == "cursor":
+        extra_fields = "      cursor_field: nextCursor\n"
+    elif style == "page_number_url":
+        extra_fields = "      next_url_field: next\n      previous_url_field: previous\n"
+    return f"""\
+partner: ratesync
+description: Test
+datapoints:
+  - name: listing
+    description: Listing
+    pattern: paginated
+    endpoints:
+      - method: GET
+        path: /ratesync/listings
+        rate_limit:
+          requests_per_minute: 60
+        response:
+          status: 200
+    pagination:
+      style: {style}
+      items_field: results
+{extra_fields}"""
+
+
+def test_rate_limit_on_paginated_page_number_url_style_parses():
+    partner = parse_partner_yaml(_rate_limit_yaml_on_paginated_style("page_number_url"))
+    ep = partner.datapoints[0].endpoints[0]
+    assert ep.rate_limit == {"requests_per_minute": 60}
+
+
+def test_rate_limit_on_paginated_offset_limit_style_raises():
+    with pytest.raises(ValueError, match="only supported on 'fetch'"):
+        parse_partner_yaml(_rate_limit_yaml_on_paginated_style("offset_limit"))
+
+
+def test_rate_limit_on_paginated_cursor_style_raises():
+    with pytest.raises(ValueError, match="only supported on 'fetch'"):
+        parse_partner_yaml(_rate_limit_yaml_on_paginated_style("cursor"))
+
+
+def test_rate_limit_on_paginated_page_number_style_raises():
+    with pytest.raises(ValueError, match="only supported on 'fetch'"):
+        parse_partner_yaml(_rate_limit_yaml_on_paginated_style("page_number"))

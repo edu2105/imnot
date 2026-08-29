@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import time
 from typing import Any, Callable
+from urllib.parse import urlencode
 
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
+from imnot.engine.rate_limiter import RateLimiter
 from imnot.engine.session_store import SessionStore, _now
 from imnot.engine.validator import validate_request
 from imnot.loader.yaml_loader import DatapointDef, EndpointDef
@@ -17,14 +20,30 @@ def make_paginated_handler(
     store: SessionStore,
     default_limit: int,
     pagination_ref: list[dict] | None = None,
+    limiter: RateLimiter | None = None,
 ) -> Callable:
     dp_name = datapoint.name
     status_code: int = endpoint.response.get("status", 200)
     if pagination_ref is None:
         pagination_ref = [datapoint.pagination or {}]
+    if limiter is None:
+        limiter = RateLimiter()
     validate_rules = endpoint.validate
+    rate_limit = endpoint.rate_limit
+    capacity = rate_limit["requests_per_minute"] if rate_limit is not None else None
+    refill_per_second = capacity / 60 if rate_limit is not None else None
 
     async def handler(request: Request) -> Response:
+        if rate_limit is not None:
+            key = (partner, dp_name, endpoint.method, endpoint.path)
+            allowed, retry_after = limiter.check(key, capacity, refill_per_second, time.time())
+            if not allowed:
+                return JSONResponse(
+                    status_code=429,
+                    content={"detail": f"Rate limit exceeded: {capacity} requests per minute"},
+                    headers={"Retry-After": str(retry_after)},
+                )
+
         if validate_rules is not None:
             errors = validate_request(validate_rules, None, request.query_params, request.headers)
             if errors:
@@ -60,6 +79,8 @@ def make_paginated_handler(
             )
         elif style == "page_number":
             return _page_number(request, payload, pagination, default_limit, status_code)
+        elif style == "page_number_url":
+            return _page_number_url(request, payload, pagination, default_limit, status_code)
         else:
             return _offset_limit(request, payload, pagination, default_limit, status_code)
 
@@ -169,18 +190,14 @@ def _cursor(
     return JSONResponse(status_code=status_code, content=body)
 
 
-def _page_number(
+def _slice_by_page(
     request: Request,
     payload: list,
     pagination: dict,
     default_limit: int,
-    status_code: int,
-) -> Response:
-    items_field: str = pagination.get("items_field", "items")
+) -> tuple[int, int, int, list, int, bool]:
     page_param: str = pagination.get("page_param", "page")
     size_param: str = pagination.get("size_param", "size")
-    total_field: str | None = pagination.get("total_field")
-    has_more_field: str | None = pagination.get("has_more_field")
 
     try:
         page = int(request.query_params.get(page_param, "1"))
@@ -201,11 +218,60 @@ def _page_number(
     offset = (page - 1) * size
     slice_ = payload[offset : offset + size]
     has_more = (offset + size) < total
+    return page, size, offset, slice_, total, has_more
+
+
+def _page_number(
+    request: Request,
+    payload: list,
+    pagination: dict,
+    default_limit: int,
+    status_code: int,
+) -> Response:
+    items_field: str = pagination.get("items_field", "items")
+    total_field: str | None = pagination.get("total_field")
+    has_more_field: str | None = pagination.get("has_more_field")
+
+    _page, _size, _offset, slice_, total, has_more = _slice_by_page(request, payload, pagination, default_limit)
 
     body: dict[str, Any] = {items_field: slice_}
     if total_field:
         body[total_field] = total
     if has_more_field:
         body[has_more_field] = has_more
+
+    return JSONResponse(status_code=status_code, content=body)
+
+
+def _page_number_url(
+    request: Request,
+    payload: list,
+    pagination: dict,
+    default_limit: int,
+    status_code: int,
+) -> Response:
+    items_field: str = pagination.get("items_field", "items")
+    total_field: str | None = pagination.get("total_field")
+    next_url_field: str = pagination["next_url_field"]
+    previous_url_field: str = pagination["previous_url_field"]
+    page_param: str = pagination.get("page_param", "page")
+    size_param: str = pagination.get("size_param", "size")
+
+    page, size, offset, slice_, total, has_more = _slice_by_page(request, payload, pagination, default_limit)
+
+    def _build_url(target_page: int) -> str:
+        base_url = str(request.app.state.base_url).rstrip("/")
+        query = dict(request.query_params)
+        query[page_param] = str(target_page)
+        query.setdefault(size_param, str(size))
+        return f"{base_url}{request.url.path}?{urlencode(query)}"
+
+    body: dict[str, Any] = {
+        items_field: slice_,
+        next_url_field: _build_url(page + 1) if has_more else None,
+        previous_url_field: _build_url(page - 1) if page > 1 else None,
+    }
+    if total_field:
+        body[total_field] = total
 
     return JSONResponse(status_code=status_code, content=body)

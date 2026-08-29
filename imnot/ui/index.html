@@ -2938,6 +2938,19 @@ img, svg {
             if (ppInp) ppInp.value = pg.page_param || '';
             var spInp = document.getElementById('b-dp-' + idx + '-size-param');
             if (spInp) spInp.value = pg.size_param || '';
+          } else if (pg.style === 'page_number_url') {
+            var nufInp = document.getElementById('b-dp-' + idx + '-next-url-field');
+            if (nufInp) nufInp.value = pg.next_url_field || '';
+            var pufInp = document.getElementById('b-dp-' + idx + '-previous-url-field');
+            if (pufInp) pufInp.value = pg.previous_url_field || '';
+            var ppuInp = document.getElementById('b-dp-' + idx + '-pg-page-url-page-param');
+            if (ppuInp) ppuInp.value = pg.page_param || '';
+            var spuInp = document.getElementById('b-dp-' + idx + '-pg-page-url-size-param');
+            if (spuInp) spuInp.value = pg.size_param || '';
+            if (eps.length > 0 && eps[0].requests_per_minute != null) {
+              var pgUrlRpmInp = document.getElementById('b-dp-' + idx + '-pg-page-url-rpm');
+              if (pgUrlRpmInp) pgUrlRpmInp.value = eps[0].requests_per_minute;
+            }
           }
         } else {
           // oauth, static, fetch — single endpoint path
@@ -3141,7 +3154,7 @@ img, svg {
           + '</div>';
       }
       if (pattern === 'paginated') {
-        var pgStyleOpts = ['offset_limit','cursor','page_number'].map(function (s) {
+        var pgStyleOpts = ['offset_limit','cursor','page_number','page_number_url'].map(function (s) {
           return '<option value="' + s + '"' + (s === 'offset_limit' ? ' selected' : '') + '>' + s + '</option>';
         }).join('');
         return '<div class="form-stack">'
@@ -3210,6 +3223,31 @@ img, svg {
           + '<input id="b-dp-' + i + '-size-param" type="text" class="form-input" placeholder="size (optional)" oninput="_builderMarkDirty();builderUpdatePreview()" />'
           + '</div>'
           + '</div>'
+          + '<div id="b-dp-' + i + '-pg-page-url-fields" class="form-row" style="display:none;">'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-next-url-field">next_url_field *<span class="field-tip" data-tip="Response key for the absolute URL to the next page, e.g. next_url_field: next → {next: \'https://.../?page=2\'}. Required for this style.">i</span></label>'
+          + '<input id="b-dp-' + i + '-next-url-field" type="text" class="form-input" placeholder="e.g. next" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '<span class="field-error" id="b-dp-' + i + '-next-url-field-err"></span>'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-previous-url-field">previous_url_field *<span class="field-tip" data-tip="Response key for the absolute URL to the previous page, e.g. previous_url_field: previous → {previous: \'https://.../?page=1\'}. Required for this style.">i</span></label>'
+          + '<input id="b-dp-' + i + '-previous-url-field" type="text" class="form-input" placeholder="e.g. previous" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '<span class="field-error" id="b-dp-' + i + '-previous-url-field-err"></span>'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-pg-page-url-page-param">page_param<span class="field-tip" data-tip="Query parameter name consumers send for the page number. Default: page. e.g. page_param: page → ?page=2">i</span></label>'
+          + '<input id="b-dp-' + i + '-pg-page-url-page-param" type="text" class="form-input" placeholder="page (optional)" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-pg-page-url-size-param">size_param<span class="field-tip" data-tip="Query parameter name consumers send for the page size. Default: size. e.g. size_param: size → ?size=20">i</span></label>'
+          + '<input id="b-dp-' + i + '-pg-page-url-size-param" type="text" class="form-input" placeholder="size (optional)" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '</div>'
+          + '<div class="form-group">'
+          + '<label class="form-label" for="b-dp-' + i + '-pg-page-url-rpm">requests_per_minute<span class="field-tip tip-align-right" data-tip="Optional rate limit ceiling enforced with a token bucket. Leave blank for unlimited. Exceeding it returns 429 with a Retry-After header.">i</span></label>'
+          + '<input id="b-dp-' + i + '-pg-page-url-rpm" type="number" class="form-input" placeholder="unlimited" min="1" oninput="_builderMarkDirty();builderUpdatePreview()" />'
+          + '<span class="field-error" id="b-dp-' + i + '-pg-page-url-rpm-err"></span>'
+          + '</div>'
+          + '</div>'
           + '</div>';
       }
       return '';
@@ -3217,12 +3255,14 @@ img, svg {
 
     function _builderPgStyleChange(dpIdx) {
       var style = (document.getElementById('b-dp-' + dpIdx + '-pg-style') || {}).value || 'offset_limit';
-      var offsetEl = document.getElementById('b-dp-' + dpIdx + '-pg-offset-fields');
-      var cursorEl = document.getElementById('b-dp-' + dpIdx + '-pg-cursor-fields');
-      var pageEl   = document.getElementById('b-dp-' + dpIdx + '-pg-page-fields');
-      if (offsetEl) offsetEl.style.display = style === 'offset_limit' ? '' : 'none';
-      if (cursorEl) cursorEl.style.display = style === 'cursor'        ? '' : 'none';
-      if (pageEl)   pageEl.style.display   = style === 'page_number'   ? '' : 'none';
+      var offsetEl  = document.getElementById('b-dp-' + dpIdx + '-pg-offset-fields');
+      var cursorEl  = document.getElementById('b-dp-' + dpIdx + '-pg-cursor-fields');
+      var pageEl    = document.getElementById('b-dp-' + dpIdx + '-pg-page-fields');
+      var pageUrlEl = document.getElementById('b-dp-' + dpIdx + '-pg-page-url-fields');
+      if (offsetEl)  offsetEl.style.display  = style === 'offset_limit'    ? '' : 'none';
+      if (cursorEl)  cursorEl.style.display  = style === 'cursor'          ? '' : 'none';
+      if (pageEl)    pageEl.style.display    = style === 'page_number'     ? '' : 'none';
+      if (pageUrlEl) pageUrlEl.style.display = style === 'page_number_url' ? '' : 'none';
     }
 
     function _builderFirstTwoStepsHtml(dpIdx) {
@@ -3435,13 +3475,17 @@ img, svg {
 
         if (dp.pattern === 'paginated') {
           // endpoints first, then pagination block
+          var pgStyle = dp.pg_style || 'offset_limit';
           lines.push('    endpoints:');
           lines.push('      - method: GET');
           lines.push('        path: ' + _yamlStr(dp.path));
+          if (pgStyle === 'page_number_url' && dp.requests_per_minute) {
+            lines.push('        rate_limit:');
+            lines.push('          requests_per_minute: ' + dp.requests_per_minute);
+          }
           lines.push('        response:');
           lines.push('          status: ' + dp.status);
           lines.push('    pagination:');
-          var pgStyle = dp.pg_style || 'offset_limit';
           lines.push('      style: ' + pgStyle);
           lines.push('      items_field: ' + _yamlStr(dp.items_field));
           if (dp.total_field)    lines.push('      total_field: '    + _yamlStr(dp.total_field));
@@ -3457,6 +3501,11 @@ img, svg {
           } else if (pgStyle === 'page_number') {
             if (dp.page_param) lines.push('      page_param: ' + _yamlStr(dp.page_param));
             if (dp.size_param) lines.push('      size_param: ' + _yamlStr(dp.size_param));
+          } else if (pgStyle === 'page_number_url') {
+            lines.push('      next_url_field: ' + _yamlStr(dp.next_url_field || ''));
+            lines.push('      previous_url_field: ' + _yamlStr(dp.previous_url_field || ''));
+            if (dp.pg_page_url_page_param) lines.push('      page_param: ' + _yamlStr(dp.pg_page_url_page_param));
+            if (dp.pg_page_url_size_param) lines.push('      size_param: ' + _yamlStr(dp.pg_page_url_size_param));
           }
           return;
         }
@@ -3716,6 +3765,33 @@ img, svg {
           } else if (dp.pg_style === 'page_number') {
             dp.page_param = ((document.getElementById('b-dp-' + idx + '-page-param') || {}).value || '').trim();
             dp.size_param = ((document.getElementById('b-dp-' + idx + '-size-param') || {}).value || '').trim();
+          } else if (dp.pg_style === 'page_number_url') {
+            dp.next_url_field = ((document.getElementById('b-dp-' + idx + '-next-url-field') || {}).value || '').trim();
+            var nufErr = document.getElementById('b-dp-' + idx + '-next-url-field-err');
+            if (!dp.next_url_field) {
+              if (nufErr) nufErr.textContent = 'next_url_field is required for page_number_url style';
+              errors.push('Datapoint ' + dpName + ': next_url_field is required for style page_number_url');
+            } else { if (nufErr) nufErr.textContent = ''; }
+            dp.previous_url_field = ((document.getElementById('b-dp-' + idx + '-previous-url-field') || {}).value || '').trim();
+            var pufErr = document.getElementById('b-dp-' + idx + '-previous-url-field-err');
+            if (!dp.previous_url_field) {
+              if (pufErr) pufErr.textContent = 'previous_url_field is required for page_number_url style';
+              errors.push('Datapoint ' + dpName + ': previous_url_field is required for style page_number_url');
+            } else { if (pufErr) pufErr.textContent = ''; }
+            dp.pg_page_url_page_param = ((document.getElementById('b-dp-' + idx + '-pg-page-url-page-param') || {}).value || '').trim();
+            dp.pg_page_url_size_param = ((document.getElementById('b-dp-' + idx + '-pg-page-url-size-param') || {}).value || '').trim();
+            var pgUrlRpmRaw = ((document.getElementById('b-dp-' + idx + '-pg-page-url-rpm') || {}).value || '').trim();
+            var pgUrlRpmErr = document.getElementById('b-dp-' + idx + '-pg-page-url-rpm-err');
+            if (pgUrlRpmRaw) {
+              var pgUrlRpmVal = parseInt(pgUrlRpmRaw, 10);
+              if (!pgUrlRpmVal || pgUrlRpmVal < 1) {
+                if (pgUrlRpmErr) pgUrlRpmErr.textContent = 'Must be a positive integer';
+                errors.push('Datapoint ' + dpName + ': requests_per_minute must be a positive integer');
+              } else {
+                if (pgUrlRpmErr) pgUrlRpmErr.textContent = '';
+                dp.requests_per_minute = pgUrlRpmVal;
+              }
+            } else if (pgUrlRpmErr) { pgUrlRpmErr.textContent = ''; }
           }
         }
 

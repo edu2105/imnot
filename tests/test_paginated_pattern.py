@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from imnot.engine.patterns.paginated import make_paginated_handler
+from imnot.engine.rate_limiter import RateLimiter
 from imnot.engine.session_store import SessionStore
 from imnot.loader.yaml_loader import DatapointDef, EndpointDef
 
@@ -74,8 +75,39 @@ def _make_page_number_datapoint(
     return DatapointDef(name=name, description="", pattern="paginated", endpoints=[], pagination=pagination)
 
 
+def _make_page_number_url_datapoint(
+    name: str = "listing",
+    page_param: str = "page",
+    size_param: str = "size",
+    total_field: str | None = None,
+    next_url_field: str = "next",
+    previous_url_field: str = "previous",
+) -> DatapointDef:
+    pagination: dict = {
+        "style": "page_number_url",
+        "items_field": "items",
+        "page_param": page_param,
+        "size_param": size_param,
+        "next_url_field": next_url_field,
+        "previous_url_field": previous_url_field,
+    }
+    if total_field:
+        pagination["total_field"] = total_field
+    return DatapointDef(name=name, description="", pattern="paginated", endpoints=[], pagination=pagination)
+
+
 def _make_endpoint(status: int = 200) -> EndpointDef:
     return EndpointDef(method="GET", path="/ratesync/listings", step=None, response={"status": status})
+
+
+def _make_rate_limited_endpoint(requests_per_minute: int, status: int = 200) -> EndpointDef:
+    return EndpointDef(
+        method="GET",
+        path="/ratesync/listings",
+        step=None,
+        response={"status": status},
+        rate_limit={"requests_per_minute": requests_per_minute},
+    )
 
 
 @pytest.fixture
@@ -722,6 +754,178 @@ def test_page_number_session_isolation(store):
 
     assert r_alice.json()["items"][0]["user"] == "alice"
     assert r_bob.json()["items"][0]["user"] == "bob"
+
+
+# ---------------------------------------------------------------------------
+# Page-number-url handler
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def page_url_client(store):
+    app = FastAPI()
+    app.state.base_url = "http://localhost:8000"
+    datapoint = _make_page_number_url_datapoint(total_field="total")
+    endpoint = _make_endpoint()
+    handler = make_paginated_handler("staylink", datapoint, endpoint, store, default_limit=3)
+    app.add_api_route("/staylink/listings", handler, methods=["GET"])
+    return TestClient(app, raise_server_exceptions=True), store
+
+
+def test_page_number_url_first_page(page_url_client):
+    c, store = page_url_client
+    store.store_global_payload("staylink", "listing", _ten_items())
+    r = c.get("/staylink/listings?page=1&size=3")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["items"]) == 3
+    assert body["items"][0]["id"] == 0
+    assert body["previous"] is None
+    assert body["next"] is not None
+    assert "page=2" in body["next"]
+
+
+def test_page_number_url_middle_page(page_url_client):
+    c, store = page_url_client
+    store.store_global_payload("staylink", "listing", _ten_items())
+    r = c.get("/staylink/listings?page=2&size=3")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["items"][0]["id"] == 3
+    assert body["next"] is not None
+    assert "page=3" in body["next"]
+    assert body["previous"] is not None
+    assert "page=1" in body["previous"]
+
+
+def test_page_number_url_last_page(page_url_client):
+    c, store = page_url_client
+    store.store_global_payload("staylink", "listing", _ten_items())
+    r = c.get("/staylink/listings?page=4&size=3")
+    assert r.status_code == 200
+    body = r.json()
+    assert len(body["items"]) == 1
+    assert body["next"] is None
+    assert body["previous"] is not None
+    assert "page=3" in body["previous"]
+
+
+def test_page_number_url_out_of_range(page_url_client):
+    c, store = page_url_client
+    store.store_global_payload("staylink", "listing", _ten_items())
+    r = c.get("/staylink/listings?page=999&size=3")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["items"] == []
+    assert body["next"] is None
+    assert body["previous"] is not None
+    assert "page=998" in body["previous"]
+
+
+def test_page_number_url_preserves_other_query_params(page_url_client):
+    c, store = page_url_client
+    store.store_global_payload("staylink", "listing", _ten_items())
+    r = c.get("/staylink/listings?hotel=178&page=1&size=2")
+    assert r.status_code == 200
+    body = r.json()
+    assert "hotel=178" in body["next"]
+    assert "page=2" in body["next"]
+    assert "size=2" in body["next"]
+
+
+def test_page_number_url_total_field_present(page_url_client):
+    c, store = page_url_client
+    store.store_global_payload("staylink", "listing", _ten_items())
+    r = c.get("/staylink/listings?page=1&size=3")
+    assert r.status_code == 200
+    assert r.json()["total"] == 10
+
+
+def test_page_number_url_total_field_absent_not_in_response(store):
+    app = FastAPI()
+    app.state.base_url = "http://localhost:8000"
+    dp = _make_page_number_url_datapoint(total_field=None)
+    handler = make_paginated_handler("staylink", dp, _make_endpoint(), store, default_limit=3)
+    app.add_api_route("/staylink/listings", handler, methods=["GET"])
+    c = TestClient(app)
+    store.store_global_payload("staylink", "listing", _ten_items())
+    body = c.get("/staylink/listings?page=1&size=3").json()
+    assert "total" not in body
+
+
+def test_page_number_url_handler_name(store):
+    handler = make_paginated_handler("staylink", _make_page_number_url_datapoint(), _make_endpoint(), store, 10)
+    assert "paginated" in handler.__name__
+    assert "staylink" in handler.__name__
+
+
+def test_page_number_url_rate_limit_429_after_ceiling(store):
+    app = FastAPI()
+    app.state.base_url = "http://localhost:8000"
+    datapoint = _make_page_number_url_datapoint()
+    endpoint = _make_rate_limited_endpoint(requests_per_minute=2)
+    limiter = RateLimiter()
+    handler = make_paginated_handler("staylink", datapoint, endpoint, store, default_limit=3, limiter=limiter)
+    app.add_api_route("/staylink/listings", handler, methods=["GET"])
+    c = TestClient(app)
+    store.store_global_payload("staylink", "listing", _ten_items())
+
+    r1 = c.get("/staylink/listings?page=1")
+    r2 = c.get("/staylink/listings?page=1")
+    r3 = c.get("/staylink/listings?page=1")
+
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert r3.status_code == 429
+    assert "Retry-After" in r3.headers
+    assert "2 requests per minute" in r3.json()["detail"]
+
+
+def test_page_number_url_rate_limit_shared_across_pages(store):
+    app = FastAPI()
+    app.state.base_url = "http://localhost:8000"
+    datapoint = _make_page_number_url_datapoint()
+    endpoint = _make_rate_limited_endpoint(requests_per_minute=1)
+    limiter = RateLimiter()
+    handler = make_paginated_handler("staylink", datapoint, endpoint, store, default_limit=3, limiter=limiter)
+    app.add_api_route("/staylink/listings", handler, methods=["GET"])
+    c = TestClient(app)
+    store.store_global_payload("staylink", "listing", _ten_items())
+
+    r1 = c.get("/staylink/listings?page=1")
+    r2 = c.get("/staylink/listings?page=2")
+
+    assert r1.status_code == 200
+    assert r2.status_code == 429
+
+
+def test_page_number_url_no_rate_limit_when_not_configured(page_url_client):
+    c, store = page_url_client
+    store.store_global_payload("staylink", "listing", _ten_items())
+    for _ in range(20):
+        r = c.get("/staylink/listings?page=1")
+        assert r.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Regression: next/previous URL fields absent for other styles
+# ---------------------------------------------------------------------------
+
+
+def test_offset_limit_style_has_no_next_previous_url_fields(client):
+    c, store = client
+    store.store_global_payload("ratesync", "listing", _ten_items())
+    body = c.get("/ratesync/listings?offset=0&limit=3").json()
+    assert "next" not in body
+    assert "previous" not in body
+
+
+def test_page_number_style_has_no_next_previous_url_fields(page_client):
+    c, store = page_client
+    store.store_global_payload("staylink", "listing", _ten_items())
+    body = c.get("/staylink/listings?page=1&size=3").json()
+    assert "next" not in body
+    assert "previous" not in body
 
 
 # ---------------------------------------------------------------------------

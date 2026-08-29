@@ -1225,3 +1225,64 @@ def test_e2e_endpoint_without_rate_limit_never_429(rate_limit_e2e_client):
     for _ in range(20):
         r = c.get("/ratesync2/quotes-unlimited")
         assert r.status_code != 429
+
+
+# ---------------------------------------------------------------------------
+# End-to-end: paginated `page_number_url` style + rate_limit: via tmp_path YAML
+# ---------------------------------------------------------------------------
+
+
+_PAGINATED_URL_RATE_LIMIT_E2E_YAML = """\
+partner: ratesync3
+description: Paginated page_number_url rate limit e2e test partner
+datapoints:
+  - name: listing
+    description: Paginated listing (page_number_url, rate limited)
+    pattern: paginated
+    endpoints:
+      - method: GET
+        path: /ratesync3/listings
+        rate_limit:
+          requests_per_minute: 1
+        response:
+          status: 200
+    pagination:
+      style: page_number_url
+      items_field: results
+      total_field: count
+      next_url_field: next
+      previous_url_field: previous
+"""
+
+
+@pytest.fixture
+def paginated_url_rate_limit_e2e_client(tmp_path, store):
+    partner_dir = tmp_path / "ratesync3"
+    partner_dir.mkdir()
+    (partner_dir / "partner.yaml").write_text(_PAGINATED_URL_RATE_LIMIT_E2E_YAML)
+    app = FastAPI()
+    partners = load_partners(tmp_path)
+    register_routes(app, partners, store)
+    items = [{"id": i} for i in range(10)]
+    store.store_global_payload("ratesync3", "listing", items)
+    return TestClient(app, raise_server_exceptions=True), store
+
+
+def test_e2e_paginated_url_admin_partners_exposes_requests_per_minute(paginated_url_rate_limit_e2e_client):
+    c, _ = paginated_url_rate_limit_e2e_client
+    r = c.get("/imnot/admin/partners")
+    body = r.json()
+    partner = next(p for p in body if p["partner"] == "ratesync3")
+    listing_dp = next(dp for dp in partner["datapoints"] if dp["name"] == "listing")
+    assert listing_dp["endpoints"][0]["requests_per_minute"] == 1
+
+
+def test_e2e_paginated_url_rate_limit_drains_then_429(paginated_url_rate_limit_e2e_client):
+    c, _ = paginated_url_rate_limit_e2e_client
+    r1 = c.get("/ratesync3/listings?page=1&size=3")
+    assert r1.status_code == 200
+    assert r1.json()["next"] is not None
+    r2 = c.get("/ratesync3/listings?page=2")
+    assert r2.status_code == 429
+    assert "Retry-After" in r2.headers
+    assert "detail" in r2.json()

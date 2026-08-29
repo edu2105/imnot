@@ -33,6 +33,8 @@ _PAGINATION_VALID_KEYS = {
     "cursor_ttl_seconds",
     "page_param",
     "size_param",
+    "next_url_field",
+    "previous_url_field",
 }
 
 _VALIDATE_VALID_KEYS = {"body", "query", "headers"}
@@ -111,11 +113,17 @@ def _validate_validate_block(validate: dict[str, Any], path_hint: str) -> None:
                 )
 
 
-def _validate_rate_limit_block(rate_limit: dict[str, Any], path_hint: str, pattern: str) -> None:
-    if pattern != "fetch":
+def _validate_rate_limit_block(
+    rate_limit: dict[str, Any], path_hint: str, pattern: str, pagination: dict[str, Any] | None = None
+) -> None:
+    allowed = pattern == "fetch" or (
+        pattern == "paginated" and pagination is not None and pagination.get("style") == "page_number_url"
+    )
+    if not allowed:
         raise ValueError(
             f"Endpoint {path_hint}: 'rate_limit:' is declared on a '{pattern}' pattern endpoint, but "
-            f"'rate_limit:' is only supported on 'fetch' pattern endpoints in the current version"
+            f"'rate_limit:' is only supported on 'fetch' pattern endpoints, or 'paginated' pattern endpoints "
+            f"using pagination.style 'page_number_url', in the current version"
         )
 
     unknown_top = set(rate_limit.keys()) - _RATE_LIMIT_VALID_KEYS
@@ -135,7 +143,7 @@ def _validate_rate_limit_block(rate_limit: dict[str, Any], path_hint: str, patte
         )
 
 
-def _parse_endpoint(raw: dict[str, Any], pattern: str) -> EndpointDef:
+def _parse_endpoint(raw: dict[str, Any], pattern: str, pagination: dict[str, Any] | None = None) -> EndpointDef:
     method = raw.get("method")
     path = raw.get("path")
 
@@ -150,7 +158,7 @@ def _parse_endpoint(raw: dict[str, Any], pattern: str) -> EndpointDef:
 
     raw_rate_limit = raw.get("rate_limit")
     if raw_rate_limit is not None:
-        _validate_rate_limit_block(raw_rate_limit, f"{method.upper()} {path}", pattern)
+        _validate_rate_limit_block(raw_rate_limit, f"{method.upper()} {path}", pattern, pagination)
 
     return EndpointDef(
         method=method.upper(),
@@ -197,7 +205,7 @@ def _parse_datapoint(raw: dict[str, Any], partner: str) -> DatapointDef:
         style = raw_pagination.get("style")
         if not style:
             raise ValueError(f"Datapoint '{name}' in partner '{partner}': 'pagination.style' is required")
-        _VALID_STYLES = {"offset_limit", "cursor", "page_number"}
+        _VALID_STYLES = {"offset_limit", "cursor", "page_number", "page_number_url"}
         if style not in _VALID_STYLES:
             raise ValueError(
                 f"Datapoint '{name}' in partner '{partner}': 'pagination.style' must be one of "
@@ -209,13 +217,20 @@ def _parse_datapoint(raw: dict[str, Any], partner: str) -> DatapointDef:
             raise ValueError(
                 f"Datapoint '{name}' in partner '{partner}': 'pagination.cursor_field' is required for style 'cursor'"
             )
+        if style == "page_number_url" and (
+            not raw_pagination.get("next_url_field") or not raw_pagination.get("previous_url_field")
+        ):
+            raise ValueError(
+                f"Datapoint '{name}' in partner '{partner}': 'pagination.next_url_field' and "
+                f"'pagination.previous_url_field' are both required for style 'page_number_url'"
+            )
         pagination = raw_pagination
 
     return DatapointDef(
         name=name,
         description=raw.get("description", ""),
         pattern=pattern,
-        endpoints=[_parse_endpoint(e, pattern) for e in raw_endpoints],
+        endpoints=[_parse_endpoint(e, pattern, pagination) for e in raw_endpoints],
         pagination=pagination,
     )
 

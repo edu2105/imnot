@@ -463,7 +463,8 @@ curl -X POST http://localhost:8000/imnot/admin/partner/rate-push/callback/<reque
 ### Pattern: `paginated`
 
 **Use when:** the endpoint returns a list of items that consumers page through. Supports
-`offset/limit`, `cursor`, and `page-number` styles.
+`offset/limit`, `cursor`, `page-number`, and `page-number-URL` (DRF-style `next`/`previous`
+links) styles.
 
 **How it works:** you upload an array payload (the full dataset) via the admin API; imnot
 slices it at request time and wraps the slice in an envelope whose field names you define in
@@ -478,15 +479,17 @@ can hold independent datasets.
 
 | Field | Required | Style | Description |
 |-------|----------|-------|-------------|
-| `style` | Yes | all | Must be `offset_limit`, `cursor`, or `page_number` |
+| `style` | Yes | all | Must be `offset_limit`, `cursor`, `page_number`, or `page_number_url` |
 | `items_field` | Yes | all | Top-level response key that holds the item array (e.g. `items`, `results`, `data`) |
 | `total_field` | No | all | Top-level response key for total dataset count |
 | `has_more_field` | No | all | Top-level response key for boolean "more pages exist" flag |
 | `next_offset_field` | No | `offset_limit` | Top-level response key for the next page's offset value (null when no more pages); silently ignored for `page_number` |
 | `cursor_field` | Yes (cursor only) | `cursor` | Response key that carries the next-page cursor token (e.g. `nextCursor`); always present, `null` on last page |
 | `cursor_ttl_seconds` | No | `cursor` | Seconds before a cursor expires (default 3600); `0` means never expires |
-| `page_param` | No | `page_number` | Query parameter name for the page number (default `"page"`) |
-| `size_param` | No | `page_number` | Query parameter name for the page size (default `"size"`) |
+| `page_param` | No | `page_number`, `page_number_url` | Query parameter name for the page number (default `"page"`) |
+| `size_param` | No | `page_number`, `page_number_url` | Query parameter name for the page size (default `"size"`) |
+| `next_url_field` | Yes (`page_number_url` only) | `page_number_url` | Top-level response key for the absolute URL to the next page (null on last page) |
+| `previous_url_field` | Yes (`page_number_url` only) | `page_number_url` | Top-level response key for the absolute URL to the previous page (null on first page) |
 
 **Query parameters — `offset_limit` style:**
 
@@ -667,6 +670,67 @@ Response:
 }
 ```
 
+**Example — `page_number_url`:**
+
+Reproduces Django REST Framework's `PageNumberPagination` envelope: absolute `next`/`previous`
+URL strings instead of an opaque cursor or a `hasMore` boolean. URLs are built from
+`app.state.base_url` (not the incoming request's `Host` header), so they stay externally
+reachable even when imnot runs behind Docker or EKS.
+
+```yaml
+- name: listing
+  description: Paginated property listings (DRF-style page-number URLs)
+  pattern: paginated
+  endpoints:
+    - method: GET
+      path: /ratesync/listings
+      response:
+        status: 200
+  pagination:
+    style: page_number_url
+    items_field: results
+    total_field: count
+    next_url_field: next
+    previous_url_field: previous
+```
+
+Upload the dataset:
+```bash
+curl -X POST http://localhost:8000/imnot/admin/ratesync/listing/payload \
+  -H "Content-Type: application/json" \
+  -d '[{"id":1,"name":"Apt A"},{"id":2,"name":"Apt B"},{"id":3,"name":"Apt C"}]'
+```
+
+First page:
+```bash
+curl "http://localhost:8000/ratesync/listings?page=1&size=2"
+```
+
+Response:
+```json
+{
+  "count": 3,
+  "next": "http://localhost:8000/ratesync/listings?page=2&size=2",
+  "previous": null,
+  "results": [{"id": 1, "name": "Apt A"}, {"id": 2, "name": "Apt B"}]
+}
+```
+
+Follow the `next` URL:
+```bash
+curl "http://localhost:8000/ratesync/listings?page=2&size=2"
+```
+
+Response (last page — `next` is now `null`, `previous` points back at page 1):
+```json
+{
+  "count": 3,
+  "next": null,
+  "previous": "http://localhost:8000/ratesync/listings?page=1&size=2",
+  "results": [{"id": 3, "name": "Apt C"}]
+}
+```
+
 ---
 
 ## Request validation
@@ -805,7 +869,7 @@ The response also includes a `Retry-After` header (seconds, integer) telling the
 
 ### Notes
 
-- **v1 scope: `fetch` pattern only.** Declaring `rate_limit:` on any other pattern (`oauth`, `static`, `polling`, `callback`, `paginated`) raises a `ValueError` at startup.
+- **v1 scope: `fetch` pattern, plus `paginated` endpoints using `pagination.style: page_number_url`.** Declaring `rate_limit:` on any other pattern, or on a `paginated` endpoint using any other pagination style (`offset_limit`, `cursor`, plain `page_number`), raises a `ValueError` at startup.
 - Bucket state is in-memory only — it resets on every server restart (including `--reload` dev-mode restarts) and is not shared across multiple imnot instances.
 - `rate_limit:` is not hot-reloadable via `POST /imnot/admin/reload` — changing `requests_per_minute` requires a restart, matching `validate:`.
 - `rate_limit:` is per-endpoint, not per-datapoint, the same as `validate:`.
@@ -855,16 +919,17 @@ runs in a container and you cannot exec in to run the CLI. See the main README f
 - [ ] Polling steps that reference the generated UUID use `{id}` in their path
 - [ ] The polling fetch step has `returns_payload: true`
 - [ ] Every `callback` datapoint has exactly one endpoint with exactly one of `callback_url_field` or `callback_url_header` set (not both, not neither)
-- [ ] Every `paginated` datapoint has a `pagination:` block with `style` (`offset_limit`, `cursor`, or `page_number`) and `items_field` set
+- [ ] Every `paginated` datapoint has a `pagination:` block with `style` (`offset_limit`, `cursor`, `page_number`, or `page_number_url`) and `items_field` set
 - [ ] If `style: cursor`, `cursor_field` is also set in the `pagination:` block
-- [ ] The `pagination:` block contains only recognized keys: `style`, `items_field`, `total_field`, `has_more_field`, `next_offset_field`, `cursor_field`, `cursor_ttl_seconds`, `page_param`, `size_param`
+- [ ] If `style: page_number_url`, `next_url_field` and `previous_url_field` are both set in the `pagination:` block
+- [ ] The `pagination:` block contains only recognized keys: `style`, `items_field`, `total_field`, `has_more_field`, `next_offset_field`, `cursor_field`, `cursor_ttl_seconds`, `page_param`, `size_param`, `next_url_field`, `previous_url_field`
 - [ ] The payload uploaded for a `paginated` datapoint is a JSON array (not an object)
 - [ ] All `response` blocks are nested inside their endpoint, not at the datapoint level
 - [ ] No two endpoints across the whole file share the same `method` + `path` combination
 - [ ] No endpoint in this file shares `method` + `path` with an endpoint in any other partner file — imnot enforces this at startup and will refuse to start if a conflict is detected
 - [ ] If `validate:` is declared on an endpoint, only `body`, `query`, and `headers` are valid top-level keys — unknown keys raise an error at startup
 - [ ] Field rules under `validate:` use only recognized attributes: `required`, `type`, `allowed`, `pattern`, `min`, `max` — unknown attributes raise an error at startup
-- [ ] `rate_limit:` is only declared on `fetch`-pattern endpoints — declaring it on any other pattern raises an error at startup
+- [ ] `rate_limit:` is only declared on `fetch`-pattern endpoints, or on `paginated` endpoints using `pagination.style: page_number_url` — declaring it on any other pattern, or on a `paginated` endpoint using any other pagination style, raises an error at startup
 - [ ] `rate_limit.requests_per_minute` must be a positive integer; unknown keys under `rate_limit:` raise an error at startup
 - [ ] After saving, call `POST /imnot/admin/reload` or restart the server to pick up changes
 

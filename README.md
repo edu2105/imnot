@@ -19,7 +19,7 @@
 - **Zero code.** One YAML file per external API. No JVM, no framework, no boilerplate.
 - **Stateful, not just stubbed.** OAuth, polling, callbacks, paginated lists, and per-test session isolation — all modeled in YAML.
 - **Validation-aware.** Declare field rules in YAML — imnot rejects malformed requests with realistic 422 errors before returning a mock response.
-- **Rate-limit aware.** Declare a `requests_per_minute` ceiling on `fetch` endpoints — imnot enforces it with a token bucket and returns realistic `429` responses with a `Retry-After` header.
+- **Rate-limit aware.** Declare a `requests_per_minute` ceiling on `fetch` endpoints (and on `paginated` endpoints using the DRF-style `page_number_url` pagination) — imnot enforces it with a token bucket and returns realistic `429` responses with a `Retry-After` header.
 - **Ships with your tests.** Partner definitions are version-controlled alongside the integration they test and run anywhere Docker runs.
 
 ---
