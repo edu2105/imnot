@@ -1,5 +1,8 @@
 .PHONY: ui dev openapi
 
+# Use the project venv when it exists (local dev); fall back to python3 (CI, Docker).
+PYTHON ?= $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
+
 # ui: inline all CSS files into index.html for production (before packaging the wheel).
 #     Replaces everything between the IMNOT:CSS sentinel markers. Safe to run multiple times.
 #
@@ -10,10 +13,10 @@
 #     Run before tagging a release alongside 'make ui'.
 
 ui:
-	python3 scripts/css_build.py ui
+	$(PYTHON) scripts/css_build.py ui
 
 dev:
-	python3 scripts/css_build.py dev
+	$(PYTHON) scripts/css_build.py dev
 
 openapi:
-	python3 scripts/export_openapi.py
+	$(PYTHON) scripts/export_openapi.py
