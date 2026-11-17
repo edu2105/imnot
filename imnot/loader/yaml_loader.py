@@ -243,7 +243,9 @@ def _parse_datapoint(raw: dict[str, Any], partner: str) -> DatapointDef:
     )
 
 
-def _parse_partner(raw: dict[str, Any], source_path: Path) -> PartnerDef:
+def _parse_partner(raw: Any, source_path: Path) -> PartnerDef:
+    if not isinstance(raw, dict):
+        raise ValueError(f"Partner YAML at {source_path} must be a YAML mapping with a 'partner' key")
     partner = raw.get("partner")
     if not partner:
         raise ValueError(f"Partner YAML at {source_path} is missing the 'partner' key")
