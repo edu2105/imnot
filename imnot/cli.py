@@ -245,6 +245,10 @@ def start(
         if reload:
             os.environ["IMNOT_PARTNERS_DIR"] = str(resolved_partners_dir) if resolved_partners_dir else ""
             os.environ["IMNOT_DB_PATH"] = str(db_path)
+            # The factory runs in a fresh process: hand it the same imnot.toml this command resolved.
+            resolved_config = config_path or db_path.parent / "imnot.toml"
+            if resolved_config.exists():
+                os.environ["IMNOT_CONFIG_PATH"] = str(resolved_config.resolve())
             if effective_admin_key:
                 os.environ["IMNOT_ADMIN_KEY"] = effective_admin_key
             uvicorn.run(
