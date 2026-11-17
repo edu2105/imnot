@@ -226,3 +226,13 @@ def test_create_app_from_env_reads_toml_default_limit(tmp_path, monkeypatch):
     monkeypatch.setenv("IMNOT_CONFIG_PATH", str(toml))
     app = create_app_from_env()
     assert app.state.default_limit == 25
+
+
+def test_create_app_from_env_reads_toml_base_url(tmp_path, monkeypatch):
+    toml = tmp_path / "imnot.toml"
+    toml.write_text('[server]\nbase_url = "https://mocks.example.test"\n')
+    monkeypatch.setenv("IMNOT_PARTNERS_DIR", str(PARTNERS_DIR))
+    monkeypatch.setenv("IMNOT_DB_PATH", str(tmp_path / "test.db"))
+    monkeypatch.setenv("IMNOT_CONFIG_PATH", str(toml))
+    app = create_app_from_env()
+    assert app.state.base_url == "https://mocks.example.test"

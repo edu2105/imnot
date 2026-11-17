@@ -1254,3 +1254,20 @@ def test_resolve_db_finds_db_in_data_subdir(tmp_path):
         os.chdir(original)
 
     assert result == db.resolve()
+
+
+def test_start_reload_hands_resolved_toml_to_factory(runner, tmp_path, monkeypatch):
+    """--reload must pass the imnot.toml it resolved to the factory process (IMNOT_CONFIG_PATH)."""
+    # setenv first so monkeypatch restores the original (unset) state after the CLI writes os.environ.
+    monkeypatch.setenv("IMNOT_CONFIG_PATH", "placeholder")
+    monkeypatch.delenv("IMNOT_CONFIG_PATH")
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "imnot.toml").write_text('[server]\nbase_url = "https://mocks.example.test"\n')
+    with patch("imnot.cli.uvicorn.run"):
+        result = runner.invoke(
+            cli,
+            ["start", "--partners-dir", str(PARTNERS_DIR), "--db", str(data / "imnot.db"), "--reload"],
+        )
+    assert result.exit_code == 0, result.output
+    assert os.environ.get("IMNOT_CONFIG_PATH") == str((data / "imnot.toml").resolve())

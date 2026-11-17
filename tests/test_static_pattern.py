@@ -218,3 +218,28 @@ async def test_invalid_json_string_body_returned_as_raw_string():
     response = await handler(_empty_request())
     body = json.loads(response.body)
     assert body == "not json"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body", [[], [{"id": 1}], 0, False, ""])
+async def test_falsy_or_list_body_is_served_verbatim(body):
+    handler = _make_handler("GET", "/x", {"status": 200, "body": body})
+    resp = await handler(_empty_request())
+    assert json.loads(resp.body) == body
+
+
+@pytest.mark.asyncio
+async def test_missing_body_serves_empty_object():
+    handler = _make_handler("GET", "/x", {"status": 204})
+    resp = await handler(_empty_request())
+    assert json.loads(resp.body) == {}
+
+
+@pytest.mark.asyncio
+async def test_response_headers_are_applied():
+    handler = _make_handler(
+        "GET", "/x", {"status": 200, "body": {}, "headers": {"X-Partner-Version": "2", "Retry-After": 30}}
+    )
+    resp = await handler(_empty_request())
+    assert resp.headers["x-partner-version"] == "2"
+    assert resp.headers["retry-after"] == "30"

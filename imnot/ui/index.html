@@ -693,6 +693,18 @@ img, svg {
   scale: 0.97;
 }
 
+/* Disabled — e.g. Builder "Save Changes" with nothing changed. Neutral grey, no hover or press. */
+.btn:disabled,
+.btn-primary:disabled:hover,
+.btn-primary:disabled:active {
+  background-color: var(--color-border);
+  color: var(--color-muted);
+  box-shadow: none;
+  scale: 1;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 /* Secondary — outlined, subtle */
 .btn-secondary {
   background: transparent;
@@ -1963,7 +1975,7 @@ img, svg {
           <div id="builder-datapoints"></div>
 
           <!-- Add Datapoint button -->
-          <button onclick="builderAddDatapoint()" class="btn btn-secondary builder-add-btn">
+          <button onclick="_builderMarkDirty();builderAddDatapoint()" class="btn btn-secondary builder-add-btn">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
             </svg>
@@ -2783,6 +2795,16 @@ img, svg {
 
     function _builderMarkDirty() {
       _builderDirty = true;
+      _builderSyncSubmit();
+    }
+
+    // In edit mode there is nothing to save until the form changes.
+    function _builderSyncSubmit() {
+      var btn = document.getElementById('builder-submit-btn');
+      if (!btn) return;
+      var idle = _builderMode === 'edit' && !_builderDirty;
+      btn.disabled = idle;
+      btn.title = idle ? 'No changes to save' : '';
     }
 
     function showBuilder(mode, partnerName) {
@@ -2814,6 +2836,7 @@ img, svg {
       builderReset();
       _builderMode = 'edit';
       _builderOriginalName = partnerName;
+      _builderSyncSubmit();
 
       fetch('/imnot/admin/partners', { headers: authHeaders() })
         .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
@@ -2845,6 +2868,7 @@ img, svg {
       document.getElementById('builder-datapoints').innerHTML = '';
       document.getElementById('builder-yaml-preview').textContent = '';
       document.querySelectorAll('.field-error').forEach(function (el) { el.textContent = ''; });
+      _builderSyncSubmit();
     }
 
     function builderPreFill(partnerData) {
@@ -2972,6 +2996,9 @@ img, svg {
       // Ensure at least one datapoint block
       if (dps.length === 0) builderAddDatapoint();
       builderUpdatePreview();
+      // Pre-filling goes through the same helpers as user edits; it is not a change.
+      _builderDirty = false;
+      _builderSyncSubmit();
     }
 
     function builderAddDatapoint() {
@@ -3020,6 +3047,7 @@ img, svg {
     function builderRemoveDatapoint(idx) {
       var block = document.querySelector('.dp-block[data-dp-idx="' + idx + '"]');
       if (block) block.remove();
+      _builderMarkDirty();
       builderUpdatePreview();
     }
 
@@ -3858,15 +3886,30 @@ img, svg {
       btn.disabled = true;
       btn.textContent = 'Saving…';
 
-      var url = '/imnot/admin/partners' + (_builderMode === 'edit' ? '?force=true' : '');
-      fetch(url, {
+      // Edit mode asks the server to compare against the current partner.yaml first: the form
+      // does not round-trip every field (validate:, bodies, headers…), so a save could drop them.
+      var compareTo = _builderMode === 'edit' ? _builderOriginalName : '';
+      return _builderPost(result.yaml, submittedPartnerName, compareTo)
+        .catch(function (e) { notify('Network error: ' + e.message, 'error'); })
+        .finally(function () {
+          btn.textContent = origLabel;
+          _builderSyncSubmit();
+        });
+    }
+
+    function _builderPost(yamlText, submittedPartnerName, compareTo) {
+      var url = '/imnot/admin/partners';
+      if (_builderMode === 'edit') {
+        url += '?force=true' + (compareTo ? '&compare_to=' + encodeURIComponent(compareTo) : '');
+      }
+      return fetch(url, {
         method: 'POST',
         headers: (function () {
           var h = authHeaders();
           h['Content-Type'] = 'text/plain';
           return h;
         })(),
-        body: result.yaml,
+        body: yamlText,
       })
         .then(function (r) {
           if (r.status === 201 || r.status === 200) {
@@ -3874,15 +3917,28 @@ img, svg {
             var renamed = _builderMode === 'edit' && oldName && oldName !== submittedPartnerName;
             builderReset();
             if (renamed) {
+              // Deleting the old name unregisters its routes; reload then registers the new file's routes.
               return fetch('/imnot/admin/partners/' + encodeURIComponent(oldName), {
                 method: 'DELETE', headers: authHeaders(),
-              }).finally(function () { builderHighlightCard(submittedPartnerName); });
+              })
+                .then(function () {
+                  return fetch('/imnot/admin/reload', { method: 'POST', headers: authHeaders() });
+                })
+                .finally(function () { builderHighlightCard(submittedPartnerName); });
             }
             builderHighlightCard(submittedPartnerName);
             return;
           }
           return r.json().then(function (body) {
             var detail = body.detail || body.message || '';
+            if (r.status === 409 && body.dropped) {
+              var msg = 'Saving from the Builder would remove these fields from partner.yaml:\n\n  '
+                + body.dropped.join('\n  ')
+                + '\n\nComments in the file are not kept either. Edit the YAML by hand to keep them.'
+                + '\n\nSave anyway?';
+              if (confirm(msg)) return _builderPost(yamlText, submittedPartnerName, '');
+              return;
+            }
             if (r.status === 409) {
               notify('Partner already exists. Switch to edit mode or use force.', 'error');
             } else if (r.status === 422) {
@@ -3893,11 +3949,6 @@ img, svg {
               notify('Server error: HTTP ' + r.status + (detail ? ' — ' + detail : ''), 'error');
             }
           });
-        })
-        .catch(function (e) { notify('Network error: ' + e.message, 'error'); })
-        .finally(function () {
-          btn.disabled = false;
-          btn.textContent = origLabel;
         });
     }
 

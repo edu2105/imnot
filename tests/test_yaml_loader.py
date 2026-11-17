@@ -1139,3 +1139,32 @@ def test_rate_limit_on_paginated_cursor_style_raises():
 def test_rate_limit_on_paginated_page_number_style_raises():
     with pytest.raises(ValueError, match="only supported on 'fetch'"):
         parse_partner_yaml(_rate_limit_yaml_on_paginated_style("page_number"))
+
+
+@pytest.mark.parametrize("content", ["", "# only a comment\n", "- just\n- a list\n", "plain string\n"])
+def test_non_mapping_partner_yaml_is_skipped(tmp_path, content):
+    bad = tmp_path / "broken"
+    bad.mkdir()
+    (bad / "partner.yaml").write_text(content)
+    good = tmp_path / "ok"
+    good.mkdir()
+    (good / "partner.yaml").write_text(
+        "partner: ok\n"
+        "datapoints:\n"
+        "  - name: ping\n"
+        "    pattern: static\n"
+        "    endpoints:\n"
+        "      - method: GET\n"
+        "        path: /ok/ping\n"
+        "        response: {status: 200, body: {}}\n"
+    )
+
+    result = load_partners(tmp_path)
+
+    assert [p.partner for p in result] == ["ok"]
+
+
+@pytest.mark.parametrize("content", ["", "- a list\n"])
+def test_parse_partner_yaml_rejects_non_mapping(content):
+    with pytest.raises(ValueError, match="must be a YAML mapping"):
+        parse_partner_yaml(content)

@@ -157,8 +157,8 @@ fit the standard shape, use the `static` pattern with a `body:` block instead.
 **Use when:** the endpoint always returns a fixed JSON body regardless of input.
 Use for non-standard auth endpoints, health checks, or any endpoint with a fully known fixed response.
 
-**How it works:** imnot returns exactly what is defined under `response.body`. No payload storage.
-The response body can be updated without restarting the server: edit the YAML and call
+**How it works:** imnot returns exactly what is defined under `response.body` (and `response.headers`, if set). No payload storage.
+The response body and headers can be updated without restarting the server: edit the YAML and call
 `POST /imnot/admin/reload`.
 
 **Response config fields:**
@@ -166,7 +166,8 @@ The response body can be updated without restarting the server: edit the YAML an
 | Field | Required | Description |
 |-------|----------|-------------|
 | `status` | Yes | HTTP status code |
-| `body` | Yes | JSON body to return verbatim |
+| `body` | Yes | JSON body to return verbatim (object, array or scalar) |
+| `headers` | No | Response headers, e.g. `{X-Partner-Version: "2"}`. Values are sent as strings |
 
 **Example — non-standard token endpoint:**
 

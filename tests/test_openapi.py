@@ -104,3 +104,9 @@ def test_export_script_exits_zero(tmp_path):
         text=True,
     )
     assert result.returncode == 0
+
+
+def test_schema_version_matches_package(schema):
+    from importlib.metadata import version
+
+    assert schema["info"]["version"] == version("imnot")

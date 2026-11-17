@@ -156,3 +156,96 @@ def test_result_contains_partner_def(tmp_path):
     assert result.partner.description == "StayLink reservation API"
     assert len(result.partner.datapoints) == 1
     assert result.partner.datapoints[0].pattern == "fetch"
+
+
+# ---------------------------------------------------------------------------
+# dropped_fields — Builder edit-mode guard
+# ---------------------------------------------------------------------------
+
+_HAND_WRITTEN = """\
+partner: bookingco
+description: BookingCo
+datapoints:
+  - name: reservation
+    description: Fixed reservation
+    pattern: static
+    endpoints:
+      - method: GET
+        path: /bookingco/v1/reservation
+        validate:
+          query:
+            id: {required: true}
+        response:
+          status: 200
+          headers: {X-Version: "2"}
+          body:
+            reservationId: RES-001
+            nights: 2
+  - name: charges
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /bookingco/v1/charges
+        response:
+          status: 200
+"""
+
+_BUILDER_OUTPUT = """\
+partner: bookingco
+description: BookingCo
+datapoints:
+  - name: reservation
+    pattern: static
+    endpoints:
+      - method: GET
+        path: /bookingco/v1/reservation
+        response:
+          status: 200
+          body: {}
+  - name: charges
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /bookingco/v1/charges
+        response:
+          status: 200
+"""
+
+
+def test_dropped_fields_lists_what_the_builder_would_lose():
+    from imnot.partners import dropped_fields
+
+    assert dropped_fields(_HAND_WRITTEN, _BUILDER_OUTPUT) == [
+        "datapoints[reservation].description",
+        "datapoints[reservation].endpoints[GET /bookingco/v1/reservation].validate",
+        "datapoints[reservation].endpoints[GET /bookingco/v1/reservation].response.headers",
+        "datapoints[reservation].endpoints[GET /bookingco/v1/reservation].response.body.reservationId",
+        "datapoints[reservation].endpoints[GET /bookingco/v1/reservation].response.body.nights",
+    ]
+
+
+def test_dropped_fields_ignores_changed_values_and_removed_datapoints():
+    from imnot.partners import dropped_fields
+
+    edited = _HAND_WRITTEN.replace("status: 200", "status: 201").replace("description: BookingCo\n", "description: X\n")
+    without_charges = _HAND_WRITTEN.split("  - name: charges")[0]
+
+    assert dropped_fields(_HAND_WRITTEN, edited) == []
+    assert dropped_fields(_HAND_WRITTEN, without_charges) == []
+
+
+def test_dropped_fields_matches_endpoints_by_position_when_the_path_changes():
+    from imnot.partners import dropped_fields
+
+    moved = _HAND_WRITTEN.replace("/bookingco/v1/reservation\n", "/bookingco/v2/reservation\n")
+    moved_and_stripped = moved.replace("        validate:\n          query:\n            id: {required: true}\n", "")
+
+    assert dropped_fields(_HAND_WRITTEN, moved_and_stripped) == [
+        "datapoints[reservation].endpoints[GET /bookingco/v1/reservation].validate"
+    ]
+
+
+def test_dropped_fields_with_unparseable_old_file_reports_nothing():
+    from imnot.partners import dropped_fields
+
+    assert dropped_fields("", _BUILDER_OUTPUT) == []

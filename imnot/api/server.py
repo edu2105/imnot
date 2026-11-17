@@ -25,7 +25,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 from imnot.config import UIConfig, load_config
-from imnot.engine.router import register_routes
+from imnot.engine.router import _IMNOT_VERSION, register_routes
 from imnot.engine.session_store import SessionStore
 from imnot.engine.stress import StressStore
 from imnot.loader.yaml_loader import load_partners
@@ -103,7 +103,7 @@ def create_app(
     app = FastAPI(
         title="imnot",
         description="Stateful API mock server for integration testing",
-        version="0.1.0",
+        version=_IMNOT_VERSION,
         lifespan=lifespan,
     )
 
@@ -132,7 +132,9 @@ def create_app_from_env() -> FastAPI:
     - ``IMNOT_DB_PATH``       (default: ``imnot.db``)
     - ``IMNOT_ADMIN_KEY``     (default: none)
 
-    ``default_limit`` for the paginated pattern is read from ``imnot.toml`` via ``load_config()``.
+    - ``IMNOT_CONFIG_PATH``   (default: ``imnot.toml`` in the CWD)
+
+    ``base_url``, ``default_limit`` and the UI config are read from ``imnot.toml`` via ``load_config()``.
     """
     partners_dir_env = os.environ.get("IMNOT_PARTNERS_DIR", str(DEFAULT_PARTNERS_DIR))
     partners_dir = Path(partners_dir_env) if partners_dir_env else None
@@ -150,6 +152,7 @@ def create_app_from_env() -> FastAPI:
         partners_dir=partners_dir,
         db_path=db_path,
         admin_key=admin_key,
+        base_url=config.server.base_url,
         default_limit=default_limit,
         ui_config=config.ui,
     )
