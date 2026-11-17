@@ -218,7 +218,7 @@ def test_partner_bound_422_no_payload(app_client: TestClient):
             "mode": "partner",
             "partner": "staylink",
             "datapoint": "reservation",
-            "target_url": "http://nifi.internal/webhook",
+            "target_url": "http://ingest.example.test/webhook",
             "rate_per_second": 10,
             "total_count": 100,
         },

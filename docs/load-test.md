@@ -24,7 +24,7 @@ Fire any HTTP request at any URL. Useful for stress-testing your own infrastruct
 **Example — send 1 000 webhook events at 100/s, cycling through 5 property IDs:**
 
 ```
-Target URL:       https://nifi.internal/webhook
+Target URL:       https://ingest.example.test/webhook
 Method:           POST
 Payload Template: {"propertyId": "{{vary}}", "event": "checkin"}
 Vary Values:      P001
@@ -53,7 +53,7 @@ Fire the global payload already uploaded for a `callback`-pattern partner/datapo
 **Fields:**
 - **Partner** — any partner with at least one `callback`-pattern datapoint (other patterns are excluded)
 - **Datapoint** — the specific callback datapoint
-- **Target URL** — where to send the payload (typically your NiFi endpoint)
+- **Target URL** — where to send the payload (typically your integration's inbound webhook)
 - **Rate / second** and **Stop after** — same as standalone
 
 The payload is fetched once from the session store at run start. If no global payload has been uploaded for the selected partner/datapoint, the run is rejected with a `422` before it starts.

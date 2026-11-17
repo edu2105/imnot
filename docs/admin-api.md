@@ -142,7 +142,7 @@ Start a new stress run. Returns immediately with a `run_id`; poll `GET /{run_id}
   "mode": "partner",
   "partner": "staylink",
   "datapoint": "rate-push",
-  "target_url": "https://nifi.internal/webhook",
+  "target_url": "https://ingest.example.test/webhook",
   "rate_per_second": 500,
   "total_count": 5000
 }
