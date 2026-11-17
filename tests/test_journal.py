@@ -48,7 +48,14 @@ def test_does_not_record_imnot_routes_or_healthz(client):
     client.get("/imnot/admin/partners")
     client.get("/imnot/docs")
     client.get("/openapi.json")
+    client.get("/docs")
     assert _entries(client) == []
+
+
+def test_mock_routes_that_merely_start_like_docs_are_recorded(client):
+    client.get("/docsign/v1/envelopes")
+    client.get("/healthzcheck")
+    assert [e["path"] for e in _entries(client)] == ["/healthzcheck", "/docsign/v1/envelopes"]
 
 
 def test_redacts_secret_headers(client):

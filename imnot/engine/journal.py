@@ -21,7 +21,8 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 logger = logging.getLogger(__name__)
 
 MAX_BODY_BYTES = 64 * 1024
-_SKIP_PREFIXES = ("/imnot/", "/healthz", "/docs", "/redoc", "/openapi.json")
+_SKIP_PREFIXES = ("/imnot/", "/docs/")
+_SKIP_EXACT = {"/imnot", "/healthz", "/docs", "/redoc", "/openapi.json"}
 _SECRET_HEADERS = {"authorization", "proxy-authorization", "cookie", "x-api-key"}
 _SECRET_WORDS = re.compile(r"token|secret|password|api-key|apikey", re.IGNORECASE)
 REDACTED = "[redacted]"
@@ -42,7 +43,7 @@ class JournalMiddleware:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         path: str = scope.get("path", "")
-        if scope["type"] != "http" or path.startswith(_SKIP_PREFIXES) or path == "/imnot":
+        if scope["type"] != "http" or path in _SKIP_EXACT or path.startswith(_SKIP_PREFIXES):
             await self.app(scope, receive, send)
             return
 

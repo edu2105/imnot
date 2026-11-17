@@ -104,8 +104,9 @@ curl -s "http://localhost:8000/imnot/admin/requests?partner=bookingco&session=$S
 
 - Recorded: every request outside `/imnot/*`, `/healthz` and FastAPI's docs — including requests
   that match no mock route (`partner: null`, usually a 404), which helps spot a wrong URL.
-- Secrets are never stored: `Authorization`, `Proxy-Authorization`, `Cookie`, `X-Api-Key` and any
-  header whose name contains `token`, `secret`, `password` or `api-key` are saved as `[redacted]`.
+- Secret headers are saved as `[redacted]`: `Authorization`, `Proxy-Authorization`, `Cookie`,
+  `X-Api-Key` and any header whose name contains `token`, `secret`, `password` or `api-key`.
+  The query string and the body are stored as sent (e.g. a `client_secret` in a token request).
 - `body` is the raw request body as text, cut at 64 KB (`body_truncated: true`).
 - The newest 1000 entries are kept in `imnot.db`; older ones are dropped automatically.
 
