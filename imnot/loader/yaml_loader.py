@@ -106,7 +106,8 @@ class PartnerDef:
     seed_payloads: dict[str, Any] = field(default_factory=dict)
 
 
-# Patterns whose responses come from an uploaded payload. Single source: router, cli and postman import it.
+# Patterns whose responses come from an uploaded payload, so they get admin payload routes; oauth and
+# static are fully defined by the YAML. Single source: router, cli and postman import it.
 PAYLOAD_PATTERNS = {"fetch", "polling", "callback", "paginated"}
 
 

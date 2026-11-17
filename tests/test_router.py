@@ -1424,7 +1424,7 @@ datapoints:
 """
 
 
-def _seed_client(tmp_path, store, payload_text):
+def _seed_client(tmp_path, payload_text):
     partners_dir = tmp_path / "partners"
     (partners_dir / "seedco" / "payloads").mkdir(parents=True)
     (partners_dir / "seedco" / "partner.yaml").write_text(_SEED_YAML)
@@ -1433,15 +1433,15 @@ def _seed_client(tmp_path, store, payload_text):
     return TestClient(app), partners_dir
 
 
-def test_payload_file_is_served_without_any_upload(tmp_path, store):
+def test_payload_file_is_served_without_any_upload(tmp_path):
     """Through create_app, so the lifespan (store.init → seed) runs exactly like `imnot start`."""
-    c, _ = _seed_client(tmp_path, store, '{"total": 3}')
+    c, _ = _seed_client(tmp_path, '{"total": 3}')
     with c:
         assert c.get("/seedco/charges").json() == {"total": 3}
 
 
-def test_payload_file_wins_over_an_earlier_upload_on_reload_but_sessions_are_kept(tmp_path, store):
-    c, partners_dir = _seed_client(tmp_path, store, '{"v": 1}')
+def test_payload_file_wins_over_an_earlier_upload_on_reload_but_sessions_are_kept(tmp_path):
+    c, partners_dir = _seed_client(tmp_path, '{"v": 1}')
     with c:
         c.post("/imnot/admin/seedco/charges/payload", json={"v": "uploaded"})
         session = c.post("/imnot/admin/seedco/charges/payload/session", json={"v": "session"}).json()

@@ -49,10 +49,6 @@ logger = _cli_logger  # startup / registration events go to the CLI stream
 
 _IMNOT_VERSION = _pkg_version("imnot")
 
-# Patterns that store payload in the session store and therefore need admin
-# payload endpoints (GET/POST global + session).  oauth and static are fully
-# defined by the YAML and never consult the store, so they get no admin routes.
-
 
 def register_routes(
     app: FastAPI,
