@@ -1061,6 +1061,50 @@ def test_delete_partner_removes_file_and_list(tmp_path, store):
     assert "bookingco" not in names
 
 
+def test_delete_partner_unregisters_its_routes_only(tmp_path, store):
+    c, _ = _make_client(tmp_path, store)
+    c.post("/imnot/admin/partners", content=_NEW_PARTNER_YAML)
+    c.post("/imnot/admin/partners", content=_STATIC_PARTNER_YAML)
+    c.post("/imnot/admin/bookingco/reservation/payload", json={"id": "R1"})
+    assert c.get("/bookingco/v1/reservations/R1").status_code == 200
+
+    assert c.delete("/imnot/admin/partners/bookingco").status_code == 200
+
+    # Consumer route, its trailing-slash alias and the admin payload routes are gone.
+    assert c.get("/bookingco/v1/reservations/R1").status_code == 404
+    assert c.get("/bookingco/v1/reservations/R1/").status_code == 404
+    assert c.post("/imnot/admin/bookingco/reservation/payload", json={}).status_code == 404
+    assert c.get("/imnot/admin/bookingco/reservation/payload").status_code == 404
+    assert "/bookingco/v1/reservations/{id}" not in c.get("/openapi.json").json()["paths"]
+    # The other partner and the infra routes still work.
+    assert c.get("/staticco/status").status_code == 200
+    assert c.get("/imnot/admin/partners").status_code == 200
+
+
+def test_deleted_partner_can_be_registered_again(tmp_path, store):
+    c, _ = _make_client(tmp_path, store)
+    c.post("/imnot/admin/partners", content=_NEW_PARTNER_YAML)
+    c.delete("/imnot/admin/partners/bookingco")
+
+    r = c.post("/imnot/admin/partners", content=_NEW_PARTNER_YAML)
+
+    assert r.status_code == 201
+    assert r.json().get("conflicts", []) == []
+    c.post("/imnot/admin/bookingco/reservation/payload", json={"id": "R2"})
+    assert c.get("/bookingco/v1/reservations/R2").json() == {"id": "R2"}
+
+
+def test_delete_partner_named_like_an_infra_route_keeps_infra_routes(tmp_path, store):
+    c, _ = _make_client(tmp_path, store)
+    yaml_text = _NEW_PARTNER_YAML.replace("partner: bookingco", "partner: partners").replace("/bookingco/", "/p/")
+    assert c.post("/imnot/admin/partners", content=yaml_text).status_code == 201
+
+    assert c.delete("/imnot/admin/partners/partners").status_code == 200
+
+    assert c.get("/imnot/admin/partners").status_code == 200
+    assert c.delete("/imnot/admin/partners/nope").status_code == 404
+
+
 def test_delete_partner_not_found_returns_404(tmp_path, store):
     c, _ = _make_client(tmp_path, store)
     r = c.delete("/imnot/admin/partners/nonexistent")

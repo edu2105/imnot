@@ -29,6 +29,7 @@ Always available regardless of which partners are loaded:
 | `GET`  | `/healthz` | Health check — always returns `{"status":"ok","version":"…"}`, no auth required |
 | `GET`  | `/imnot/admin/partners` | List all loaded partners and their datapoints |
 | `POST` | `/imnot/admin/partners` | Validate and register a new partner from a raw YAML body — routes go live immediately |
+| `DELETE` | `/imnot/admin/partners/{partner_name}` | Delete the partner's directory and unregister its routes immediately — returns `200 {"status":"ok","partner":"…"}` or `404` |
 | `GET`    | `/imnot/admin/sessions` | List all active sessions with `session_id`, `partner`, `datapoint`, `created_at`, `last_used` |
 | `DELETE` | `/imnot/admin/sessions/{session_id}` | Delete a single session — returns `200 {"status":"ok","session_id":"…"}` or `404` |
 | `POST` | `/imnot/admin/reload` | Hot-reload partner YAMLs without restarting |

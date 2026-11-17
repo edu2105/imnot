@@ -268,6 +268,40 @@ def _register_consumer_routes(
             logger.debug("Registered paginated route %s %s", endpoint.method, endpoint.path)
 
 
+def _unregister_partner_routes(app: FastAPI, partner_name: str) -> None:
+    """Remove every consumer and admin route that *partner_name* registered, and its bookkeeping.
+
+    Infra routes (``/imnot/admin/partners``, ``/imnot/admin/reload``…) are never touched: admin
+    routes are matched by the exact paths ``_register_admin_routes`` builds, not by prefix.
+    """
+    registered: dict[tuple[str, str], str] = app.state.registered_routes
+    owned = {key for key, owner in registered.items() if owner.split("/", 1)[0] == partner_name}
+    admin_prefixes = {f"/imnot/admin/{p}/{dp}/" for (p, dp) in app.state.registered_admin_dps if p == partner_name}
+    admin_suffixes = ("payload", "payload/session", "payload/session/{session_id}", "callback/{request_id}/retrigger")
+    admin_paths = {prefix + suffix for prefix in admin_prefixes for suffix in admin_suffixes}
+
+    def _belongs(route: Any) -> bool:
+        path: str | None = getattr(route, "path", None)
+        methods: set[str] = getattr(route, "methods", None) or set()
+        if path is None:
+            return False
+        if path in admin_paths:
+            return True
+        canonical = path[:-1] if path.endswith("/") and path != "/" else path
+        return any((m, path) in owned or (m, canonical) in owned for m in methods)
+
+    app.router.routes[:] = [r for r in app.router.routes if not _belongs(r)]
+    for key in owned:
+        del registered[key]
+    app.state.registered_admin_dps.difference_update(
+        {k for k in app.state.registered_admin_dps if k[0] == partner_name}
+    )
+    for store_dict in (app.state.configs, app.state.paginated_config_refs):
+        for key in [k for k in store_dict if k[0] == partner_name]:
+            del store_dict[key]
+    app.openapi_schema = None  # rebuild /openapi.json without the removed routes
+
+
 # ---------------------------------------------------------------------------
 # Admin payload routes (dynamic per datapoint)
 # ---------------------------------------------------------------------------
@@ -466,6 +500,7 @@ def _register_infra_routes(
                 content={"detail": "Partner directory contains symlinks; refusing to delete.", "symlinks": symlinks},
             )
         shutil.rmtree(partner_dir)
+        _unregister_partner_routes(request.app, partner_name)
         for i, p in enumerate(partners):
             if p.partner == partner_name:
                 partners.pop(i)
