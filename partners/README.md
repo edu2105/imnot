@@ -246,7 +246,29 @@ step responds as completed immediately.
 |------|-----------|----------|
 | `generates_id: true` | Submit | Generate UUID, persist to store, deliver via header or body |
 | `returns_payload: true` | Fetch | Validate `{id}` in store (404 if unknown), return session/global payload |
-| *(neither)* | Static | Return configured status, headers, and body verbatim |
+| *(neither)* | Static | Return configured status, headers, and body verbatim. If the path has `{id}`, an id that no submit created returns `404` |
+
+#### Pending responses (status and fetch steps)
+
+Real async APIs answer "not ready yet" a few times before the result. Add `pending:` to the
+`response` of a status or fetch step:
+
+```yaml
+      - step: 2
+        method: GET
+        path: /staylink/reports/{id}/status
+        response:
+          status: 200
+          body: {state: DONE}
+          pending:
+            times: 2                 # required: the first 2 calls for each id are "pending"
+            status: 202              # optional, default 202
+            body: {state: RUNNING}   # optional (no body if omitted)
+            headers: {Retry-After: 1}  # optional
+```
+
+- Counted per request id, so every new submit starts from zero (in memory, reset on restart).
+- Needs `{id}` in the path and is not allowed on the submit step (`generates_id: true`).
 
 #### ID delivery (submit step)
 
@@ -996,6 +1018,7 @@ Run `imnot validate` to check all of this automatically. Unknown keys (usually t
 - [ ] If `id_header` is used, `id_header_value` contains `{id}`
 - [ ] Polling steps that reference the generated UUID use `{id}` in their path
 - [ ] The polling fetch step has `returns_payload: true`
+- [ ] A `pending:` block has `times` (positive integer), is on a step whose path has `{id}`, and not on the submit step
 - [ ] Every `callback` datapoint has exactly one endpoint with exactly one of `callback_url_field` or `callback_url_header` set (not both, not neither)
 - [ ] Every `paginated` datapoint has a `pagination:` block with `style` (`offset_limit`, `cursor`, `page_number`, or `page_number_url`) and `items_field` set
 - [ ] If `style: cursor`, `cursor_field` is also set in the `pagination:` block
