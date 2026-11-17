@@ -3,7 +3,7 @@
   "info": {
     "title": "imnot",
     "description": "Stateful API mock server for integration testing",
-    "version": "0.1.0"
+    "version": "1.5.0"
   },
   "paths": {
     "/imnot/docs": {

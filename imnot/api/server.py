@@ -17,6 +17,7 @@ import os
 import time
 import uuid
 from contextlib import asynccontextmanager
+from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from typing import AsyncGenerator
 
@@ -103,7 +104,7 @@ def create_app(
     app = FastAPI(
         title="imnot",
         description="Stateful API mock server for integration testing",
-        version="0.1.0",
+        version=_pkg_version("imnot"),
         lifespan=lifespan,
     )
 
