@@ -56,7 +56,7 @@ MAX_DELAY_MS = 60_000
 _RESPONSE_KEYS: dict[str, set[str]] = {
     "static": {"status", "body", "headers"},
     "oauth": {"status", "token_type", "expires_in"},
-    "fetch": {"status"},
+    "fetch": {"status", "payload_by"},
     "paginated": {"status"},
     "callback": {"status", "callback_url_field", "callback_url_header", "callback_method", "callback_delay_seconds"},
     "polling": {
@@ -296,6 +296,13 @@ def _parse_endpoint(
             raise ValueError(
                 f"{where}: callback needs exactly one of "
                 "'response.callback_url_field' or 'response.callback_url_header'"
+            )
+    payload_by = response.get("payload_by")
+    if pattern == "fetch" and payload_by is not None:
+        if not isinstance(payload_by, str) or f"{{{payload_by}}}" not in path:
+            raise ValueError(
+                f"{where}: 'response.payload_by' must name a path parameter, "
+                f"e.g. 'id' for '{{id}}' (got {payload_by!r})"
             )
     if pattern == "polling" and response.get("pending") is not None:
         _validate_pending_block(response["pending"], response, path, where)

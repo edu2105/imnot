@@ -40,6 +40,7 @@ def make_fetch_handler(
 
     dp_name = datapoint.name
     status_code: int = endpoint.response.get("status", 200)
+    payload_by: str | None = endpoint.response.get("payload_by")  # path param that selects an entry
     validate_rules = endpoint.validate
     rate_limit = endpoint.rate_limit
     capacity = rate_limit["requests_per_minute"] if rate_limit is not None else None
@@ -81,6 +82,21 @@ def make_fetch_handler(
                 else f"No global payload found for {partner}/{dp_name}"
             )
             return JSONResponse(status_code=404, content={"detail": detail})
+
+        if payload_by is not None:
+            # The payload is a map {<path param value>: <response>}; pick this request's entry.
+            if not isinstance(payload, dict):
+                return JSONResponse(
+                    status_code=422,
+                    content={"detail": f"Payload must be a JSON object keyed by '{payload_by}' (payload_by)"},
+                )
+            key = request.path_params.get(payload_by)
+            if key not in payload:
+                return JSONResponse(
+                    status_code=404,
+                    content={"detail": f"No payload entry for {payload_by} '{key}' in {partner}/{dp_name}"},
+                )
+            payload = payload[key]
 
         return JSONResponse(status_code=status_code, content=payload)
 
