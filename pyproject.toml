@@ -42,6 +42,11 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["imnot"]
 
+# Served by GET /imnot/docs and /imnot/docs/partners (see _DOC_FILES in imnot/engine/router.py).
+[tool.hatch.build.targets.wheel.force-include]
+"README.md" = "imnot/_docs/README.md"
+"partners/README.md" = "imnot/_docs/partners-README.md"
+
 [tool.pytest.ini_options]
 asyncio_mode = "strict"
 

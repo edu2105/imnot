@@ -38,13 +38,35 @@ def client_no_partners_dir(store):
 
 
 @pytest.fixture
-def client_missing_files(store, tmp_path):
-    """Client whose partners_dir points to a directory with no README files."""
+def client_missing_files(store, tmp_path, monkeypatch):
+    """Client where neither the packaged docs nor the repo-root docs exist."""
+    import imnot.engine.router as router_mod
+
+    missing = (tmp_path / "nope.md", tmp_path / "nope2.md")
+    monkeypatch.setattr(router_mod, "_DOC_FILES", {"readme": missing, "partners": missing})
+    app = FastAPI()
+    register_routes(app, [], store, partners_dir=tmp_path)
+    return TestClient(app)
+
+
+def test_docs_serve_imnot_readme_not_the_users_project_readme(store, tmp_path):
+    """A pip-installed imnot must not serve the user's own README.md from the project root."""
+    (tmp_path / "README.md").write_text("MY PROJECT")
     partners_subdir = tmp_path / "partners"
     partners_subdir.mkdir()
     app = FastAPI()
     register_routes(app, [], store, partners_dir=partners_subdir)
-    return TestClient(app)
+    body = TestClient(app).get("/imnot/docs").text
+    assert "MY PROJECT" not in body and "imnot" in body
+
+
+def test_wheel_ships_both_readmes():
+    import tomllib
+    from pathlib import Path
+
+    pyproject = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text())
+    included = pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
+    assert included == {"README.md": "imnot/_docs/README.md", "partners/README.md": "imnot/_docs/partners-README.md"}
 
 
 # ---------------------------------------------------------------------------
