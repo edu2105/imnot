@@ -7,6 +7,7 @@ from click.testing import CliRunner
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from imnot.api.server import create_app
 from imnot.cli import cli
 from imnot.engine.router import register_routes
 from imnot.engine.session_store import SessionStore
@@ -1428,23 +1429,26 @@ def _seed_client(tmp_path, store, payload_text):
     (partners_dir / "seedco" / "payloads").mkdir(parents=True)
     (partners_dir / "seedco" / "partner.yaml").write_text(_SEED_YAML)
     (partners_dir / "seedco" / "payloads" / "charges.json").write_text(payload_text)
-    app = FastAPI()
-    register_routes(app, load_partners(partners_dir), store, partners_dir=partners_dir)
+    app = create_app(partners_dir=partners_dir, db_path=tmp_path / "seed.db")
     return TestClient(app), partners_dir
 
 
 def test_payload_file_is_served_without_any_upload(tmp_path, store):
+    """Through create_app, so the lifespan (store.init → seed) runs exactly like `imnot start`."""
     c, _ = _seed_client(tmp_path, store, '{"total": 3}')
-    assert c.get("/seedco/charges").json() == {"total": 3}
+    with c:
+        assert c.get("/seedco/charges").json() == {"total": 3}
 
 
 def test_payload_file_wins_over_an_earlier_upload_on_reload_but_sessions_are_kept(tmp_path, store):
     c, partners_dir = _seed_client(tmp_path, store, '{"v": 1}')
-    c.post("/imnot/admin/seedco/charges/payload", json={"v": "uploaded"})
-    session_id = c.post("/imnot/admin/seedco/charges/payload/session", json={"v": "session"}).json()["session_id"]
-    (partners_dir / "seedco" / "payloads" / "charges.json").write_text('{"v": 2}')
+    with c:
+        c.post("/imnot/admin/seedco/charges/payload", json={"v": "uploaded"})
+        session = c.post("/imnot/admin/seedco/charges/payload/session", json={"v": "session"}).json()
+        (partners_dir / "seedco" / "payloads" / "charges.json").write_text('{"v": 2}')
 
-    assert c.post("/imnot/admin/reload").status_code == 200
+        assert c.post("/imnot/admin/reload").status_code == 200
 
-    assert c.get("/seedco/charges").json() == {"v": 2}
-    assert c.get("/seedco/charges", headers={"X-Imnot-Session": session_id}).json() == {"v": "session"}
+        assert c.get("/seedco/charges").json() == {"v": 2}
+        headers = {"X-Imnot-Session": session["session_id"]}
+        assert c.get("/seedco/charges", headers=headers).json() == {"v": "session"}

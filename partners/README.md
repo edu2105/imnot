@@ -917,6 +917,8 @@ partners/bookingco/
   source of truth. Session payloads (`X-Imnot-Session`) are never touched.
 - A file with invalid JSON, a name that matches no datapoint, or a non-array `paginated` payload is
   skipped with a warning in the log; `imnot validate` reports it as an error.
+- Deleting a file does **not** clear the global payload it seeded (it lives in `imnot.db`). To reset
+  it, upload a new one or delete `imnot.db`.
 
 ---
 

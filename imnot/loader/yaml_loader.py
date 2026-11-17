@@ -106,7 +106,7 @@ class PartnerDef:
     seed_payloads: dict[str, Any] = field(default_factory=dict)
 
 
-# Patterns whose responses come from an uploaded payload (mirrors router._PAYLOAD_PATTERNS).
+# Patterns whose responses come from an uploaded payload. Single source: router, cli and postman import it.
 PAYLOAD_PATTERNS = {"fetch", "polling", "callback", "paginated"}
 
 

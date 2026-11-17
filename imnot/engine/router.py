@@ -52,7 +52,6 @@ _IMNOT_VERSION = _pkg_version("imnot")
 # Patterns that store payload in the session store and therefore need admin
 # payload endpoints (GET/POST global + session).  oauth and static are fully
 # defined by the YAML and never consult the store, so they get no admin routes.
-_PAYLOAD_PATTERNS = PAYLOAD_PATTERNS
 
 
 def register_routes(
@@ -119,10 +118,9 @@ def register_routes(
                 app.state.rate_limiter,
                 default_limit,
             )
-            if datapoint.pattern in _PAYLOAD_PATTERNS:
+            if datapoint.pattern in PAYLOAD_PATTERNS:
                 _register_admin_routes(app, partner, datapoint, store)
                 registered_admin_dps.add((partner.partner, datapoint.name))
-    _seed_payloads(store, partners)
     logger.info(
         "Registered routes for %d partner(s): %s",
         len(partners),
@@ -130,11 +128,12 @@ def register_routes(
     )
 
 
-def _seed_payloads(store: SessionStore, partners: list[PartnerDef]) -> None:
+def seed_payloads(store: SessionStore, partners: list[PartnerDef]) -> None:
     """Store payloads from ``partners/<partner>/payloads/*.json`` as global payloads.
 
     The files are the source of truth: they overwrite any global payload uploaded earlier for the
-    same datapoint (sessions are untouched). Runs at startup and on every reload.
+    same datapoint (sessions are untouched). Called from the app lifespan once the store is
+    initialised (``create_app``), and on every reload.
     """
     for partner in partners:
         for dp_name, payload in partner.seed_payloads.items():
@@ -632,12 +631,12 @@ def _register_infra_routes(
                         conflicts.append(str(exc))
 
                 # Register admin routes for new payload-pattern datapoints
-                if dp.pattern in _PAYLOAD_PATTERNS and (partner.partner, dp.name) not in registered_admin:
+                if dp.pattern in PAYLOAD_PATTERNS and (partner.partner, dp.name) not in registered_admin:
                     _register_admin_routes(request.app, partner, dp, store_)
                     registered_admin.add((partner.partner, dp.name))
                     added.append(f"admin routes for {partner.partner}/{dp.name}")
 
-        _seed_payloads(store_, new_partners)
+        seed_payloads(store_, new_partners)
 
         # Sync partners list in-place so list_partners() closure sees the change.
         existing_names = {p.partner for p in partners}
@@ -748,7 +747,7 @@ def _register_infra_routes(
                     conflicts.append(str(exc))
 
             # Register admin routes for new payload-pattern datapoints
-            if dp.pattern in _PAYLOAD_PATTERNS and (partner.partner, dp.name) not in registered_admin_:
+            if dp.pattern in PAYLOAD_PATTERNS and (partner.partner, dp.name) not in registered_admin_:
                 _register_admin_routes(request.app, partner, dp, store_)
                 registered_admin_.add((partner.partner, dp.name))
                 added.append(f"admin routes for {partner.partner}/{dp.name}")
@@ -763,7 +762,7 @@ def _register_infra_routes(
                     partners[i] = partner
                     break
 
-        payload_dp_names = {dp.name for dp in partner.datapoints if dp.pattern in _PAYLOAD_PATTERNS}
+        payload_dp_names = {dp.name for dp in partner.datapoints if dp.pattern in PAYLOAD_PATTERNS}
         status_code = 201 if result.created else 200
         return JSONResponse(
             status_code=status_code,
