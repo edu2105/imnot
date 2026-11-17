@@ -207,9 +207,9 @@ def _register_consumer_routes(
 ) -> None:
     owner = f"{partner.partner}/{datapoint.name}"
 
-    def _add(path: str, handler: Any, method: str) -> None:
+    def _add(endpoint: EndpointDef, handler: Any) -> None:
         """Register canonical path + trailing-slash alias (hidden from schema), with delay_ms/fail applied."""
-        endpoint = next(ep for ep in datapoint.endpoints if ep.path == path and ep.method.upper() == method.upper())
+        path, method = endpoint.path, endpoint.method
         handler = with_faults(handler, endpoint, app.state.fault_counters)
         app.add_api_route(path, handler, methods=[method])
         if path != "/":
@@ -219,7 +219,7 @@ def _register_consumer_routes(
         for endpoint in datapoint.endpoints:
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             handler = make_oauth_handler(endpoint)
-            _add(endpoint.path, handler, endpoint.method)
+            _add(endpoint, handler)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered oauth route %s %s", endpoint.method, endpoint.path)
 
@@ -227,7 +227,7 @@ def _register_consumer_routes(
         for endpoint in datapoint.endpoints:
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             handler = make_static_handler(partner.partner, datapoint.name, endpoint, configs)
-            _add(endpoint.path, handler, endpoint.method)
+            _add(endpoint, handler)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered static route %s %s", endpoint.method, endpoint.path)
 
@@ -235,7 +235,7 @@ def _register_consumer_routes(
         for endpoint in datapoint.endpoints:
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             handler = make_fetch_handler(partner.partner, datapoint, endpoint, store, limiter)
-            _add(endpoint.path, handler, endpoint.method)
+            _add(endpoint, handler)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered fetch route %s %s", endpoint.method, endpoint.path)
 
@@ -249,7 +249,7 @@ def _register_consumer_routes(
         for step_num, handler in handlers.items():
             endpoint = step_map[step_num]
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
-            _add(endpoint.path, handler, endpoint.method)
+            _add(endpoint, handler)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug(
                 "Registered polling step %d route %s %s",
@@ -262,7 +262,7 @@ def _register_consumer_routes(
         for endpoint in datapoint.endpoints:
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             handler = make_push_handler(partner.partner, datapoint, endpoint, store)
-            _add(endpoint.path, handler, endpoint.method)
+            _add(endpoint, handler)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered callback route %s %s", endpoint.method, endpoint.path)
 
@@ -275,7 +275,7 @@ def _register_consumer_routes(
             handler = make_paginated_handler(
                 partner.partner, datapoint, endpoint, store, default_limit, pagination_ref, limiter
             )
-            _add(endpoint.path, handler, endpoint.method)
+            _add(endpoint, handler)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered paginated route %s %s", endpoint.method, endpoint.path)
 
