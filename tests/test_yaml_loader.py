@@ -1287,3 +1287,69 @@ def test_broken_callback_partner_is_skipped_at_startup_not_fatal(tmp_path):
     good.mkdir()
     (good / "partner.yaml").write_text(_yaml().replace("acme", "good"))
     assert [p.partner for p in load_partners(tmp_path)] == ["good"]
+
+
+# ---------------------------------------------------------------------------
+# Payload files: partners/<partner>/payloads/<datapoint>.json
+# ---------------------------------------------------------------------------
+
+_PAYLOAD_PARTNER = """\
+partner: acme
+datapoints:
+  - name: charges
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /acme/charges
+        response: {status: 200}
+  - name: listings
+    pattern: paginated
+    pagination: {style: offset_limit, items_field: items}
+    endpoints:
+      - method: GET
+        path: /acme/listings
+        response: {status: 200}
+  - name: ping
+    pattern: static
+    endpoints:
+      - method: GET
+        path: /acme/ping
+        response: {status: 200, body: {}}
+"""
+
+
+def _payload_partner_dir(tmp_path, files):
+    d = tmp_path / "acme"
+    (d / "payloads").mkdir(parents=True)
+    (d / "partner.yaml").write_text(_PAYLOAD_PARTNER)
+    for name, text in files.items():
+        (d / "payloads" / name).write_text(text)
+    return tmp_path
+
+
+def test_payload_files_are_loaded_as_seed_payloads(tmp_path):
+    root = _payload_partner_dir(tmp_path, {"charges.json": '{"total": 3}', "listings.json": '[{"id": 1}]'})
+    (partner,) = load_partners(root)
+    assert partner.seed_payloads == {"charges": {"total": 3}, "listings": [{"id": 1}]}
+
+
+@pytest.mark.parametrize(
+    "name, text, problem",
+    [
+        ("charges.json", "{not json", "invalid JSON"),
+        ("nope.json", "{}", "no datapoint named 'nope'"),
+        ("ping.json", "{}", "takes no payload"),
+        ("listings.json", '{"items": []}', "must be a JSON array"),
+    ],
+)
+def test_bad_payload_files_are_skipped_with_a_warning(tmp_path, caplog, name, text, problem):
+    root = _payload_partner_dir(tmp_path, {name: text})
+    with caplog.at_level("WARNING"):
+        (partner,) = load_partners(root)
+    assert partner.seed_payloads == {}
+    assert problem in caplog.text
+
+
+def test_partner_without_payloads_dir_has_no_seeds():
+    for partner in load_partners(PARTNERS_DIR):
+        assert partner.seed_payloads == {}

@@ -16,8 +16,10 @@ Each partner lives in its own subdirectory:
 partners/
 └── {partner-name}/
     ├── partner.yaml        ← the definition (required)
-    └── payloads/           ← optional example payload files
+    └── payloads/           ← optional: <datapoint>.json files loaded as global payloads
 ```
+
+See [Payload files](#payload-files) for how `payloads/` is loaded.
 
 ---
 
@@ -893,6 +895,28 @@ The response also includes a `Retry-After` header (seconds, integer) telling the
 - Bucket state is in-memory only — it resets on every server restart (including `--reload` dev-mode restarts) and is not shared across multiple imnot instances.
 - `rate_limit:` is not hot-reloadable via `POST /imnot/admin/reload` — changing `requests_per_minute` requires a restart, matching `validate:`.
 - `rate_limit:` is per-endpoint, not per-datapoint, the same as `validate:`.
+
+---
+
+## Payload files
+
+For the patterns that serve a payload (`fetch`, `polling`, `callback`, `paginated`), you can keep the
+payload in the repo next to the YAML instead of uploading it on every run:
+
+```
+partners/bookingco/
+├── partner.yaml
+└── payloads/
+    └── charges.json        ← global payload for the "charges" datapoint
+```
+
+- The file name is the datapoint name. The content is exactly what you would `POST` to
+  `/imnot/admin/<partner>/<datapoint>/payload` (for `paginated`, a JSON array of items).
+- Files are loaded as the **global** payload at `imnot start` and on every `POST /imnot/admin/reload`.
+  They overwrite a global payload uploaded earlier for the same datapoint, so the repo stays the
+  source of truth. Session payloads (`X-Imnot-Session`) are never touched.
+- A file with invalid JSON, a name that matches no datapoint, or a non-array `paginated` payload is
+  skipped with a warning in the log; `imnot validate` reports it as an error.
 
 ---
 

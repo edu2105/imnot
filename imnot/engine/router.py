@@ -39,7 +39,7 @@ from imnot.engine.patterns.static import make_static_handler
 from imnot.engine.rate_limiter import RateLimiter
 from imnot.engine.session_store import SessionStore
 from imnot.engine.stress_router import register_stress_routes
-from imnot.loader.yaml_loader import DatapointDef, EndpointDef, PartnerDef, load_partners
+from imnot.loader.yaml_loader import PAYLOAD_PATTERNS, DatapointDef, EndpointDef, PartnerDef, load_partners
 from imnot.partners import dropped_fields, register_partner
 from imnot.postman import build_postman_collection
 
@@ -52,7 +52,7 @@ _IMNOT_VERSION = _pkg_version("imnot")
 # Patterns that store payload in the session store and therefore need admin
 # payload endpoints (GET/POST global + session).  oauth and static are fully
 # defined by the YAML and never consult the store, so they get no admin routes.
-_PAYLOAD_PATTERNS = {"fetch", "polling", "callback", "paginated"}
+_PAYLOAD_PATTERNS = PAYLOAD_PATTERNS
 
 
 def register_routes(
@@ -122,11 +122,24 @@ def register_routes(
             if datapoint.pattern in _PAYLOAD_PATTERNS:
                 _register_admin_routes(app, partner, datapoint, store)
                 registered_admin_dps.add((partner.partner, datapoint.name))
+    _seed_payloads(store, partners)
     logger.info(
         "Registered routes for %d partner(s): %s",
         len(partners),
         [p.partner for p in partners],
     )
+
+
+def _seed_payloads(store: SessionStore, partners: list[PartnerDef]) -> None:
+    """Store payloads from ``partners/<partner>/payloads/*.json`` as global payloads.
+
+    The files are the source of truth: they overwrite any global payload uploaded earlier for the
+    same datapoint (sessions are untouched). Runs at startup and on every reload.
+    """
+    for partner in partners:
+        for dp_name, payload in partner.seed_payloads.items():
+            store.store_global_payload(partner.partner, dp_name, payload)
+            _cli_logger.info("Seeded global payload for %s/%s from payloads/%s.json", partner.partner, dp_name, dp_name)
 
 
 # ---------------------------------------------------------------------------
@@ -623,6 +636,8 @@ def _register_infra_routes(
                     _register_admin_routes(request.app, partner, dp, store_)
                     registered_admin.add((partner.partner, dp.name))
                     added.append(f"admin routes for {partner.partner}/{dp.name}")
+
+        _seed_payloads(store_, new_partners)
 
         # Sync partners list in-place so list_partners() closure sees the change.
         existing_names = {p.partner for p in partners}

@@ -30,7 +30,7 @@ from imnot.api.server import create_app
 from imnot.config import load_config
 from imnot.engine.router import _PAYLOAD_PATTERNS
 from imnot.engine.session_store import SessionStore
-from imnot.loader.yaml_loader import load_partners, parse_partner_yaml
+from imnot.loader.yaml_loader import load_partners, load_payload_files, parse_partner_yaml
 from imnot.logging_setup import configure_logging
 from imnot.partners import register_partner
 from imnot.postman import build_postman_collection, collection_stats
@@ -432,7 +432,7 @@ def status(db: str) -> None:
     help="Directory containing partner YAML definitions.",
 )
 def validate(partners_dir: str) -> None:
-    """Check every partner.yaml strictly: schema errors, unknown keys and route conflicts.
+    """Check every partner.yaml strictly: schema errors, unknown keys, payload files and route conflicts.
 
     Exits 1 if anything is wrong. `imnot start` is more lenient: it only warns about unknown keys.
     """
@@ -459,19 +459,22 @@ def validate(partners_dir: str) -> None:
             for problem in str(exc).split("; "):
                 click.echo(f"      {problem}")
             continue
-        conflicts = []
+        problems = []
+        _, payload_problems = load_payload_files(partner, yaml_path.parent / "payloads")
+        problems.extend(payload_problems)
         for dp in partner.datapoints:
             for ep in dp.endpoints:
                 key = (ep.method, ep.path)
                 owner = f"{partner.partner}/{dp.name}"
                 if key in seen_routes and seen_routes[key] != owner:
-                    conflicts.append(f"{ep.method} {ep.path} is already defined by '{seen_routes[key]}'")
+                    other = seen_routes[key]
+                    problems.append(f"Route conflict: {ep.method} {ep.path} is already defined by '{other}'")
                 seen_routes.setdefault(key, owner)
-        if conflicts:
+        if problems:
             failed += 1
             click.echo(f"{click.style('FAIL', fg='red')}  {label}")
-            for problem in conflicts:
-                click.echo(f"      Route conflict: {problem}")
+            for problem in problems:
+                click.echo(f"      {problem}")
         else:
             click.echo(f"{click.style('OK', fg='green')}    {label}  ({len(partner.datapoints)} datapoint(s))")
 

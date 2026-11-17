@@ -1339,3 +1339,12 @@ def test_generate_dry_run_rejects_unknown_key(runner, tmp_path):
     result = runner.invoke(cli, ["generate", "--file", str(f), "--partners-dir", str(tmp_path), "--dry-run"])
     assert result.exit_code != 0
     assert "bodyy" in result.output
+
+
+def test_validate_reports_bad_payload_files(runner, tmp_path):
+    _write_partner(tmp_path, "acme", _VALID_PARTNER.format(name="acme", path="/acme"))
+    (tmp_path / "acme" / "payloads").mkdir()
+    (tmp_path / "acme" / "payloads" / "ping.json").write_text("{}")
+    result = runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "payloads/ping.json" in result.output and "takes no payload" in result.output
