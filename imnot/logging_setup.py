@@ -58,7 +58,10 @@ class ArchivingRotatingHandler(logging.handlers.RotatingFileHandler):
 
 
 def configure_logging(config: LoggingConfig, log_dir: Path) -> None:
-    """Attach rotating file handlers (and optionally stdout) to imnot.cli and imnot.http."""
+    """Attach rotating file handlers (and optionally stdout) to imnot.cli and imnot.http.
+
+    Every other ``imnot.*`` logger ends up in the CLI log file, with warnings also on the console.
+    """
     level = logging.DEBUG if config.debug else logging.INFO
     formatter = logging.Formatter(_FORMAT)
 
@@ -88,3 +91,17 @@ def configure_logging(config: LoggingConfig, log_dir: Path) -> None:
             sh = logging.StreamHandler()
             sh.setFormatter(formatter)
             log.addHandler(sh)
+
+    # Module loggers (imnot.loader.yaml_loader, imnot.engine.patterns.push, …) have no handler of
+    # their own: route them to the CLI log file, and keep warnings on the console as before
+    # (without this they only reached Python's last-resort stderr handler, never a file).
+    # propagate stays True so pytest's caplog still sees them; root has no handlers by default.
+    cli_file = logging.getLogger("imnot.cli").handlers[0]
+    parent = logging.getLogger("imnot")
+    parent.setLevel(level)
+    parent.handlers.clear()
+    parent.addHandler(cli_file)
+    console = logging.StreamHandler()
+    console.setFormatter(formatter)
+    console.setLevel(logging.DEBUG if config.stdout else logging.WARNING)
+    parent.addHandler(console)
