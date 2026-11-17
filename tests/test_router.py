@@ -1154,6 +1154,23 @@ def test_renamed_partner_routes_go_live_after_delete_and_reload(tmp_path, store)
     assert c.get("/bookingco/v1/reservations/R9").json() == {"id": "R9"}
 
 
+def test_deleted_static_partner_serves_new_body_when_registered_again(tmp_path, store):
+    c, _ = _make_client(tmp_path, store)
+    c.post("/imnot/admin/partners", content=_STATIC_PARTNER_YAML)
+    c.delete("/imnot/admin/partners/staticco")
+
+    c.post("/imnot/admin/partners", content=_STATIC_PARTNER_YAML.replace("ok: true", "ok: false"))
+
+    assert c.get("/staticco/status").json() == {"ok": False}
+
+
+def test_create_partner_compare_to_with_invalid_yaml_returns_422(tmp_path, store):
+    c, _ = _make_client(tmp_path, store)
+    c.post("/imnot/admin/partners", content=_NEW_PARTNER_YAML)
+    r = c.post("/imnot/admin/partners?force=true&compare_to=bookingco", content="partner: [unclosed")
+    assert r.status_code == 422
+
+
 def test_delete_partner_not_found_returns_404(tmp_path, store):
     c, _ = _make_client(tmp_path, store)
     r = c.delete("/imnot/admin/partners/nonexistent")
