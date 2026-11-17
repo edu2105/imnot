@@ -1105,6 +1105,55 @@ def test_delete_partner_named_like_an_infra_route_keeps_infra_routes(tmp_path, s
     assert c.delete("/imnot/admin/partners/nope").status_code == 404
 
 
+def test_create_partner_compare_to_rejects_dropped_fields(tmp_path, store):
+    c, partners_dir = _make_client(tmp_path, store)
+    with_validate = _NEW_PARTNER_YAML.replace(
+        "        response:", "        validate:\n          query:\n            v: {required: true}\n        response:"
+    )
+    c.post("/imnot/admin/partners", content=with_validate)
+
+    r = c.post("/imnot/admin/partners?force=true&compare_to=bookingco", content=_NEW_PARTNER_YAML)
+
+    assert r.status_code == 409
+    assert r.json()["dropped"] == ["datapoints[reservation].endpoints[GET /bookingco/v1/reservations/{id}].validate"]
+    assert "validate:" in (partners_dir / "bookingco" / "partner.yaml").read_text()  # untouched
+
+
+def test_create_partner_compare_to_allows_lossless_save_and_force_without_it_still_overwrites(tmp_path, store):
+    c, partners_dir = _make_client(tmp_path, store)
+    c.post("/imnot/admin/partners", content=_NEW_PARTNER_YAML)
+    edited = _NEW_PARTNER_YAML.replace("description: BookingCo mock", "description: Edited")
+
+    assert c.post("/imnot/admin/partners?force=true&compare_to=bookingco", content=edited).status_code == 200
+    # Without compare_to, force keeps its old behaviour (scripts depend on it).
+    assert (
+        c.post(
+            "/imnot/admin/partners?force=true", content="partner: bookingco\n" + edited.split("\n", 1)[1]
+        ).status_code
+        == 200
+    )
+
+
+def test_create_partner_compare_to_rejects_bad_name(tmp_path, store):
+    c, _ = _make_client(tmp_path, store)
+    r = c.post("/imnot/admin/partners?force=true&compare_to=../etc", content=_NEW_PARTNER_YAML)
+    assert r.status_code == 400
+
+
+def test_renamed_partner_routes_go_live_after_delete_and_reload(tmp_path, store):
+    """The Builder's rename flow: POST new name → DELETE old name → POST /reload."""
+    c, _ = _make_client(tmp_path, store)
+    c.post("/imnot/admin/partners", content=_NEW_PARTNER_YAML)
+    renamed = _NEW_PARTNER_YAML.replace("partner: bookingco", "partner: bookingco2")
+
+    assert c.post("/imnot/admin/partners?force=true&compare_to=bookingco", content=renamed).status_code == 201
+    assert c.delete("/imnot/admin/partners/bookingco").status_code == 200
+    assert c.post("/imnot/admin/reload").status_code == 200
+
+    c.post("/imnot/admin/bookingco2/reservation/payload", json={"id": "R9"})
+    assert c.get("/bookingco/v1/reservations/R9").json() == {"id": "R9"}
+
+
 def test_delete_partner_not_found_returns_404(tmp_path, store):
     c, _ = _make_client(tmp_path, store)
     r = c.delete("/imnot/admin/partners/nonexistent")

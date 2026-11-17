@@ -8,6 +8,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+
 from imnot.loader.yaml_loader import PartnerDef, parse_partner_yaml
 
 _SAFE_NAME = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
@@ -61,3 +63,55 @@ def register_partner(
         created=False if dry_run else not file_exists,
         dest_file=dest_file,
     )
+
+
+def dropped_fields(old_yaml: str, new_yaml: str) -> list[str]:
+    """Return the fields present in *old_yaml* that *new_yaml* would silently lose.
+
+    Used by the Builder's edit mode, which regenerates partner.yaml from a form that does
+    not round-trip every field. Only removals count, not changed values. Datapoints are
+    matched by name and endpoints by ``(method, path, step)``, falling back to position;
+    a datapoint missing from *new_yaml* is treated as removed on purpose, not as a drop.
+    """
+    old = yaml.safe_load(old_yaml)
+    new = yaml.safe_load(new_yaml)
+    if not isinstance(old, dict) or not isinstance(new, dict):
+        return []
+
+    dropped: list[str] = []
+    _diff_keys(old, new, "", dropped, skip={"datapoints"})
+
+    new_dps = {dp.get("name"): dp for dp in new.get("datapoints") or [] if isinstance(dp, dict)}
+    for old_dp in old.get("datapoints") or []:
+        if not isinstance(old_dp, dict) or old_dp.get("name") not in new_dps:
+            continue
+        new_dp = new_dps[old_dp["name"]]
+        where = f"datapoints[{old_dp['name']}]"
+        _diff_keys(old_dp, new_dp, where, dropped, skip={"endpoints"})
+
+        new_eps = [ep for ep in new_dp.get("endpoints") or [] if isinstance(ep, dict)]
+        by_key = {_endpoint_key(ep): ep for ep in new_eps}
+        for i, old_ep in enumerate(old_dp.get("endpoints") or []):
+            if not isinstance(old_ep, dict):
+                continue
+            new_ep = by_key.get(_endpoint_key(old_ep)) or (new_eps[i] if i < len(new_eps) else None)
+            if new_ep is None:
+                continue
+            label = f"{str(old_ep.get('method', '')).upper()} {old_ep.get('path', '')}".strip()
+            _diff_keys(old_ep, new_ep, f"{where}.endpoints[{label}]", dropped)
+    return dropped
+
+
+def _endpoint_key(ep: dict) -> tuple:
+    return (str(ep.get("method", "")).upper(), ep.get("path"), ep.get("step"))
+
+
+def _diff_keys(old: dict, new: dict, where: str, out: list[str], skip: set[str] = frozenset()) -> None:
+    for key, old_val in old.items():
+        if key in skip:
+            continue
+        path = f"{where}.{key}" if where else str(key)
+        if key not in new:
+            out.append(path)
+        elif isinstance(old_val, dict) and isinstance(new[key], dict):
+            _diff_keys(old_val, new[key], path, out)

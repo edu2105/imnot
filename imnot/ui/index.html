@@ -3858,15 +3858,30 @@ img, svg {
       btn.disabled = true;
       btn.textContent = 'Saving…';
 
-      var url = '/imnot/admin/partners' + (_builderMode === 'edit' ? '?force=true' : '');
-      fetch(url, {
+      // Edit mode asks the server to compare against the current partner.yaml first: the form
+      // does not round-trip every field (validate:, bodies, headers…), so a save could drop them.
+      var compareTo = _builderMode === 'edit' ? _builderOriginalName : '';
+      return _builderPost(result.yaml, submittedPartnerName, compareTo)
+        .catch(function (e) { notify('Network error: ' + e.message, 'error'); })
+        .finally(function () {
+          btn.disabled = false;
+          btn.textContent = origLabel;
+        });
+    }
+
+    function _builderPost(yamlText, submittedPartnerName, compareTo) {
+      var url = '/imnot/admin/partners';
+      if (_builderMode === 'edit') {
+        url += '?force=true' + (compareTo ? '&compare_to=' + encodeURIComponent(compareTo) : '');
+      }
+      return fetch(url, {
         method: 'POST',
         headers: (function () {
           var h = authHeaders();
           h['Content-Type'] = 'text/plain';
           return h;
         })(),
-        body: result.yaml,
+        body: yamlText,
       })
         .then(function (r) {
           if (r.status === 201 || r.status === 200) {
@@ -3874,15 +3889,28 @@ img, svg {
             var renamed = _builderMode === 'edit' && oldName && oldName !== submittedPartnerName;
             builderReset();
             if (renamed) {
+              // Deleting the old name unregisters its routes; reload then registers the new file's routes.
               return fetch('/imnot/admin/partners/' + encodeURIComponent(oldName), {
                 method: 'DELETE', headers: authHeaders(),
-              }).finally(function () { builderHighlightCard(submittedPartnerName); });
+              })
+                .then(function () {
+                  return fetch('/imnot/admin/reload', { method: 'POST', headers: authHeaders() });
+                })
+                .finally(function () { builderHighlightCard(submittedPartnerName); });
             }
             builderHighlightCard(submittedPartnerName);
             return;
           }
           return r.json().then(function (body) {
             var detail = body.detail || body.message || '';
+            if (r.status === 409 && body.dropped) {
+              var msg = 'Saving from the Builder would remove these fields from partner.yaml:\n\n  '
+                + body.dropped.join('\n  ')
+                + '\n\nComments in the file are not kept either. Edit the YAML by hand to keep them.'
+                + '\n\nSave anyway?';
+              if (confirm(msg)) return _builderPost(yamlText, submittedPartnerName, '');
+              return;
+            }
             if (r.status === 409) {
               notify('Partner already exists. Switch to edit mode or use force.', 'error');
             } else if (r.status === 422) {
@@ -3893,11 +3921,6 @@ img, svg {
               notify('Server error: HTTP ' + r.status + (detail ? ' — ' + detail : ''), 'error');
             }
           });
-        })
-        .catch(function (e) { notify('Network error: ' + e.message, 'error'); })
-        .finally(function () {
-          btn.disabled = false;
-          btn.textContent = origLabel;
         });
     }
 
