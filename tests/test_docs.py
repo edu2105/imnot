@@ -60,13 +60,20 @@ def test_docs_serve_imnot_readme_not_the_users_project_readme(store, tmp_path):
     assert "MY PROJECT" not in body and "imnot" in body
 
 
-def test_wheel_ships_both_readmes():
+def test_wheel_ships_both_readmes_and_docker_build_has_them():
+    """Every force-included doc must exist in the repo and be copied into the Docker build context."""
     import tomllib
     from pathlib import Path
 
-    pyproject = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text())
+    root = Path(__file__).parents[1]
+    pyproject = tomllib.loads((root / "pyproject.toml").read_text())
     included = pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
-    assert included == {"README.md": "imnot/_docs/README.md", "partners/README.md": "imnot/_docs/partners-README.md"}
+    assert set(included.values()) == {"imnot/_docs/README.md", "imnot/_docs/partners-README.md"}
+    copied = [line.split()[1:-1] for line in (root / "Dockerfile").read_text().splitlines() if line.startswith("COPY ")]
+    copied_sources = {src for srcs in copied for src in srcs}
+    for source in included:
+        assert (root / source).is_file(), source
+        assert source in copied_sources, f"Dockerfile does not COPY {source}; the image build would fail"
 
 
 # ---------------------------------------------------------------------------

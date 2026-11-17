@@ -99,7 +99,7 @@ def register_routes(
 
     if admin_key:
         _register_admin_auth_middleware(app, admin_key)
-    _register_docs_routes(app, partners_dir)
+    _register_docs_routes(app)
     _register_infra_routes(app, partners, store)
     stress_store = getattr(app.state, "stress_store", None)
     if stress_store is not None:
@@ -411,11 +411,10 @@ def _find_doc(name: str) -> Path | None:
     return next((p for p in _DOC_FILES[name] if p.is_file()), None)
 
 
-def _register_docs_routes(app: FastAPI, partners_dir: Path | None) -> None:
+def _register_docs_routes(app: FastAPI) -> None:
     """Register public read-only endpoints that serve imnot's README files as plain text.
 
-    They always serve imnot's own docs, never the user's project files: the lookup does not
-    depend on *partners_dir* (kept in the signature for callers).
+    They always serve imnot's own docs (see ``_DOC_FILES``), never the user's project files.
     """
 
     async def serve_readme() -> PlainTextResponse:
