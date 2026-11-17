@@ -24,7 +24,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
 from imnot.engine.session_store import SessionStore
-from imnot.engine.templating import has_placeholders, render, request_context, uses_body
+from imnot.engine.templating import render_response
 from imnot.engine.validator import validate_request
 from imnot.loader.yaml_loader import DatapointDef, EndpointDef
 
@@ -171,15 +171,7 @@ def _make_static_handler(
             if pending is not None:
                 return pending
         if static_body is not None:
-            content = static_body
-            if has_placeholders(static_body):
-                request_body: Any = None
-                if uses_body(static_body):
-                    try:
-                        request_body = await request.json()
-                    except Exception:
-                        request_body = None
-                content = render(static_body, request_context(request, request_body))
+            content = await render_response(static_body, request)
             return JSONResponse(status_code=status_code, content=content, headers=extra_headers)
         return Response(status_code=status_code, headers=extra_headers)
 

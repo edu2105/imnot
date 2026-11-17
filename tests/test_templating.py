@@ -162,3 +162,72 @@ datapoints:
         r = c.post("/tplco/notify", json={"callbackUrl": "http://x/cb", "orderId": "O-5"})
     assert captured["context"]["request_id"] == r.json()["request_id"]
     assert captured["context"]["body"]["orderId"] == "O-5"
+
+
+def test_header_mode_callback_still_gets_the_submit_body(tmp_path, monkeypatch):
+    import imnot.engine.patterns.push as push
+
+    captured = {}
+
+    async def capture(**kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(push, "fire_callback", capture)
+    yaml_text = """\
+partner: tplco
+datapoints:
+  - name: notify
+    pattern: callback
+    endpoints:
+      - method: POST
+        path: /tplco/notify
+        response: {status: 202, callback_url_header: X-Callback-Url}
+"""
+    with _client(tmp_path, yaml_text) as c:
+        c.post("/tplco/notify", json={"orderId": "O-5"}, headers={"X-Callback-Url": "http://x/cb"})
+    assert captured["context"]["body"] == {"orderId": "O-5"}
+
+
+def test_retrigger_renders_request_id(tmp_path, monkeypatch):
+    import imnot.engine.patterns.push as push
+
+    sent = []
+
+    async def submit_capture(**kwargs):
+        pass
+
+    class FakeResponse:
+        is_success = True
+        status_code = 200
+
+    class FakeClient:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def request(self, method, url, json=None):
+            sent.append(json)
+            return FakeResponse()
+
+    monkeypatch.setattr(push, "fire_callback", submit_capture)  # the submit's own callback is not under test
+    monkeypatch.setattr(push.httpx, "AsyncClient", FakeClient)
+    yaml_text = """\
+partner: tplco
+datapoints:
+  - name: notify
+    pattern: callback
+    endpoints:
+      - method: POST
+        path: /tplco/notify
+        response: {status: 202, callback_url_field: callbackUrl}
+"""
+    with _client(tmp_path, yaml_text) as c:
+        c.post("/imnot/admin/tplco/notify/payload", json={"requestId": "{{request_id}}"})
+        rid = c.post("/tplco/notify", json={"callbackUrl": "http://x/cb"}).json()["request_id"]
+        assert c.post(f"/imnot/admin/tplco/notify/callback/{rid}/retrigger").status_code == 200
+    assert sent == [{"requestId": rid}]

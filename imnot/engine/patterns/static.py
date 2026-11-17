@@ -23,7 +23,7 @@ from typing import Any, Callable
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
-from imnot.engine.templating import has_placeholders, render, request_context, uses_body
+from imnot.engine.templating import render_response
 from imnot.engine.validator import validate_request
 from imnot.loader.yaml_loader import EndpointDef
 
@@ -69,14 +69,7 @@ def make_static_handler(
                 body_val = json.loads(body_val)
             except (ValueError, TypeError):
                 pass
-        if has_placeholders(body_val):
-            request_body: Any = None
-            if uses_body(body_val):
-                try:
-                    request_body = await request.json()
-                except Exception:
-                    request_body = None
-            body_val = render(body_val, request_context(request, request_body))
+        body_val = await render_response(body_val, request)
         headers = {str(k): str(v) for k, v in (cfg.get("headers") or {}).items()}
         return JSONResponse(status_code=cfg.get("status", 200), content=body_val, headers=headers)
 

@@ -42,6 +42,19 @@ def uses_body(value: Any) -> bool:
     return _BODY_PLACEHOLDER.search(json.dumps(value)) is not None
 
 
+async def render_response(value: Any, request: Request) -> Any:
+    """Render *value* against *request*, parsing the JSON body only if a placeholder needs it."""
+    if not has_placeholders(value):
+        return value
+    body: Any = None
+    if uses_body(value):
+        try:
+            body = await request.json()
+        except Exception:
+            body = None
+    return render(value, request_context(request, body))
+
+
 def request_context(request: Request, body: Any = None, request_id: str | None = None) -> dict[str, Any]:
     return {
         "path": dict(request.path_params),

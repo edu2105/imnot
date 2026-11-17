@@ -88,6 +88,13 @@ def make_push_handler(
                     content={"detail": f"Missing required header '{callback_url_header}'"},
                 )
 
+        if parsed_body is None:
+            # Header mode never needed the body; parse it anyway so {{body.x}} works in the callback.
+            try:
+                parsed_body = await request.json()
+            except Exception:
+                parsed_body = None
+
         session_id: str | None = request.headers.get("X-Imnot-Session")
         push_uuid = store.store_push_request(
             partner=partner,

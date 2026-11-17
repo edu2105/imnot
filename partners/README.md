@@ -930,7 +930,7 @@ response:
 - A missing value renders as `""` (or `null` when the placeholder is the whole string).
 - Only these roots are recognized; other `{{…}}` text is left as is.
 - For callbacks the context is the submit request. A retrigger (`POST …/callback/{request_id}/retrigger`)
-  only knows `{{request_id}}`; other placeholders render empty.
+  only knows `{{request_id}}`; other placeholders render as `""` / `null` (see above).
 
 ---
 
