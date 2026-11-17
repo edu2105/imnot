@@ -107,6 +107,38 @@
         }
       }
     },
+    "/imnot/admin/requests": {
+      "get": {
+        "summary": "List Requests",
+        "description": "Request journal, newest first. Filters: partner, datapoint, session, method; limit (1-1000, default 50).",
+        "operationId": "list_requests_imnot_admin_requests_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Clear Requests",
+        "description": "Clear the request journal, or only one session's entries with ?session=<id>.",
+        "operationId": "clear_requests_imnot_admin_requests_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/imnot/admin/partners": {
       "get": {
         "summary": "List Partners",

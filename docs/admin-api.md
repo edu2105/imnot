@@ -32,6 +32,8 @@ Always available regardless of which partners are loaded:
 | `DELETE` | `/imnot/admin/partners/{partner_name}` | Delete the partner's directory and unregister its routes immediately — returns `200 {"status":"ok","partner":"…"}` or `404` |
 | `GET`    | `/imnot/admin/sessions` | List all active sessions with `session_id`, `partner`, `datapoint`, `created_at`, `last_used` |
 | `DELETE` | `/imnot/admin/sessions/{session_id}` | Delete a single session — returns `200 {"status":"ok","session_id":"…"}` or `404` |
+| `GET`    | `/imnot/admin/requests` | Request journal: what consumers sent to the mock routes, newest first. Filters: `partner`, `datapoint`, `session`, `method`; `limit` 1–1000 (default 50). See [Request journal](#request-journal) |
+| `DELETE` | `/imnot/admin/requests` | Clear the journal, or one session's entries with `?session=<id>` — returns `{"status":"ok","deleted":N}` |
 | `POST` | `/imnot/admin/reload` | Hot-reload partner YAMLs without restarting |
 | `GET`  | `/imnot/admin/postman` | Download a Postman collection v2.1 JSON for all loaded partners |
 | `GET`  | `/imnot/admin/ui` | Admin web UI (auth-gated, see [Admin UI](#admin-ui)) |
@@ -77,6 +79,35 @@ curl -X POST "http://localhost:8000/imnot/admin/partners?force=true" \
 ```
 
 > **Ephemeral storage:** partners registered at runtime live on the container's local filesystem. Mount a persistent volume at `/app/partners` if you need them to survive restarts.
+
+---
+
+## Request journal
+
+imnot records every request sent to a mock route so a test can assert what the integration sent:
+
+```bash
+curl -s "http://localhost:8000/imnot/admin/requests?partner=bookingco&session=$SESSION&limit=5"
+```
+
+```json
+[
+  {
+    "id": 42, "received_at": "2026-11-17T22:00:00+00:00",
+    "partner": "bookingco", "datapoint": "charges", "session_id": "…",
+    "method": "POST", "path": "/bookingco/v1/charges", "query": "property=P1",
+    "headers": {"content-type": "application/json", "authorization": "[redacted]"},
+    "body": "{\"amount\": 100}", "body_truncated": false, "status": 200
+  }
+]
+```
+
+- Recorded: every request outside `/imnot/*`, `/healthz` and FastAPI's docs — including requests
+  that match no mock route (`partner: null`, usually a 404), which helps spot a wrong URL.
+- Secrets are never stored: `Authorization`, `Proxy-Authorization`, `Cookie`, `X-Api-Key` and any
+  header whose name contains `token`, `secret`, `password` or `api-key` are saved as `[redacted]`.
+- `body` is the raw request body as text, cut at 64 KB (`body_truncated: true`).
+- The newest 1000 entries are kept in `imnot.db`; older ones are dropped automatically.
 
 ---
 
