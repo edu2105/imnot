@@ -30,6 +30,7 @@ from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
 from imnot.config import UIConfig
+from imnot.engine.faults import with_faults
 from imnot.engine.patterns.async_ import make_async_handlers
 from imnot.engine.patterns.fetch import make_fetch_handler
 from imnot.engine.patterns.oauth import make_oauth_handler
@@ -88,6 +89,7 @@ def register_routes(
     app.state.partners_dir = partners_dir
     app.state.base_url = base_url
     app.state.registered_routes = registered_routes
+    app.state.fault_counters = {}  # fail.first_n call counts, see engine/faults.py
     app.state.registered_admin_dps = registered_admin_dps
     app.state.default_limit = default_limit
     app.state.rate_limiter = RateLimiter()
@@ -206,7 +208,9 @@ def _register_consumer_routes(
     owner = f"{partner.partner}/{datapoint.name}"
 
     def _add(path: str, handler: Any, method: str) -> None:
-        """Register canonical path + trailing-slash alias (hidden from schema)."""
+        """Register canonical path + trailing-slash alias (hidden from schema), with delay_ms/fail applied."""
+        endpoint = next(ep for ep in datapoint.endpoints if ep.path == path and ep.method.upper() == method.upper())
+        handler = with_faults(handler, endpoint, app.state.fault_counters)
         app.add_api_route(path, handler, methods=[method])
         if path != "/":
             app.add_api_route(path + "/", handler, methods=[method], include_in_schema=False)
@@ -478,6 +482,13 @@ def _register_infra_routes(
 
     async def list_sessions() -> JSONResponse:
         return JSONResponse(store.list_sessions())
+
+    async def reset_faults(request: Request) -> JSONResponse:
+        """Reset fail.first_n counters, so failing endpoints fail again from the first call."""
+        counters: dict = request.app.state.fault_counters
+        cleared = len(counters)
+        counters.clear()
+        return JSONResponse({"status": "ok", "cleared": cleared})
 
     async def delete_session(session_id: str) -> JSONResponse:
         deleted = store.delete_session(session_id)
@@ -797,6 +808,7 @@ def _register_infra_routes(
     app.add_api_route("/healthz", healthz, methods=["GET"])
     app.add_api_route("/imnot/admin/sessions", list_sessions, methods=["GET"])
     app.add_api_route("/imnot/admin/sessions/{session_id}", delete_session, methods=["DELETE"])
+    app.add_api_route("/imnot/admin/faults", reset_faults, methods=["DELETE"])
     app.add_api_route("/imnot/admin/partners", list_partners, methods=["GET"])
     app.add_api_route("/imnot/admin/partners", create_partner_handler, methods=["POST"])
     app.add_api_route("/imnot/admin/partners/{partner_name}", delete_partner, methods=["DELETE"])

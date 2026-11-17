@@ -95,6 +95,8 @@ endpoints:
 | `step` | Polling only | Identifies the step number within the polling sequence |
 | `response` | Yes | At minimum must contain `status` |
 | `validate` | No | Request validation rules — see [Request validation](#request-validation) section |
+| `delay_ms` | No | Add latency to every response of this endpoint — see [Failures and latency](#failures-and-latency) |
+| `fail` | No | Return a simulated error instead of the normal response — see [Failures and latency](#failures-and-latency) |
 | `rate_limit` | No | Requests-per-minute ceiling — `fetch` pattern only, see [Rate limiting](#rate-limiting) section |
 
 ---
@@ -847,6 +849,34 @@ Error message format: `"<section>.<field>: <reason>"` where `section` is `body`,
 - `static` endpoints support `validate:`. If validation rules change, a server restart is required — `POST /imnot/admin/reload` updates the response body only.
 - Unknown top-level keys under `validate:` (anything other than `body`, `query`, `headers`) raise a `ValueError` at startup.
 - Unknown rule attributes under a field raise a `ValueError` at startup.
+
+---
+
+## Failures and latency
+
+Any endpoint, in any pattern, can simulate a slow or failing partner so you can test timeouts,
+retries and dead-letter handling:
+
+```yaml
+endpoints:
+  - method: GET
+    path: /bookingco/v1/charges
+    delay_ms: 1500                  # every response waits 1.5 s (0–60000)
+    fail:
+      status: 503                   # required
+      first_n: 2                    # fail the first 2 calls, then respond normally (omit: always fail)
+      headers: {Retry-After: 1}     # optional
+      body: {error: "unavailable"}  # optional, default {"detail": "Simulated failure (imnot fail: block)"}
+    response:
+      status: 200
+```
+
+- Order: the delay applies first, then the failure, then the normal handler (`rate_limit:` and
+  `validate:` included). A failing endpoint fails before validating, like a partner that is down.
+- `first_n` is counted per session (`X-Imnot-Session`), or globally without one, so parallel tests
+  don't share a counter. `DELETE /imnot/admin/faults` resets every counter; a restart does too.
+- A timeout is just a `delay_ms` longer than your client's timeout.
+- Like `validate:` and `rate_limit:`, changes need a restart (not picked up by `POST /imnot/admin/reload`).
 
 ---
 

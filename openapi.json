@@ -107,6 +107,23 @@
         }
       }
     },
+    "/imnot/admin/faults": {
+      "delete": {
+        "summary": "Reset Faults",
+        "description": "Reset fail.first_n counters, so failing endpoints fail again from the first call.",
+        "operationId": "reset_faults_imnot_admin_faults_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/imnot/admin/partners": {
       "get": {
         "summary": "List Partners",
