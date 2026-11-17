@@ -11,7 +11,7 @@ Responsibilities:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +44,31 @@ _VALID_RULE_TYPES = {"string", "integer", "number", "boolean", "array", "object"
 
 _RATE_LIMIT_VALID_KEYS = {"requests_per_minute"}
 
+# Keys the loader and the pattern handlers actually read. Anything else is almost always a typo
+# (``respose:``, ``vaildate:``) that would otherwise be ignored silently. Unknown keys are a
+# warning when the server loads partners and an error in ``imnot validate`` / ``generate``.
+_PARTNER_KEYS = {"partner", "description", "datapoints"}
+_DATAPOINT_KEYS = {"name", "description", "pattern", "endpoints", "pagination"}
+_ENDPOINT_KEYS = {"method", "path", "step", "response", "validate", "rate_limit"}
+_RESPONSE_KEYS: dict[str, set[str]] = {
+    "static": {"status", "body", "headers"},
+    "oauth": {"status", "token_type", "expires_in"},
+    "fetch": {"status"},
+    "paginated": {"status"},
+    "callback": {"status", "callback_url_field", "callback_url_header", "callback_method", "callback_delay_seconds"},
+    "polling": {
+        "status",
+        "body",
+        "headers",
+        "generates_id",
+        "id_header",
+        "id_header_value",
+        "id_body_field",
+        "returns_payload",
+    },
+}
+_HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
+
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -75,6 +100,7 @@ class PartnerDef:
     description: str
     datapoints: list[DatapointDef]
     source_path: Path  # absolute path to the partner.yaml file
+    warnings: list[str] = field(default_factory=list)  # unknown keys found while parsing (see _PARTNER_KEYS)
 
 
 # ---------------------------------------------------------------------------
@@ -144,7 +170,21 @@ def _validate_rate_limit_block(
         )
 
 
-def _parse_endpoint(raw: dict[str, Any], pattern: str, pagination: dict[str, Any] | None = None) -> EndpointDef:
+def _check_unknown_keys(raw: dict[str, Any], known: set[str], where: str, warns: list[str] | None) -> None:
+    if warns is None:
+        return
+    for key in sorted(set(raw) - known, key=str):
+        warns.append(f"{where}: unknown key '{key}' (ignored). Known keys: {sorted(known)}")
+
+
+def _parse_endpoint(
+    raw: dict[str, Any],
+    pattern: str,
+    pagination: dict[str, Any] | None = None,
+    warns: list[str] | None = None,
+) -> EndpointDef:
+    if not isinstance(raw, dict):
+        raise ValueError(f"Endpoint must be a mapping, got {raw!r}")
     method = raw.get("method")
     path = raw.get("path")
 
@@ -152,6 +192,30 @@ def _parse_endpoint(raw: dict[str, Any], pattern: str, pagination: dict[str, Any
         raise ValueError(f"Endpoint is missing 'method': {raw}")
     if not path:
         raise ValueError(f"Endpoint is missing 'path': {raw}")
+    if not isinstance(method, str) or method.upper() not in _HTTP_METHODS:
+        raise ValueError(f"Endpoint {path}: 'method' must be one of {sorted(_HTTP_METHODS)} (got {method!r})")
+    if not isinstance(path, str) or not path.startswith("/"):
+        raise ValueError(f"Endpoint {method.upper()} {path}: 'path' must start with '/' (got {path!r})")
+    where = f"Endpoint {method.upper()} {path}"
+    _check_unknown_keys(raw, _ENDPOINT_KEYS, where, warns)
+
+    response = raw.get("response") or {}
+    if not isinstance(response, dict):
+        raise ValueError(f"{where}: 'response' must be a mapping (got {response!r})")
+    status = response.get("status")
+    if status is not None and (isinstance(status, bool) or not isinstance(status, int) or not 100 <= status <= 599):
+        raise ValueError(f"{where}: 'response.status' must be an HTTP status code between 100 and 599 (got {status!r})")
+    _check_unknown_keys(response, _RESPONSE_KEYS[pattern], f"{where} response", warns)
+    if pattern == "callback":
+        has_field, has_header = bool(response.get("callback_url_field")), bool(response.get("callback_url_header"))
+        if has_field == has_header:
+            raise ValueError(
+                f"{where}: callback needs exactly one of "
+                "'response.callback_url_field' or 'response.callback_url_header'"
+            )
+    if pattern == "polling" and response.get("generates_id"):
+        if not (response.get("id_header") and response.get("id_header_value")) and not response.get("id_body_field"):
+            raise ValueError(f"{where}: 'generates_id: true' needs 'id_header' + 'id_header_value' or 'id_body_field'")
 
     raw_validate = raw.get("validate")
     if raw_validate is not None:
@@ -165,13 +229,15 @@ def _parse_endpoint(raw: dict[str, Any], pattern: str, pagination: dict[str, Any
         method=method.upper(),
         path=path.rstrip("/") or "/",
         step=raw.get("step"),  # optional; only polling endpoints carry this
-        response=raw.get("response") or {},
+        response=response,
         validate=raw_validate,
         rate_limit=raw_rate_limit,
     )
 
 
-def _parse_datapoint(raw: dict[str, Any], partner: str) -> DatapointDef:
+def _parse_datapoint(raw: dict[str, Any], partner: str, warns: list[str] | None = None) -> DatapointDef:
+    if not isinstance(raw, dict):
+        raise ValueError(f"Datapoint in partner '{partner}' must be a mapping, got {raw!r}")
     name = raw.get("name")
     pattern = raw.get("pattern")
 
@@ -188,6 +254,9 @@ def _parse_datapoint(raw: dict[str, Any], partner: str) -> DatapointDef:
     raw_endpoints = raw.get("endpoints")
     if not raw_endpoints:
         raise ValueError(f"Datapoint '{name}' in partner '{partner}' has no endpoints")
+    if not isinstance(raw_endpoints, list):
+        raise ValueError(f"Datapoint '{name}' in partner '{partner}': 'endpoints' must be a list")
+    _check_unknown_keys(raw, _DATAPOINT_KEYS, f"Datapoint '{name}' in partner '{partner}'", warns)
 
     pagination: dict[str, Any] | None = None
     if pattern == "paginated":
@@ -238,12 +307,12 @@ def _parse_datapoint(raw: dict[str, Any], partner: str) -> DatapointDef:
         name=name,
         description=raw.get("description", ""),
         pattern=pattern,
-        endpoints=[_parse_endpoint(e, pattern, pagination) for e in raw_endpoints],
+        endpoints=[_parse_endpoint(e, pattern, pagination, warns) for e in raw_endpoints],
         pagination=pagination,
     )
 
 
-def _parse_partner(raw: Any, source_path: Path) -> PartnerDef:
+def _parse_partner(raw: Any, source_path: Path, strict: bool = False) -> PartnerDef:
     if not isinstance(raw, dict):
         raise ValueError(f"Partner YAML at {source_path} must be a YAML mapping with a 'partner' key")
     partner = raw.get("partner")
@@ -253,12 +322,21 @@ def _parse_partner(raw: Any, source_path: Path) -> PartnerDef:
     raw_datapoints = raw.get("datapoints")
     if not raw_datapoints:
         raise ValueError(f"Partner '{partner}' has no datapoints defined")
+    if not isinstance(raw_datapoints, list):
+        raise ValueError(f"Partner '{partner}': 'datapoints' must be a list")
+
+    warns: list[str] = []
+    _check_unknown_keys(raw, _PARTNER_KEYS, f"Partner '{partner}'", warns)
+    datapoints = [_parse_datapoint(dp, partner, warns) for dp in raw_datapoints]
+    if strict and warns:
+        raise ValueError("; ".join(warns))
 
     return PartnerDef(
         partner=partner,
         description=raw.get("description", ""),
-        datapoints=[_parse_datapoint(dp, partner) for dp in raw_datapoints],
+        datapoints=datapoints,
         source_path=source_path,
+        warnings=warns,
     )
 
 
@@ -267,15 +345,17 @@ def _parse_partner(raw: Any, source_path: Path) -> PartnerDef:
 # ---------------------------------------------------------------------------
 
 
-def parse_partner_yaml(text: str, source_path: Path = Path("<input>")) -> PartnerDef:
+def parse_partner_yaml(text: str, source_path: Path = Path("<input>"), strict: bool = False) -> PartnerDef:
     """Parse and validate a partner YAML string.
+
+    With ``strict=True`` unknown keys are errors instead of entries in ``PartnerDef.warnings``.
 
     Raises:
         yaml.YAMLError: if the text is not valid YAML.
         ValueError: if the parsed content fails schema validation.
     """
     raw = yaml.safe_load(text)
-    return _parse_partner(raw, source_path)
+    return _parse_partner(raw, source_path, strict=strict)
 
 
 def load_partners(partners_dir: Path) -> list[PartnerDef]:
@@ -298,6 +378,8 @@ def load_partners(partners_dir: Path) -> list[PartnerDef]:
         try:
             raw = yaml.safe_load(yaml_path.read_text())
             partner = _parse_partner(raw, yaml_path)
+            for warning in partner.warnings:
+                logger.warning("%s: %s", yaml_path, warning)
             partners.append(partner)
             logger.info(
                 "Loaded partner '%s' with %d datapoint(s) from %s",

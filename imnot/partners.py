@@ -34,7 +34,7 @@ def register_partner(
         yaml.YAMLError / ValueError  — invalid YAML or schema validation error.
         FileExistsError              — partner already exists and *force* is False.
     """
-    partner = parse_partner_yaml(yaml_text)
+    partner = parse_partner_yaml(yaml_text, strict=True)
 
     if not _SAFE_NAME.match(partner.partner):
         raise ValueError(

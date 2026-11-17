@@ -1171,6 +1171,14 @@ def test_create_partner_compare_to_with_invalid_yaml_returns_422(tmp_path, store
     assert r.status_code == 422
 
 
+def test_create_partner_with_unknown_key_returns_422(tmp_path, store):
+    c, partners_dir = _make_client(tmp_path, store)
+    r = c.post("/imnot/admin/partners", content=_NEW_PARTNER_YAML.replace("response:", "respose:"))
+    assert r.status_code == 422
+    assert "unknown key 'respose'" in r.json()["detail"]
+    assert not (partners_dir / "bookingco").exists()
+
+
 def test_delete_partner_not_found_returns_404(tmp_path, store):
     c, _ = _make_client(tmp_path, store)
     r = c.delete("/imnot/admin/partners/nonexistent")
