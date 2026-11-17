@@ -10,10 +10,10 @@
 #     Run before tagging a release alongside 'make ui'.
 
 ui:
-	python3 scripts/css_build.py ui
+	.venv/bin/python scripts/css_build.py ui
 
 dev:
-	python3 scripts/css_build.py dev
+	.venv/bin/python scripts/css_build.py dev
 
 openapi:
-	python3 scripts/export_openapi.py
+	.venv/bin/python scripts/export_openapi.py
