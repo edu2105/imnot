@@ -63,7 +63,7 @@ _IMNOT_TOML_TEMPLATE = """\
 
 [ui]
 # enabled = true                          # set to false to disable the admin UI entirely
-# default_theme = "light"                 # "light", "dark", or "system"
+# default_theme = "dark"                  # "light", "dark", or "system"
 """
 
 

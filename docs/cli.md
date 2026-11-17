@@ -35,14 +35,14 @@
 # port = 8000                          # bind port
 # partners_dir = "partners"            # path to partner YAML directory
 # db = "imnot.db"                      # path to SQLite database file
-# base_url = "http://localhost:8000"   # used in generated Postman collections
+# base_url = "http://localhost:8000"   # public URL: Postman collections and page_number_url links
 # stop_timeout_seconds = 5             # seconds to wait for graceful shutdown
 
 [logging]
-# log_dir = "."                           # directory for log files
+# log_dir = "logs"                        # directory for log files, relative to the DB directory
 # max_bytes = 10485760                    # rotate at this size (10 MB)
 # backup_name_format = "date"             # "date" (2026-04-20) or "epoch" (1745789123)
-# archived_logs_dir = "./archived-logs"   # rotated backups, relative to log_dir
+# archived_logs_dir = "./archived"        # rotated backups, relative to log_dir
 # debug = false                           # enable DEBUG-level logs
 # stdout = false                          # also emit to stdout (useful for Docker/ECS)
 
@@ -60,12 +60,12 @@
 
 ## Logging
 
-imnot writes two log files alongside `imnot.db`:
+imnot writes two log files to `logs/` next to `imnot.db` (`[logging] log_dir`):
 
-- `imnot.cli.log` — CLI operations (start, stop, generate, etc.)
+- `imnot.cli.log` — CLI operations (start, stop, generate, etc.) and server events: partners loaded or skipped, unknown YAML keys, callback deliveries
 - `imnot.http.log` — all HTTP traffic except `/healthz`
 
-When a log file reaches `max_bytes`, it is moved to `archived-logs/` with a timestamp in the filename and a new file starts. `IMNOT_ADMIN_KEY` is never written to logs.
+Warnings are also printed to the console. When a log file reaches `max_bytes`, it is moved to `logs/archived/` (`archived_logs_dir`) with a timestamp in the filename and a new file starts. `IMNOT_ADMIN_KEY` is never written to logs.
 
 ---
 

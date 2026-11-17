@@ -18,7 +18,7 @@ Fire any HTTP request at any URL. Useful for stress-testing your own infrastruct
 - **Headers** — optional JSON object merged with `Content-Type: application/json`
 - **Payload Template** — JSON body; use `{{vary}}` as a placeholder for per-request variation
 - **Vary Values** — one value per line, cycled in order across all requests
-- **Rate / second** — target dispatch rate (1–2000)
+- **Rate / second** — target dispatch rate (0.01–1000)
 - **Stop after** — total request count or duration in seconds
 
 **Example — send 1 000 webhook events at 100/s, cycling through 5 property IDs:**
