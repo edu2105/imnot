@@ -26,6 +26,7 @@ from fastapi import BackgroundTasks, Request
 from fastapi.responses import JSONResponse, Response
 
 from imnot.engine.session_store import SessionStore
+from imnot.engine.templating import has_placeholders, render, request_context
 from imnot.engine.validator import validate_request
 from imnot.loader.yaml_loader import DatapointDef, EndpointDef
 
@@ -105,6 +106,7 @@ def make_push_handler(
             callback_url=callback_url,
             callback_method=callback_method,
             delay=callback_delay,
+            context=request_context(request, parsed_body, request_id=push_uuid),
         )
 
         return JSONResponse(status_code=status_code, content={"request_id": push_uuid})
@@ -121,10 +123,12 @@ async def fire_callback(
     callback_url: str,
     callback_method: str,
     delay: float = 0,
+    context: dict[str, Any] | None = None,
 ) -> None:
-    """Resolve the stored payload and deliver it to the callback URL.
+    """Resolve the stored payload, render its placeholders with *context*, and deliver it.
 
-    Exported so the retrigger admin route can call it directly.
+    Exported so the retrigger admin route can call it directly. *context* comes from the submit
+    request (``templating.request_context``); a retrigger only knows the ``request_id``.
     """
     if delay > 0:
         await asyncio.sleep(delay)
@@ -139,6 +143,8 @@ async def fire_callback(
             callback_url,
         )
         return
+    if context is not None and has_placeholders(payload):
+        payload = render(payload, context)
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:

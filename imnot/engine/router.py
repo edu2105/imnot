@@ -395,6 +395,7 @@ def _register_admin_routes(
                 session_id=row["session_id"],
                 callback_url=row["callback_url"],
                 callback_method=row["callback_method"],
+                context={"request_id": request_id},  # the submit request itself is not stored
             )
             return JSONResponse({"status": "dispatched", "request_id": request_id})
 
