@@ -17,7 +17,6 @@ import os
 import time
 import uuid
 from contextlib import asynccontextmanager
-from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from typing import AsyncGenerator
 
@@ -26,7 +25,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 from imnot.config import UIConfig, load_config
-from imnot.engine.router import register_routes
+from imnot.engine.router import _IMNOT_VERSION, register_routes
 from imnot.engine.session_store import SessionStore
 from imnot.engine.stress import StressStore
 from imnot.loader.yaml_loader import load_partners
@@ -104,7 +103,7 @@ def create_app(
     app = FastAPI(
         title="imnot",
         description="Stateful API mock server for integration testing",
-        version=_pkg_version("imnot"),
+        version=_IMNOT_VERSION,
         lifespan=lifespan,
     )
 

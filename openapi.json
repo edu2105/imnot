@@ -124,7 +124,7 @@
       },
       "post": {
         "summary": "Admin Create Partner",
-        "description": "Validate raw YAML body, write it to disk, and hot-load its routes.\n\nQuery params:\n    force (bool, default false) \u2014 overwrite if partner already exists.\n\nReturns 201 on create, 200 on overwrite, 409 on conflict, 422 on bad YAML.",
+        "description": "Validate raw YAML body, write it to disk, and hot-load its routes.\n\nQuery params:\n    force (bool, default false) \u2014 overwrite if partner already exists.\n    compare_to (partner name, optional) \u2014 before writing, compare against that partner's\n        current partner.yaml and return 409 with ``dropped`` if fields would be lost. Used by\n        the Builder's edit mode, which does not round-trip every field.\n\nReturns 201 on create, 200 on overwrite, 409 on conflict or dropped fields, 422 on bad YAML.",
         "operationId": "admin_create_partner_imnot_admin_partners_post",
         "responses": {
           "200": {
