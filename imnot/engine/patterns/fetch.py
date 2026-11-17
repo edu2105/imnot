@@ -90,13 +90,13 @@ def make_fetch_handler(
                     status_code=422,
                     content={"detail": f"Payload must be a JSON object keyed by '{payload_by}' (payload_by)"},
                 )
-            key = request.path_params.get(payload_by)
-            if key not in payload:
+            param_value = request.path_params.get(payload_by)
+            if param_value not in payload:
                 return JSONResponse(
                     status_code=404,
-                    content={"detail": f"No payload entry for {payload_by} '{key}' in {partner}/{dp_name}"},
+                    content={"detail": f"No payload entry for {payload_by} '{param_value}' in {partner}/{dp_name}"},
                 )
-            payload = payload[key]
+            payload = payload[param_value]
 
         return JSONResponse(status_code=status_code, content=payload)
 
