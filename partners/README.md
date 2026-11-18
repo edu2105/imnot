@@ -16,8 +16,10 @@ Each partner lives in its own subdirectory:
 partners/
 └── {partner-name}/
     ├── partner.yaml        ← the definition (required)
-    └── payloads/           ← optional example payload files
+    └── payloads/           ← optional: <datapoint>.json files loaded as global payloads
 ```
+
+See [Payload files](#payload-files) for how `payloads/` is loaded.
 
 ---
 
@@ -93,6 +95,8 @@ endpoints:
 | `step` | Polling only | Identifies the step number within the polling sequence |
 | `response` | Yes | At minimum must contain `status` |
 | `validate` | No | Request validation rules — see [Request validation](#request-validation) section |
+| `delay_ms` | No | Add latency to every response of this endpoint — see [Failures and latency](#failures-and-latency) |
+| `fail` | No | Return a simulated error instead of the normal response — see [Failures and latency](#failures-and-latency) |
 | `rate_limit` | No | Requests-per-minute ceiling — `fetch` pattern only, see [Rate limiting](#rate-limiting) section |
 
 ---
@@ -209,7 +213,14 @@ The response body and headers can be updated without restarting the server: edit
 **How it works:** consumer uploads a payload via the admin API, then GET returns it.
 Supports session isolation via `X-Imnot-Session`.
 
-**Required endpoints:** exactly one `GET` endpoint.
+**Required endpoints:** one or more, usually a single `GET` (any method works).
+
+**Response config fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `status` | No | HTTP status code (default `200`) |
+| `payload_by` | No | Name of a path parameter. The payload becomes a map and each value of that parameter gets its own entry (see below) |
 
 **Example:**
 
@@ -222,6 +233,30 @@ Supports session isolation via `X-Imnot-Session`.
       response:
         status: 200
 ```
+
+**Example — a different response per id (`payload_by`):**
+
+```yaml
+- name: reservation
+  pattern: fetch
+  endpoints:
+    - method: GET
+      path: /bookingco/v1/reservations/{id}
+      response:
+        status: 200
+        payload_by: id
+```
+
+Upload one map instead of one route per reservation:
+
+```bash
+curl -X POST http://localhost:8000/imnot/admin/bookingco/reservation/payload \
+  -H "Content-Type: application/json" \
+  -d '{"RES-1": {"guest": "Ana", "nights": 2}, "RES-2": {"guest": "Leo", "nights": 5}}'
+```
+
+`GET /bookingco/v1/reservations/RES-2` returns `{"guest": "Leo", "nights": 5}`; an id with no entry
+returns `404`. Works the same with session payloads and with `payloads/reservation.json`.
 
 ---
 
@@ -242,7 +277,29 @@ step responds as completed immediately.
 |------|-----------|----------|
 | `generates_id: true` | Submit | Generate UUID, persist to store, deliver via header or body |
 | `returns_payload: true` | Fetch | Validate `{id}` in store (404 if unknown), return session/global payload |
-| *(neither)* | Static | Return configured status, headers, and body verbatim |
+| *(neither)* | Static | Return configured status, headers, and body verbatim. If the path has `{id}`, an id that no submit created returns `404` |
+
+#### Pending responses (status and fetch steps)
+
+Real async APIs answer "not ready yet" a few times before the result. Add `pending:` to the
+`response` of a status or fetch step:
+
+```yaml
+      - step: 2
+        method: GET
+        path: /staylink/reports/{id}/status
+        response:
+          status: 200
+          body: {state: DONE}
+          pending:
+            times: 2                 # required: the first 2 calls for each id are "pending"
+            status: 202              # optional, default 202
+            body: {state: RUNNING}   # optional (no body if omitted)
+            headers: {Retry-After: 1}  # optional
+```
+
+- Counted per request id, so every new submit starts from zero (in memory, reset on restart).
+- Needs `{id}` in the path and is not allowed on the submit step (`generates_id: true`).
 
 #### ID delivery (submit step)
 
@@ -391,6 +448,9 @@ body field or header), stores the request, returns the configured status code wi
 | `callback_url_header` | One of these two | — | Request header that contains the callback URL |
 | `callback_method` | No | `POST` | HTTP method used for the outbound callback |
 | `callback_delay_seconds` | No | `0` | Seconds to wait before firing the callback |
+| `callback_headers` | No | — | Extra headers on the callback request, e.g. `{X-Source: imnot}`. Values support [templating](#response-templating) (`{{request_id}}`) |
+| `callback_signature` | No | — | `{secret, header, algorithm}`: HMAC of the exact JSON body sent, as `<algorithm>=<hex>` in `header` (default `X-Imnot-Signature`, algorithm `sha256`; also `sha512`, `sha1`) |
+| `callback_retries` | No | 1 attempt | `{attempts: 1–10, backoff_seconds: 0–60}`: retry on a non-2xx answer or a network error, waiting `backoff_seconds × attempt` between tries |
 
 Exactly one of `callback_url_field` or `callback_url_header` must be present — specifying
 both or neither is a validation error caught at startup.
@@ -848,6 +908,96 @@ Error message format: `"<section>.<field>: <reason>"` where `section` is `body`,
 
 ---
 
+## Response templating
+
+String values in a `static` body, a polling static step's body, and a callback payload can use
+data from the request:
+
+| Placeholder | Value |
+|-------------|-------|
+| `{{path.id}}` | A path parameter (any name: `{{path.property_id}}`) |
+| `{{query.lang}}` | A query parameter |
+| `{{headers.X-Trace-Id}}` | A request header (case-insensitive) |
+| `{{body.order.id}}` | A field of the JSON request body; dots go into objects, numbers into lists (`{{body.items.0.sku}}`) |
+| `{{request_id}}` | Callback only: the `request_id` returned to the submitter, so the callback can be correlated |
+
+```yaml
+response:
+  status: 200
+  body:
+    bookingId: "{{path.id}}"
+    nights: "{{body.nights}}"          # whole-string placeholder keeps the JSON type: 2, not "2"
+    message: "Confirmed {{path.id}}"   # inside a longer string the value is inserted as text
+```
+
+- A missing value renders as `""` (or `null` when the placeholder is the whole string).
+- Only these roots are recognized; other `{{…}}` text is left as is.
+- For callbacks the context is the submit request. A retrigger (`POST …/callback/{request_id}/retrigger`)
+  only knows `{{request_id}}`; other placeholders render as `""` / `null` (see above).
+
+---
+
+## Failures and latency
+
+Any endpoint, in any pattern, can simulate a slow or failing partner so you can test timeouts,
+retries and dead-letter handling:
+
+```yaml
+endpoints:
+  - method: GET
+    path: /bookingco/v1/charges
+    delay_ms: 1500                  # every response waits 1.5 s (0–60000)
+    fail:
+      status: 503                   # required
+      first_n: 2                    # fail the first 2 calls, then respond normally (omit: always fail)
+      headers: {Retry-After: 1}     # optional
+      body: {error: "unavailable"}  # optional, default {"detail": "Simulated failure (imnot fail: block)"}
+    response:
+      status: 200
+```
+
+- Order: the delay applies first, then the failure, then the normal handler (`rate_limit:` and
+  `validate:` included). A failing endpoint fails before validating, like a partner that is down.
+- `first_n` is counted per session (`X-Imnot-Session`), or globally without one, so parallel tests
+  don't share a counter. `DELETE /imnot/admin/faults` resets every counter; a restart does too.
+- A timeout is just a `delay_ms` longer than your client's timeout.
+- Like `validate:` and `rate_limit:`, changes need a restart (not picked up by `POST /imnot/admin/reload`).
+
+---
+
+### Partner-shaped errors (`error:`)
+
+By default a failed `validate:` answers `422 {"detail": [...]}` and an exceeded `rate_limit:`
+answers `429 {"detail": "Rate limit exceeded: …"}` with `Retry-After`. To answer like the real
+partner instead, add an `error:` block inside `validate:` or `rate_limit:`:
+
+```yaml
+validate:
+  query:
+    id: {required: true}
+  error:
+    status: 400
+    headers: {X-Error-Code: INVALID}
+    body: {code: INVALID_REQUEST, message: "{{message}}", details: "{{errors}}"}
+rate_limit:
+  requests_per_minute: 60
+  error:
+    status: 429
+    body: {error: too_many_requests, retryInSeconds: "{{retry_after}}"}
+```
+
+| Placeholder | In | Value |
+|-------------|----|-------|
+| `{{errors}}` | `validate.error` | The list of validation errors (a whole-string placeholder becomes the JSON list) |
+| `{{message}}` | `validate.error` | The errors joined with `; ` |
+| `{{retry_after}}` | `rate_limit.error` | Seconds until the next request is allowed (`Retry-After` is always sent too) |
+| `{{limit}}` | `rate_limit.error` | `requests_per_minute` |
+
+`status` is required; `body` and `headers` are optional (no `body` → an empty response). A
+placeholder from the other block renders empty; a list in a header is joined with `; `.
+
+---
+
 ## Rate limiting
 
 `fetch`-pattern endpoints can declare a `rate_limit:` block. imnot enforces a requests-per-minute ceiling with a token bucket; once exceeded, it returns `429` with a `Retry-After` header instead of the mock response — checked before `validate:` and before any payload/session work.
@@ -896,6 +1046,30 @@ The response also includes a `Retry-After` header (seconds, integer) telling the
 
 ---
 
+## Payload files
+
+For the patterns that serve a payload (`fetch`, `polling`, `callback`, `paginated`), you can keep the
+payload in the repo next to the YAML instead of uploading it on every run:
+
+```
+partners/bookingco/
+├── partner.yaml
+└── payloads/
+    └── charges.json        ← global payload for the "charges" datapoint
+```
+
+- The file name is the datapoint name. The content is exactly what you would `POST` to
+  `/imnot/admin/<partner>/<datapoint>/payload` (for `paginated`, a JSON array of items).
+- Files are loaded as the **global** payload at `imnot start` and on every `POST /imnot/admin/reload`.
+  They overwrite a global payload uploaded earlier for the same datapoint, so the repo stays the
+  source of truth. Session payloads (`X-Imnot-Session`) are never touched.
+- A file with invalid JSON, a name that matches no datapoint, or a non-array `paginated` payload is
+  skipped with a warning in the log; `imnot validate` reports it as an error.
+- Deleting a file does **not** clear the global payload it seeded (it lives in `imnot.db`). To reset
+  it, upload a new one or delete `imnot.db`.
+
+---
+
 ## Auto-generated admin endpoints
 
 For every `fetch`, `polling`, `callback`, or `paginated` datapoint, imnot automatically registers these
@@ -919,7 +1093,7 @@ Fixed infra endpoints (always available regardless of partners loaded):
 | `GET`  | `/imnot/admin/partners` | List all loaded partners and their datapoints |
 | `POST` | `/imnot/admin/partners` | Register a new partner from a raw YAML body — routes go live immediately |
 | `GET`  | `/imnot/admin/sessions` | List all active sessions |
-| `POST` | `/imnot/admin/reload`   | Hot-reload partner YAMLs — updates static response bodies in place, registers new partners/datapoints |
+| `POST` | `/imnot/admin/reload`   | Hot-reload partner YAMLs — updates static bodies in place, registers new routes, unregisters removed ones (a partner whose YAML fails to load keeps its routes) |
 
 `POST /imnot/admin/partners` is the HTTP equivalent of `imnot generate` — use it when imnot
 runs in a container and you cannot exec in to run the CLI. See the main README for usage examples.
@@ -927,6 +1101,8 @@ runs in a container and you cannot exec in to run the CLI. See the main README f
 ---
 
 ## Checklist before saving a partner.yaml
+
+Run `imnot validate` to check all of this automatically. Unknown keys (usually typos like `respose:`) are only a warning in the server log at `imnot start` / reload, so a partner that loads today keeps loading; `imnot validate`, `imnot generate` and `POST /imnot/admin/partners` reject them.
 
 - [ ] `partner` value is lowercase with no spaces or special characters
 - [ ] Each datapoint has a unique `name` within the file
@@ -938,6 +1114,7 @@ runs in a container and you cannot exec in to run the CLI. See the main README f
 - [ ] If `id_header` is used, `id_header_value` contains `{id}`
 - [ ] Polling steps that reference the generated UUID use `{id}` in their path
 - [ ] The polling fetch step has `returns_payload: true`
+- [ ] A `pending:` block has `times` (positive integer), is on a step whose path has `{id}`, and not on the submit step
 - [ ] Every `callback` datapoint has exactly one endpoint with exactly one of `callback_url_field` or `callback_url_header` set (not both, not neither)
 - [ ] Every `paginated` datapoint has a `pagination:` block with `style` (`offset_limit`, `cursor`, `page_number`, or `page_number_url`) and `items_field` set
 - [ ] If `style: cursor`, `cursor_field` is also set in the `pagination:` block
@@ -951,6 +1128,7 @@ runs in a container and you cannot exec in to run the CLI. See the main README f
 - [ ] Field rules under `validate:` use only recognized attributes: `required`, `type`, `allowed`, `pattern`, `min`, `max` — unknown attributes raise an error at startup
 - [ ] `rate_limit:` is only declared on `fetch`-pattern endpoints, or on `paginated` endpoints using `pagination.style: page_number_url` — declaring it on any other pattern, or on a `paginated` endpoint using any other pagination style, raises an error at startup
 - [ ] `rate_limit.requests_per_minute` must be a positive integer; unknown keys under `rate_limit:` raise an error at startup
+- [ ] Every `path` starts with `/`, every `method` is a standard HTTP verb and every `status` is an integer between 100 and 599
 - [ ] After saving, call `POST /imnot/admin/reload` or restart the server to pick up changes
 
 ---

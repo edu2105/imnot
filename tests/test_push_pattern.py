@@ -7,10 +7,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from imnot.engine.patterns.push import make_push_handler
 from imnot.engine.router import register_routes
 from imnot.engine.session_store import SessionStore
-from imnot.loader.yaml_loader import DatapointDef, EndpointDef, load_partners
+from imnot.loader.yaml_loader import load_partners
 
 CALLBACK_URL = "http://consumer/webhook"
 
@@ -101,36 +100,6 @@ def _mock_httpx(success: bool = True):
 # ---------------------------------------------------------------------------
 # Startup validation
 # ---------------------------------------------------------------------------
-
-
-def test_both_callback_sources_raises_at_startup(store):
-    """Specifying both callback_url_field and callback_url_header is a config error."""
-    ep = EndpointDef(
-        method="POST",
-        path="/partner/notify",
-        step=None,
-        response={
-            "status": 202,
-            "callback_url_field": "callbackUrl",
-            "callback_url_header": "X-Callback-URL",
-        },
-    )
-    dp = DatapointDef(name="notification", description="", pattern="callback", endpoints=[ep])
-    with pytest.raises(ValueError, match="only one of"):
-        make_push_handler("partner", dp, ep, store)
-
-
-def test_no_callback_source_raises_at_startup(store):
-    """Omitting both callback_url_field and callback_url_header is a config error."""
-    ep = EndpointDef(
-        method="POST",
-        path="/partner/notify",
-        step=None,
-        response={"status": 202},
-    )
-    dp = DatapointDef(name="notification", description="", pattern="callback", endpoints=[ep])
-    with pytest.raises(ValueError, match="one of 'callback_url_field' or 'callback_url_header'"):
-        make_push_handler("partner", dp, ep, store)
 
 
 # ---------------------------------------------------------------------------

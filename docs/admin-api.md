@@ -6,13 +6,18 @@ All admin endpoints are available at `/imnot/admin/`. They are auth-gated when `
 
 ## Payload endpoints
 
+A payload-backed route with nothing uploaded returns `404` with `detail` plus a `hint` field (and an
+`X-Imnot-Hint` header) saying exactly which admin call or `payloads/` file fixes it. Uploads are
+checked against the datapoint: a `paginated` payload must be a JSON array, and a `fetch` datapoint
+with `payload_by` needs a JSON object; anything else is rejected with `422` at upload time.
+
 For every `fetch`, `polling`, `callback`, or `paginated` datapoint, imnot auto-generates payload endpoints:
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/imnot/admin/{partner}/{datapoint}/payload` | Upload global payload |
 | `GET`  | `/imnot/admin/{partner}/{datapoint}/payload` | Inspect current global payload |
-| `POST` | `/imnot/admin/{partner}/{datapoint}/payload/session` | Upload session payload → returns `session_id` |
+| `POST` | `/imnot/admin/{partner}/{datapoint}/payload/session` | Upload session payload → returns `session_id`. Send an existing id in `X-Imnot-Session` (or `?session=<id>`) to add this datapoint to that session — one id can cover every datapoint a test touches. The id can be your own (1–128 of `A-Z a-z 0-9 . _ : -`), e.g. the test name |
 | `GET`  | `/imnot/admin/{partner}/{datapoint}/payload/session/{session_id}` | Inspect a session payload |
 | `POST` | `/imnot/admin/{partner}/{datapoint}/callback/{request_id}/retrigger` | Re-fire callback for a prior submit (`callback` pattern only) |
 
@@ -26,13 +31,17 @@ Always available regardless of which partners are loaded:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET`  | `/healthz` | Health check — always returns `{"status":"ok","version":"…"}`, no auth required |
+| `GET`  | `/healthz` | Health check — always returns `{"status":"ok","version":"…","auth_required":bool}`, no auth required. `auth_required` tells the admin UI whether to ask for a key |
 | `GET`  | `/imnot/admin/partners` | List all loaded partners and their datapoints |
-| `POST` | `/imnot/admin/partners` | Validate and register a new partner from a raw YAML body — routes go live immediately. `?force=true` overwrites; adding `&compare_to=<name>` returns `409` with a `dropped` list instead of writing if fields of that partner's current YAML would be lost |
+| `POST` | `/imnot/admin/partners` | Validate and register a new partner from a raw YAML body — routes go live immediately. `?force=true` overwrites; `&merge_from=<name>` first copies over that partner's fields the admin UI Builder never writes (`validate`, `fail`, `delay_ms`, `headers`, `payload_by`, `pending`, `callback_method`, descriptions); `&compare_to=<name>` returns `409` with a `dropped` list instead of writing if anything would still be lost |
+| `GET`  | `/imnot/admin/partners/{partner_name}` | The partner's full `partner.yaml` as JSON (used by the Builder to pre-fill every field) — `404` if not found |
 | `DELETE` | `/imnot/admin/partners/{partner_name}` | Delete the partner's directory and unregister its routes immediately — returns `200 {"status":"ok","partner":"…"}` or `404` |
 | `GET`    | `/imnot/admin/sessions` | List all active sessions with `session_id`, `partner`, `datapoint`, `created_at`, `last_used` |
-| `DELETE` | `/imnot/admin/sessions/{session_id}` | Delete a single session — returns `200 {"status":"ok","session_id":"…"}` or `404` |
-| `POST` | `/imnot/admin/reload` | Hot-reload partner YAMLs without restarting |
+| `DELETE` | `/imnot/admin/sessions/{session_id}` | Delete a session with all its datapoints — returns `200 {"status":"ok","session_id":"…"}` or `404` |
+| `GET`    | `/imnot/admin/requests` | Request journal: what consumers sent to the mock routes, newest first. Filters: `partner`, `datapoint`, `session`, `method`; `limit` 1–1000 (default 50). See [Request journal](#request-journal) |
+| `DELETE` | `/imnot/admin/requests` | Clear the journal, or one session's entries with `?session=<id>` — returns `{"status":"ok","deleted":N}` |
+| `DELETE` | `/imnot/admin/faults` | Reset every `fail.first_n` counter, so failing endpoints fail again from the first call — returns `{"status":"ok","cleared":N}` |
+| `POST` | `/imnot/admin/reload` | Hot-reload partner YAMLs without restarting: updates static bodies and pagination in place, registers new routes, and unregisters routes whose endpoint, datapoint or partner was removed. Returns `added`, `updated`, `removed`, `skipped` (partners whose YAML exists but fails to load keep their current routes; status `partial`) and `conflicts` |
 | `GET`  | `/imnot/admin/postman` | Download a Postman collection v2.1 JSON for all loaded partners |
 | `GET`  | `/imnot/admin/ui` | Admin web UI (auth-gated, see [Admin UI](#admin-ui)) |
 
@@ -77,6 +86,36 @@ curl -X POST "http://localhost:8000/imnot/admin/partners?force=true" \
 ```
 
 > **Ephemeral storage:** partners registered at runtime live on the container's local filesystem. Mount a persistent volume at `/app/partners` if you need them to survive restarts.
+
+---
+
+## Request journal
+
+imnot records every request sent to a mock route so a test can assert what the integration sent:
+
+```bash
+curl -s "http://localhost:8000/imnot/admin/requests?partner=bookingco&session=$SESSION&limit=5"
+```
+
+```json
+[
+  {
+    "id": 42, "received_at": "2026-11-17T22:00:00+00:00",
+    "partner": "bookingco", "datapoint": "charges", "session_id": "…",
+    "method": "POST", "path": "/bookingco/v1/charges", "query": "property=P1",
+    "headers": {"content-type": "application/json", "authorization": "[redacted]"},
+    "body": "{\"amount\": 100}", "body_truncated": false, "status": 200
+  }
+]
+```
+
+- Recorded: every request outside `/imnot/*`, `/healthz` and FastAPI's docs — including requests
+  that match no mock route (`partner: null`, usually a 404), which helps spot a wrong URL.
+- Secret headers are saved as `[redacted]`: `Authorization`, `Proxy-Authorization`, `Cookie`,
+  `X-Api-Key` and any header whose name contains `token`, `secret`, `password` or `api-key`.
+  The query string and the body are stored as sent (e.g. a `client_secret` in a token request).
+- `body` is the raw request body as text, cut at 64 KB (`body_truncated: true`).
+- The newest 1000 entries are kept in `imnot.db`; older ones are dropped automatically.
 
 ---
 

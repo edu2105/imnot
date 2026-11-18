@@ -1168,3 +1168,188 @@ def test_non_mapping_partner_yaml_is_skipped(tmp_path, content):
 def test_parse_partner_yaml_rejects_non_mapping(content):
     with pytest.raises(ValueError, match="must be a YAML mapping"):
         parse_partner_yaml(content)
+
+
+# ---------------------------------------------------------------------------
+# Strict validation: unknown keys, bad values, startup-time checks moved to load time
+# ---------------------------------------------------------------------------
+
+_BASE = """\
+partner: acme
+datapoints:
+  - name: ping
+    pattern: {pattern}
+    endpoints:
+      - method: {method}
+        path: {path}
+        response:
+{response}
+"""
+
+
+def _yaml(pattern="static", method="GET", path="/acme/ping", response="          status: 200"):
+    return _BASE.format(pattern=pattern, method=method, path=path, response=response)
+
+
+def test_unknown_keys_are_warnings_by_default():
+    text = _yaml(response="          status: 200\n          bodyy: {}").replace(
+        "pattern: static", "pattern: static\n    descripton: x"
+    )
+    partner = parse_partner_yaml(text)
+    assert len(partner.warnings) == 2
+    assert any("'descripton'" in w for w in partner.warnings)
+    assert any("'bodyy'" in w and "response" in w for w in partner.warnings)
+
+
+def test_unknown_keys_are_errors_in_strict_mode():
+    text = _yaml().replace("        response:", "        respose: {}\n        response:")
+    with pytest.raises(ValueError, match="unknown key 'respose'"):
+        parse_partner_yaml(text, strict=True)
+
+
+def test_known_keys_produce_no_warnings_for_bundled_partners():
+    for partner in load_partners(PARTNERS_DIR):
+        assert partner.warnings == [], partner.partner
+
+
+def test_load_partners_logs_unknown_keys_and_still_loads(tmp_path, caplog):
+    d = tmp_path / "acme"
+    d.mkdir()
+    (d / "partner.yaml").write_text(_yaml().replace("partner: acme", "partner: acme\nowner: me"))
+    with caplog.at_level("WARNING"):
+        result = load_partners(tmp_path)
+    assert [p.partner for p in result] == ["acme"]
+    assert "unknown key 'owner'" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "kwargs, message",
+    [
+        ({"path": "acme/ping"}, "must start with '/'"),
+        ({"method": "FETCH"}, "'method' must be one of"),
+        ({"response": "          status: banana"}, "between 100 and 599"),
+        ({"response": "          status: true"}, "between 100 and 599"),
+        ({"response": "          status: 42"}, "between 100 and 599"),
+        ({"response": "          - status: 200"}, "'response' must be a mapping"),
+        ({"pattern": "callback", "method": "POST"}, "exactly one of"),
+        (
+            {
+                "pattern": "callback",
+                "method": "POST",
+                "response": "          callback_url_field: a\n          callback_url_header: b",
+            },
+            "exactly one of",
+        ),
+    ],
+)
+def test_bad_values_are_errors(kwargs, message):
+    with pytest.raises(ValueError, match=message):
+        parse_partner_yaml(_yaml(**kwargs))
+
+
+def test_polling_generates_id_without_id_source_is_a_load_error():
+    text = """\
+partner: acme
+datapoints:
+  - name: job
+    pattern: polling
+    endpoints:
+      - method: POST
+        path: /acme/jobs
+        step: 1
+        response:
+          status: 202
+          generates_id: true
+"""
+    with pytest.raises(ValueError, match="generates_id: true"):
+        parse_partner_yaml(text)
+
+
+@pytest.mark.parametrize(
+    "text, message",
+    [
+        ("partner: acme\ndatapoints: {a: 1}\n", "'datapoints' must be a list"),
+        ("partner: acme\ndatapoints:\n  - just-a-string\n", "must be a mapping"),
+        ("partner: acme\ndatapoints:\n  - name: x\n    pattern: static\n    endpoints: {a: 1}\n", "must be a list"),
+        ("partner: acme\ndatapoints:\n  - name: x\n    pattern: static\n    endpoints:\n      - nope\n", "mapping"),
+    ],
+)
+def test_wrong_shapes_are_errors_not_crashes(text, message):
+    with pytest.raises(ValueError, match=message):
+        parse_partner_yaml(text)
+
+
+def test_broken_callback_partner_is_skipped_at_startup_not_fatal(tmp_path):
+    bad = tmp_path / "bad"
+    bad.mkdir()
+    (bad / "partner.yaml").write_text(_yaml(pattern="callback", method="POST").replace("acme", "bad"))
+    good = tmp_path / "good"
+    good.mkdir()
+    (good / "partner.yaml").write_text(_yaml().replace("acme", "good"))
+    assert [p.partner for p in load_partners(tmp_path)] == ["good"]
+
+
+# ---------------------------------------------------------------------------
+# Payload files: partners/<partner>/payloads/<datapoint>.json
+# ---------------------------------------------------------------------------
+
+_PAYLOAD_PARTNER = """\
+partner: acme
+datapoints:
+  - name: charges
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /acme/charges
+        response: {status: 200}
+  - name: listings
+    pattern: paginated
+    pagination: {style: offset_limit, items_field: items}
+    endpoints:
+      - method: GET
+        path: /acme/listings
+        response: {status: 200}
+  - name: ping
+    pattern: static
+    endpoints:
+      - method: GET
+        path: /acme/ping
+        response: {status: 200, body: {}}
+"""
+
+
+def _payload_partner_dir(tmp_path, files):
+    d = tmp_path / "acme"
+    (d / "payloads").mkdir(parents=True)
+    (d / "partner.yaml").write_text(_PAYLOAD_PARTNER)
+    for name, text in files.items():
+        (d / "payloads" / name).write_text(text)
+    return tmp_path
+
+
+def test_payload_files_are_loaded_as_seed_payloads(tmp_path):
+    root = _payload_partner_dir(tmp_path, {"charges.json": '{"total": 3}', "listings.json": '[{"id": 1}]'})
+    (partner,) = load_partners(root)
+    assert partner.seed_payloads == {"charges": {"total": 3}, "listings": [{"id": 1}]}
+
+
+@pytest.mark.parametrize(
+    "name, text, problem",
+    [
+        ("charges.json", "{not json", "invalid JSON"),
+        ("nope.json", "{}", "no datapoint named 'nope'"),
+        ("ping.json", "{}", "takes no payload"),
+        ("listings.json", '{"items": []}', "must be a JSON array"),
+    ],
+)
+def test_bad_payload_files_are_skipped_with_a_warning(tmp_path, caplog, name, text, problem):
+    root = _payload_partner_dir(tmp_path, {name: text})
+    with caplog.at_level("WARNING"):
+        (partner,) = load_partners(root)
+    assert partner.seed_payloads == {}
+    assert problem in caplog.text
+
+
+def test_partner_without_payloads_dir_has_no_seeds():
+    for partner in load_partners(PARTNERS_DIR):
+        assert partner.seed_payloads == {}

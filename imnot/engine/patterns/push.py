@@ -13,11 +13,22 @@ Config fields (all under `response:` in the endpoint YAML):
     callback_url_header   — request header that contains the callback URL (mutually exclusive with field)
     callback_method       — HTTP method for the outbound call (default: POST)
     callback_delay_seconds — seconds to wait before firing (default: 0)
+    callback_headers      — extra headers, templated ({{request_id}}, {{body.x}}); a header whose
+                            value renders empty or null is not sent
+    callback_signature    — {secret, header, algorithm}: HMAC of the exact JSON bytes sent; with a
+                            signature the body goes as compact JSON via content=, without one via json=
+    callback_retries      — {attempts, backoff_seconds}: retry on non-2xx / network error, linear backoff
+
+Delivery settings are captured when the route is registered (restart to change them). The retrigger
+admin route reads them from the datapoint's first endpoint.
 """
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
+import json
 import logging
 from typing import Any, Callable
 
@@ -25,11 +36,24 @@ import httpx
 from fastapi import BackgroundTasks, Request
 from fastapi.responses import JSONResponse, Response
 
+from imnot.engine.errors import validation_error_response
 from imnot.engine.session_store import SessionStore
+from imnot.engine.templating import has_placeholders, render, request_context
 from imnot.engine.validator import validate_request
 from imnot.loader.yaml_loader import DatapointDef, EndpointDef
 
+DEFAULT_SIGNATURE_HEADER = "X-Imnot-Signature"
+
 logger = logging.getLogger(__name__)
+
+
+def delivery_config(response: dict[str, Any]) -> dict[str, Any]:
+    """The callback delivery settings from an endpoint's ``response`` block (see fire_callback)."""
+    return {
+        "headers": response.get("callback_headers"),
+        "signature": response.get("callback_signature"),
+        "retries": response.get("callback_retries"),
+    }
 
 
 def make_push_handler(
@@ -40,8 +64,7 @@ def make_push_handler(
 ) -> Callable:
     """Return a route handler for a push submit endpoint.
 
-    Validates YAML config at startup — raises ValueError if callback URL source
-    is missing or ambiguous.
+    The loader (``_parse_endpoint``) guarantees exactly one callback URL source is set.
     """
     dp_name = datapoint.name
     status_code: int = endpoint.response.get("status", 202)
@@ -49,18 +72,8 @@ def make_push_handler(
     callback_url_header: str | None = endpoint.response.get("callback_url_header")
     callback_method: str = endpoint.response.get("callback_method", "POST").upper()
     callback_delay: float = float(endpoint.response.get("callback_delay_seconds", 0))
+    delivery = delivery_config(endpoint.response)
     validate_rules = endpoint.validate
-
-    if callback_url_field and callback_url_header:
-        raise ValueError(
-            f"Push endpoint {endpoint.method} {endpoint.path}: "
-            "only one of 'callback_url_field' or 'callback_url_header' may be set, not both."
-        )
-    if not callback_url_field and not callback_url_header:
-        raise ValueError(
-            f"Push endpoint {endpoint.method} {endpoint.path}: "
-            "one of 'callback_url_field' or 'callback_url_header' is required."
-        )
 
     async def handler(request: Request, background_tasks: BackgroundTasks) -> Response:
         # Parse body unconditionally for push (always has a body when callback_url_field is set)
@@ -80,7 +93,7 @@ def make_push_handler(
                 request.headers,
             )
             if errors:
-                return JSONResponse(status_code=422, content={"detail": errors})
+                return validation_error_response(validate_rules, errors)
 
         # Extract callback URL from body or header
         if callback_url_field:
@@ -98,6 +111,13 @@ def make_push_handler(
                     status_code=400,
                     content={"detail": f"Missing required header '{callback_url_header}'"},
                 )
+
+        if parsed_body is None:
+            # Header mode never needed the body; parse it anyway so {{body.x}} works in the callback.
+            try:
+                parsed_body = await request.json()
+            except Exception:
+                parsed_body = None
 
         session_id: str | None = request.headers.get("X-Imnot-Session")
         push_uuid = store.store_push_request(
@@ -117,6 +137,8 @@ def make_push_handler(
             callback_url=callback_url,
             callback_method=callback_method,
             delay=callback_delay,
+            context=request_context(request, parsed_body, request_id=push_uuid),
+            delivery=delivery,
         )
 
         return JSONResponse(status_code=status_code, content={"request_id": push_uuid})
@@ -133,10 +155,14 @@ async def fire_callback(
     callback_url: str,
     callback_method: str,
     delay: float = 0,
+    context: dict[str, Any] | None = None,
+    delivery: dict[str, Any] | None = None,
 ) -> None:
-    """Resolve the stored payload and deliver it to the callback URL.
+    """Resolve the stored payload, render its placeholders with *context*, and deliver it.
 
-    Exported so the retrigger admin route can call it directly.
+    Exported so the retrigger admin route can call it directly. *context* comes from the submit
+    request (``templating.request_context``); a retrigger only knows the ``request_id``.
+    *delivery* is ``delivery_config(endpoint.response)``: extra headers, an HMAC signature and retries.
     """
     if delay > 0:
         await asyncio.sleep(delay)
@@ -151,21 +177,42 @@ async def fire_callback(
             callback_url,
         )
         return
+    if context is not None and has_placeholders(payload):
+        payload = render(payload, context)
 
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.request(callback_method, callback_url, json=payload)
-        if resp.is_success:
-            logger.info(
-                "Callback: delivered to %s — HTTP %d",
-                callback_url,
-                resp.status_code,
-            )
-        else:
+    delivery = delivery or {}
+    rendered_headers = render(delivery.get("headers") or {}, context or {})
+    # A header whose placeholder has no value (e.g. {{body.x}} on a retrigger) is left out, not sent as "None".
+    headers = {str(k): str(v) for k, v in rendered_headers.items() if v not in (None, "")}
+    request_kwargs: dict[str, Any] = {"json": payload}
+    signature = delivery.get("signature")
+    if signature:
+        # Sign the exact bytes sent, so the receiver can verify them like a real partner webhook.
+        body = json.dumps(payload, separators=(",", ":")).encode()
+        algorithm = signature.get("algorithm", "sha256")
+        digest = hmac.new(str(signature["secret"]).encode(), body, getattr(hashlib, algorithm)).hexdigest()
+        headers[signature.get("header", DEFAULT_SIGNATURE_HEADER)] = f"{algorithm}={digest}"
+        headers.setdefault("Content-Type", "application/json")
+        request_kwargs = {"content": body}
+    retries = delivery.get("retries") or {}
+    attempts = int(retries.get("attempts", 1))
+    backoff = float(retries.get("backoff_seconds", 1))
+
+    for attempt in range(1, attempts + 1):
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.request(callback_method, callback_url, headers=headers, **request_kwargs)
+            if resp.is_success:
+                logger.info("Callback: delivered to %s — HTTP %d (attempt %d)", callback_url, resp.status_code, attempt)
+                return
             logger.error(
-                "Callback: to %s returned non-2xx status %d",
+                "Callback: to %s returned non-2xx status %d (attempt %d/%d)",
                 callback_url,
                 resp.status_code,
+                attempt,
+                attempts,
             )
-    except Exception as exc:
-        logger.error("Callback: to %s failed: %s", callback_url, exc)
+        except Exception as exc:
+            logger.error("Callback: to %s failed: %s (attempt %d/%d)", callback_url, exc, attempt, attempts)
+        if attempt < attempts:
+            await asyncio.sleep(backoff * attempt)  # linear backoff: 1×, 2×, 3× backoff_seconds

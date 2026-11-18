@@ -23,6 +23,8 @@ from typing import Any, Callable
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
+from imnot.engine.errors import validation_error_response
+from imnot.engine.templating import render_response
 from imnot.engine.validator import validate_request
 from imnot.loader.yaml_loader import EndpointDef
 
@@ -57,7 +59,7 @@ def make_static_handler(
                     body = None
             errors = validate_request(validate_rules, body, request.query_params, request.headers)
             if errors:
-                return JSONResponse(status_code=422, content={"detail": errors})
+                return validation_error_response(validate_rules, errors)
 
         cfg = configs[key]
         body_val = cfg.get("body")
@@ -68,6 +70,7 @@ def make_static_handler(
                 body_val = json.loads(body_val)
             except (ValueError, TypeError):
                 pass
+        body_val = await render_response(body_val, request)
         headers = {str(k): str(v) for k, v in (cfg.get("headers") or {}).items()}
         return JSONResponse(status_code=cfg.get("status", 200), content=body_val, headers=headers)
 

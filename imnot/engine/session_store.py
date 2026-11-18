@@ -40,12 +40,13 @@ CREATE TABLE IF NOT EXISTS global_payloads (
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
-    session_id  TEXT PRIMARY KEY,
+    session_id  TEXT NOT NULL,           -- one session can hold payloads for several datapoints
     partner     TEXT NOT NULL,
     datapoint   TEXT NOT NULL,
     payload     TEXT NOT NULL,           -- JSON blob
     created_at  TEXT NOT NULL,
-    last_used   TEXT
+    last_used   TEXT,
+    PRIMARY KEY (session_id, partner, datapoint)
 );
 
 CREATE TABLE IF NOT EXISTS async_requests (
@@ -75,7 +76,25 @@ CREATE TABLE IF NOT EXISTS paginated_cursors (
     created_at  TEXT NOT NULL,
     expires_at  TEXT               -- NULL means no TTL
 );
+
+-- Request journal: what consumers sent to the mock routes (newest JOURNAL_MAX_ENTRIES kept).
+CREATE TABLE IF NOT EXISTS request_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    received_at TEXT NOT NULL,
+    partner     TEXT,              -- NULL when the request matched no mock route
+    datapoint   TEXT,
+    session_id  TEXT,
+    method      TEXT NOT NULL,
+    path        TEXT NOT NULL,
+    query       TEXT NOT NULL,
+    headers     TEXT NOT NULL,     -- JSON object, secrets redacted
+    body        TEXT NOT NULL,
+    body_truncated INTEGER NOT NULL,
+    status      INTEGER
+);
 """
+
+JOURNAL_MAX_ENTRIES = 1000
 
 
 # ---------------------------------------------------------------------------
@@ -119,9 +138,50 @@ class SessionStore:
             logger.info("Migrated sessions table: added last_used column")
         except sqlite3.OperationalError:
             pass
+        self._migrate_sessions_primary_key()
         self._conn.executescript(_DDL)
         self._conn.commit()
         logger.info("Session store initialised at %s", self.db_path)
+
+    def _migrate_sessions_primary_key(self) -> None:
+        """Older DBs keyed sessions by session_id alone; re-key them by (session_id, partner, datapoint).
+
+        SQLite cannot change a primary key in place, so the rows are copied to a new table inside one
+        explicit transaction (Python's sqlite3 would otherwise auto-commit the RENAME and CREATE, and a
+        crash mid-way would orphan the old rows). Runs only when the old single-column key is detected.
+        On failure everything is rolled back and init() raises, rather than starting with lost sessions.
+        """
+        assert self._conn is not None  # nosec B101
+        pk_columns = [row["name"] for row in self._conn.execute("PRAGMA table_info(sessions)") if row["pk"]]
+        if pk_columns != ["session_id"]:
+            return  # new DB (table not created yet) or already migrated
+        conn = self._conn
+        conn.execute("BEGIN")
+        try:
+            conn.execute("ALTER TABLE sessions RENAME TO sessions_v1")
+            conn.execute(
+                """
+                CREATE TABLE sessions (
+                    session_id  TEXT NOT NULL,
+                    partner     TEXT NOT NULL,
+                    datapoint   TEXT NOT NULL,
+                    payload     TEXT NOT NULL,
+                    created_at  TEXT NOT NULL,
+                    last_used   TEXT,
+                    PRIMARY KEY (session_id, partner, datapoint)
+                )
+                """
+            )
+            conn.execute(
+                "INSERT INTO sessions (session_id, partner, datapoint, payload, created_at, last_used) "
+                "SELECT session_id, partner, datapoint, payload, created_at, last_used FROM sessions_v1"
+            )
+            conn.execute("DROP TABLE sessions_v1")
+            conn.commit()
+        except sqlite3.Error as exc:
+            conn.rollback()
+            raise RuntimeError(f"Could not migrate the sessions table in {self.db_path}; it was left unchanged: {exc}")
+        logger.info("Migrated sessions table: key is now (session_id, partner, datapoint)")
 
     def close(self) -> None:
         if self._conn:
@@ -165,14 +225,20 @@ class SessionStore:
     # Session payloads
     # ------------------------------------------------------------------
 
-    def store_session_payload(self, partner: str, datapoint: str, payload: dict[str, Any]) -> str:
-        """Create a new session with an isolated payload. Returns the session_id."""
-        session_id = _new_id()
+    def store_session_payload(
+        self, partner: str, datapoint: str, payload: dict[str, Any], session_id: str | None = None
+    ) -> str:
+        """Store a session payload for (partner, datapoint). Returns the session_id.
+
+        Without *session_id* a new session is created. With one, this datapoint is added to (or
+        replaced in) that session, so one X-Imnot-Session can cover several datapoints.
+        """
+        session_id = session_id or _new_id()
         now = _now()
         with self._cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO sessions (session_id, partner, datapoint, payload, created_at)
+                INSERT OR REPLACE INTO sessions (session_id, partner, datapoint, payload, created_at)
                 VALUES (?, ?, ?, ?, ?)
                 """,
                 (session_id, partner, datapoint, json.dumps(payload), now),
@@ -264,8 +330,8 @@ class SessionStore:
                 row = cur.fetchone()
                 if row is not None:
                     cur.execute(
-                        "UPDATE sessions SET last_used = ? WHERE session_id = ?",
-                        (_now(), session_id),
+                        "UPDATE sessions SET last_used = ? WHERE session_id = ? AND partner = ? AND datapoint = ?",
+                        (_now(), session_id, partner, datapoint),
                     )
             else:
                 cur.execute(
@@ -294,13 +360,17 @@ class SessionStore:
             return None
         return {"payload": json.loads(row["payload"]), "updated_at": row["updated_at"]}
 
-    def get_session_payload(self, session_id: str) -> dict[str, Any] | None:
-        """Return the payload and metadata for a session_id, or None if not found."""
+    def get_session_payload(
+        self, session_id: str, partner: str | None = None, datapoint: str | None = None
+    ) -> dict[str, Any] | None:
+        """Return the payload and metadata for a session_id (for one datapoint if given), or None."""
+        query = "SELECT session_id, partner, datapoint, payload, created_at FROM sessions WHERE session_id = ?"
+        params: list[Any] = [session_id]
+        if partner is not None and datapoint is not None:
+            query += " AND partner = ? AND datapoint = ?"
+            params += [partner, datapoint]
         with self._cursor() as cur:
-            cur.execute(
-                "SELECT session_id, partner, datapoint, payload, created_at FROM sessions WHERE session_id = ?",
-                (session_id,),
-            )
+            cur.execute(query, params)
             row = cur.fetchone()
         if row is None:
             return None
@@ -319,6 +389,70 @@ class SessionStore:
                 "SELECT session_id, partner, datapoint, created_at, last_used FROM sessions ORDER BY created_at DESC"
             )
             return [dict(row) for row in cur.fetchall()]
+
+    # ------------------------------------------------------------------
+    # Request journal
+    # ------------------------------------------------------------------
+
+    def log_request(self, entry: dict[str, Any]) -> None:
+        """Append one journal entry and drop the oldest beyond ``JOURNAL_MAX_ENTRIES``."""
+        with self._cursor() as cur:
+            cur.execute(
+                "INSERT INTO request_log (received_at, partner, datapoint, session_id, method, path, query, "
+                "headers, body, body_truncated, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    _now(),
+                    entry.get("partner"),
+                    entry.get("datapoint"),
+                    entry.get("session_id"),
+                    entry["method"],
+                    entry["path"],
+                    entry.get("query", ""),
+                    json.dumps(entry.get("headers", {})),
+                    entry.get("body", ""),
+                    int(bool(entry.get("body_truncated"))),
+                    entry.get("status"),
+                ),
+            )
+            cur.execute("DELETE FROM request_log WHERE id <= ?", (cur.lastrowid - JOURNAL_MAX_ENTRIES,))
+
+    def list_requests(
+        self,
+        partner: str | None = None,
+        datapoint: str | None = None,
+        session_id: str | None = None,
+        method: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Return journal entries, newest first, filtered by any of the given fields."""
+        clauses, params = [], []
+        for column, value in (("partner", partner), ("datapoint", datapoint), ("session_id", session_id)):
+            if value is not None:
+                clauses.append(f"{column} = ?")  # nosec B608 — column names are fixed literals
+                params.append(value)
+        if method is not None:
+            clauses.append("method = ?")
+            params.append(method.upper())
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with self._cursor() as cur:
+            cur.execute(
+                f"SELECT * FROM request_log {where} ORDER BY id DESC LIMIT ?",  # nosec B608
+                (*params, limit),
+            )
+            rows = [dict(row) for row in cur.fetchall()]
+        for row in rows:
+            row["headers"] = json.loads(row["headers"])
+            row["body_truncated"] = bool(row["body_truncated"])
+        return rows
+
+    def clear_requests(self, session_id: str | None = None) -> int:
+        """Delete journal entries (all, or one session's). Returns the number deleted."""
+        with self._cursor() as cur:
+            if session_id is None:
+                cur.execute("DELETE FROM request_log")
+            else:
+                cur.execute("DELETE FROM request_log WHERE session_id = ?", (session_id,))
+            return cur.rowcount
 
     def delete_session(self, session_id: str) -> bool:
         """Delete a single session by ID. Returns True if deleted, False if not found."""

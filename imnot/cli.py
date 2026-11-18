@@ -28,9 +28,8 @@ import yaml
 
 from imnot.api.server import create_app
 from imnot.config import load_config
-from imnot.engine.router import _PAYLOAD_PATTERNS
 from imnot.engine.session_store import SessionStore
-from imnot.loader.yaml_loader import load_partners
+from imnot.loader.yaml_loader import PAYLOAD_PATTERNS, load_partners, load_payload_files, parse_partner_yaml
 from imnot.logging_setup import configure_logging
 from imnot.partners import register_partner
 from imnot.postman import build_postman_collection, collection_stats
@@ -213,7 +212,8 @@ def start(
         resolved_partners_dir = None
         click.echo(
             "Warning: No partners directory found — server starting with zero partners.\n"
-            "Use `imnot generate` or POST /imnot/admin/partners to add partners.",
+            "Run `imnot init` to create example partners, or use `imnot generate` / "
+            "POST /imnot/admin/partners to add your own.",
             err=True,
         )
         cli_log.warning("No partners directory found — starting with zero partners")
@@ -231,6 +231,7 @@ def start(
         cli_log.warning("Binding to 0.0.0.0 with no IMNOT_ADMIN_KEY — admin endpoints are unauthenticated")
 
     click.echo(f"Starting imnot on http://{effective_host}:{effective_port}")
+    _print_startup_summary(resolved_partners_dir, db_path, effective_host, effective_port, config.ui.enabled)
     cli_log.info(
         "Starting imnot host=%s port=%d db=%s partners_dir=%s admin_key=%s",
         effective_host,
@@ -347,6 +348,7 @@ def stop(pid_file: str) -> None:
 _EXAMPLES = [
     ("staylink", "oauth + polling"),
     ("bookingco", "static + fetch"),
+    ("ratesync", "callback + paginated"),
 ]
 
 
@@ -376,12 +378,19 @@ def init(target_dir: str) -> None:
 
     written: list[tuple[Path, str]] = []
     for partner_name, patterns in _EXAMPLES:
+        source = files("imnot.examples").joinpath(partner_name)
         dest_dir = partners_dir / partner_name
         dest_dir.mkdir(parents=True)
-        yaml_text = files("imnot.examples").joinpath(partner_name).joinpath("partner.yaml").read_text(encoding="utf-8")
         dest = dest_dir / "partner.yaml"
-        dest.write_text(yaml_text, encoding="utf-8")
+        dest.write_text(source.joinpath("partner.yaml").read_text(encoding="utf-8"), encoding="utf-8")
         written.append((dest.relative_to(target), patterns))
+        payloads = source.joinpath("payloads")
+        if payloads.is_dir():
+            (dest_dir / "payloads").mkdir()
+            for item in sorted(payloads.iterdir(), key=lambda x: x.name):
+                if item.name.endswith(".json"):
+                    (dest_dir / "payloads" / item.name).write_text(item.read_text(encoding="utf-8"), encoding="utf-8")
+                    written.append((dest_dir.relative_to(target) / "payloads" / item.name, "example payload"))
 
     toml_path = target / "imnot.toml"
     if not toml_path.exists():
@@ -397,7 +406,7 @@ def init(target_dir: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# imnot \1
+# imnot status
 # ---------------------------------------------------------------------------
 
 
@@ -420,8 +429,67 @@ def status(db: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# imnot \1
+# imnot validate / routes
 # ---------------------------------------------------------------------------
+
+
+@cli.command()
+@click.option(
+    "--partners-dir",
+    default=str(DEFAULT_PARTNERS_DIR),
+    show_default=True,
+    help="Directory containing partner YAML definitions.",
+)
+def validate(partners_dir: str) -> None:
+    """Check every partner.yaml strictly: schema errors, unknown keys, payload files and route conflicts.
+
+    Exits 1 if anything is wrong. `imnot start` is more lenient: it only warns about unknown keys.
+    """
+    try:
+        resolved = _resolve_partners_dir(partners_dir)
+    except FileNotFoundError as exc:
+        click.echo(str(exc), err=True)
+        raise SystemExit(1)
+
+    yaml_files = sorted(resolved.glob("*/partner.yaml"))
+    if not yaml_files:
+        click.echo(f"No partner.yaml files found in {resolved}.")
+        return
+
+    failed = 0
+    seen_routes: dict[tuple[str, str], str] = {}
+    for yaml_path in yaml_files:
+        label = yaml_path.relative_to(resolved)
+        try:
+            partner = parse_partner_yaml(yaml_path.read_text(), yaml_path, strict=True)
+        except (yaml.YAMLError, ValueError) as exc:
+            failed += 1
+            click.echo(f"{click.style('FAIL', fg='red')}  {label}")
+            for problem in str(exc).split("; "):
+                click.echo(f"      {problem}")
+            continue
+        problems = []
+        _, payload_problems = load_payload_files(partner, yaml_path.parent / "payloads")
+        problems.extend(payload_problems)
+        for dp in partner.datapoints:
+            for ep in dp.endpoints:
+                key = (ep.method, ep.path)
+                owner = f"{partner.partner}/{dp.name}"
+                if key in seen_routes and seen_routes[key] != owner:
+                    other = seen_routes[key]
+                    problems.append(f"Route conflict: {ep.method} {ep.path} is already defined by '{other}'")
+                seen_routes.setdefault(key, owner)
+        if problems:
+            failed += 1
+            click.echo(f"{click.style('FAIL', fg='red')}  {label}")
+            for problem in problems:
+                click.echo(f"      {problem}")
+        else:
+            click.echo(f"{click.style('OK', fg='green')}    {label}  ({len(partner.datapoints)} datapoint(s))")
+
+    if failed:
+        click.echo(f"\n{failed} of {len(yaml_files)} partner file(s) have problems.", err=True)
+        raise SystemExit(1)
 
 
 @cli.command()
@@ -453,7 +521,7 @@ def routes(partners_dir: str) -> None:
             for ep in dp.endpoints:
                 click.echo(f"    {ep.method:<7} {ep.path}  [{dp.pattern}]")
 
-        payload_dps = [dp for dp in partner.datapoints if dp.pattern in _PAYLOAD_PATTERNS]
+        payload_dps = [dp for dp in partner.datapoints if dp.pattern in PAYLOAD_PATTERNS]
         if payload_dps:
             click.echo()
             click.echo(f"  {'ADMIN ENDPOINTS':}")
@@ -477,7 +545,7 @@ def routes(partners_dir: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# imnot \1
+# imnot generate
 # ---------------------------------------------------------------------------
 
 
@@ -530,7 +598,7 @@ def generate(file_path: str, partners_dir: str, dry_run: bool, json_output: bool
 
     partner = result.partner
     cli_log.info("generate partner=%s dry_run=%s created=%s", partner.partner, dry_run, result.created)
-    payload_dps = [dp for dp in partner.datapoints if dp.pattern in _PAYLOAD_PATTERNS]
+    payload_dps = [dp for dp in partner.datapoints if dp.pattern in PAYLOAD_PATTERNS]
     payload_dp_names = {dp.name for dp in payload_dps}
 
     if json_output:
@@ -597,7 +665,7 @@ def generate(file_path: str, partners_dir: str, dry_run: bool, json_output: bool
 
 
 # ---------------------------------------------------------------------------
-# imnot \1
+# imnot export
 # ---------------------------------------------------------------------------
 
 
@@ -667,7 +735,7 @@ def export_postman(out: str, partners_dir: str, selected_partners: tuple[str, ..
 
 
 # ---------------------------------------------------------------------------
-# imnot \1
+# imnot payload
 # ---------------------------------------------------------------------------
 
 
@@ -718,7 +786,7 @@ def payload_set(partner: str, datapoint: str, file: str, db: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# imnot \1
+# imnot sessions
 # ---------------------------------------------------------------------------
 
 
@@ -765,18 +833,73 @@ def _resolve_db(given: str) -> Path:
     if data_candidate.exists():
         return data_candidate.resolve()
     # Walk up from CWD looking for the filename
-    current = Path.cwd()
-    while True:
-        candidate = current / name
+    for directory in _project_dirs():
+        candidate = directory / name
         if candidate.exists():
             return candidate
-        parent = current.parent
-        if parent == current:
-            break
-        current = parent
     raise FileNotFoundError(
-        f"Database '{given}' not found in {Path.cwd()} or any parent directory. Has the server been started yet?"
+        f"Database '{given}' not found in {Path.cwd()} or its parents up to the project root (imnot.toml). "
+        "Has the server been started yet?"
     )
+
+
+def _print_startup_summary(partners_dir: Path | None, db_path: Path, host: str, port: int, ui_enabled: bool) -> None:
+    """What a user needs right after `imnot start`: where the UI is, what loaded, what is missing."""
+    shown_host = "localhost" if host in ("127.0.0.1", "0.0.0.0") else host  # nosec B104 — display only
+    if ui_enabled:
+        click.echo(f"  Admin UI:  http://{shown_host}:{port}/imnot/admin/ui")
+    if partners_dir is None:
+        return
+    yaml_files = sorted(partners_dir.glob("*/partner.yaml"))
+    # This second load only feeds the summary; silence it so its warnings don't print twice
+    # (the server's own load, right after, logs them).
+    logging.disable(logging.CRITICAL)
+    try:
+        partners = load_partners(partners_dir)
+    finally:
+        logging.disable(logging.NOTSET)
+    loaded_paths = {p.source_path.resolve() for p in partners}
+    failed = [f.parent.name for f in yaml_files if f.resolve() not in loaded_paths]
+    names = ", ".join(p.partner for p in partners) or "none"
+    click.echo(f"  Partners:  {len(partners)} loaded ({names})")
+    if failed:
+        click.echo(click.style(f"  Skipped:   {', '.join(failed)} — run `imnot validate` for details", fg="yellow"))
+    missing = _datapoints_without_payload(partners, db_path)
+    if missing:
+        click.echo(f"  No payload yet: {', '.join(missing)} — upload one or add payloads/<datapoint>.json")
+
+
+def _datapoints_without_payload(partners: list, db_path: Path) -> list[str]:
+    stored: set[tuple[str, str]] = set()
+    if db_path.exists():
+        import sqlite3
+
+        try:
+            with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
+                stored = {(r[0], r[1]) for r in conn.execute("SELECT partner, datapoint FROM global_payloads")}
+        except sqlite3.Error:
+            return []
+    return [
+        f"{p.partner}/{dp.name}"
+        for p in partners
+        for dp in p.datapoints
+        if dp.pattern in PAYLOAD_PATTERNS and dp.name not in p.seed_payloads and (p.partner, dp.name) not in stored
+    ]
+
+
+def _project_dirs() -> list[Path]:
+    """CWD and its parents, stopping at the first one that holds imnot.toml (the project root).
+
+    Without the stop, a new project inside another one silently used the outer project's
+    imnot.db. With no imnot.toml anywhere, every parent up to / is searched, as before.
+    """
+    dirs: list[Path] = []
+    current = Path.cwd()
+    while True:
+        dirs.append(current)
+        if (current / "imnot.toml").exists() or current.parent == current:
+            return dirs
+        current = current.parent
 
 
 def _resolve_pid(given: str) -> Path:
@@ -789,17 +912,13 @@ def _resolve_pid(given: str) -> Path:
     if given_path.exists():
         return given_path.resolve()
     name = given_path.name
-    current = Path.cwd()
-    while True:
-        candidate = current / name
+    for directory in _project_dirs():
+        candidate = directory / name
         if candidate.exists():
             return candidate
-        parent = current.parent
-        if parent == current:
-            break
-        current = parent
     raise FileNotFoundError(
-        f"PID file '{given}' not found in {Path.cwd()} or any parent directory. Is the server running?"
+        f"PID file '{given}' not found in {Path.cwd()} or its parents up to the project root (imnot.toml). "
+        "Is the server running?"
     )
 
 

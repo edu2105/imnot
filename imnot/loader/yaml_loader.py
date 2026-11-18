@@ -10,8 +10,9 @@ Responsibilities:
 
 from __future__ import annotations
 
+import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +45,44 @@ _VALID_RULE_TYPES = {"string", "integer", "number", "boolean", "array", "object"
 
 _RATE_LIMIT_VALID_KEYS = {"requests_per_minute"}
 
+# Keys the loader and the pattern handlers actually read. Anything else is almost always a typo
+# (``respose:``, ``vaildate:``) that would otherwise be ignored silently. Unknown keys are a
+# warning when the server loads partners and an error in ``imnot validate`` / ``generate``.
+_PARTNER_KEYS = {"partner", "description", "datapoints"}
+_DATAPOINT_KEYS = {"name", "description", "pattern", "endpoints", "pagination"}
+_ENDPOINT_KEYS = {"method", "path", "step", "response", "validate", "rate_limit", "delay_ms", "fail"}
+_FAIL_KEYS = {"status", "body", "headers", "first_n"}
+MAX_DELAY_MS = 60_000
+_RESPONSE_KEYS: dict[str, set[str]] = {
+    "static": {"status", "body", "headers"},
+    "oauth": {"status", "token_type", "expires_in"},
+    "fetch": {"status", "payload_by"},
+    "paginated": {"status"},
+    "callback": {
+        "status",
+        "callback_url_field",
+        "callback_url_header",
+        "callback_method",
+        "callback_delay_seconds",
+        "callback_headers",
+        "callback_signature",
+        "callback_retries",
+    },
+    "polling": {
+        "status",
+        "body",
+        "headers",
+        "generates_id",
+        "id_header",
+        "id_header_value",
+        "id_body_field",
+        "returns_payload",
+        "pending",
+    },
+}
+_PENDING_KEYS = {"times", "status", "body", "headers"}
+_HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
+
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -58,6 +97,8 @@ class EndpointDef:
     response: dict[str, Any]  # raw response config from YAML
     validate: dict[str, Any] | None = None  # raw validate block; None when absent
     rate_limit: dict[str, Any] | None = None  # raw rate_limit block; None when absent
+    delay_ms: int | None = None  # added latency before every response (see engine/faults.py)
+    fail: dict[str, Any] | None = None  # simulated failure block; None when absent
 
 
 @dataclass
@@ -75,6 +116,64 @@ class PartnerDef:
     description: str
     datapoints: list[DatapointDef]
     source_path: Path  # absolute path to the partner.yaml file
+    warnings: list[str] = field(default_factory=list)  # unknown keys found while parsing (see _PARTNER_KEYS)
+    # Global payloads seeded from partners/<partner>/payloads/<datapoint>.json, keyed by datapoint name.
+    seed_payloads: dict[str, Any] = field(default_factory=dict)
+
+
+# Patterns whose responses come from an uploaded payload, so they get admin payload routes; oauth and
+# static are fully defined by the YAML. Single source: router, cli and postman import it.
+PAYLOAD_PATTERNS = {"fetch", "polling", "callback", "paginated"}
+
+
+def payload_shape_error(dp: DatapointDef, payload: Any) -> str | None:
+    """Why *payload* can never be served by *dp*'s routes, or None if its shape is fine.
+
+    Shared by payload files (load time) and the admin upload endpoints (upload time).
+    """
+    if dp.pattern == "paginated" and not isinstance(payload, list):
+        return (
+            "a 'paginated' payload must be a JSON array of items; imnot builds the envelope "
+            "(items_field, totals, next links) itself"
+        )
+    keyed_by = next((ep.response["payload_by"] for ep in dp.endpoints if ep.response.get("payload_by")), None)
+    if keyed_by is not None and not isinstance(payload, dict):
+        return f"this datapoint uses payload_by: {keyed_by}; the payload must be a JSON object keyed by it"
+    return None
+
+
+def load_payload_files(partner: PartnerDef, payloads_dir: Path) -> tuple[dict[str, Any], list[str]]:
+    """Read ``<payloads_dir>/<datapoint>.json`` files for *partner*.
+
+    Returns ``(payloads, problems)``. A file is skipped (and reported) when its JSON is invalid,
+    its name matches no datapoint, the datapoint does not use a payload, or a ``paginated``
+    payload is not a JSON array.
+    """
+    payloads: dict[str, Any] = {}
+    problems: list[str] = []
+    if not payloads_dir.is_dir():
+        return payloads, problems
+    by_name = {dp.name: dp for dp in partner.datapoints}
+    for path in sorted(payloads_dir.glob("*.json")):
+        label = f"payloads/{path.name}"
+        dp = by_name.get(path.stem)
+        if dp is None:
+            problems.append(f"{label}: no datapoint named '{path.stem}' in partner '{partner.partner}'")
+            continue
+        if dp.pattern not in PAYLOAD_PATTERNS:
+            problems.append(f"{label}: datapoint '{dp.name}' uses pattern '{dp.pattern}', which takes no payload")
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (ValueError, UnicodeDecodeError) as exc:
+            problems.append(f"{label}: invalid JSON ({exc})")
+            continue
+        shape_error = payload_shape_error(dp, payload)
+        if shape_error is not None:
+            problems.append(f"{label}: {shape_error}")
+            continue
+        payloads[dp.name] = payload
+    return payloads, problems
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +181,29 @@ class PartnerDef:
 # ---------------------------------------------------------------------------
 
 
+_ERROR_SPEC_KEYS = {"status", "body", "headers"}
+
+
+def _validate_error_spec(spec: Any, where: str) -> None:
+    """The optional partner-shaped ``error:`` block of validate:/rate_limit: (see engine/errors.py)."""
+    if not isinstance(spec, dict) or set(spec) - _ERROR_SPEC_KEYS:
+        raise ValueError(f"{where}: 'error' must be a mapping with keys {sorted(_ERROR_SPEC_KEYS)}")
+    _validate_status_and_headers(spec, where, "error")
+
+
+def _validate_status_and_headers(block: dict[str, Any], where: str, name: str) -> None:
+    """Shared by fail: and error: blocks: a required HTTP status and optional headers mapping."""
+    status = block.get("status")
+    if isinstance(status, bool) or not isinstance(status, int) or not 100 <= status <= 599:
+        raise ValueError(f"{where}: '{name}.status' is required and must be an HTTP status code (got {status!r})")
+    if block.get("headers") is not None and not isinstance(block["headers"], dict):
+        raise ValueError(f"{where}: '{name}.headers' must be a mapping")
+
+
 def _validate_validate_block(validate: dict[str, Any], path_hint: str) -> None:
+    if "error" in validate:
+        _validate_error_spec(validate["error"], f"Endpoint {path_hint} validate")
+        validate = {k: v for k, v in validate.items() if k != "error"}
     unknown_top = set(validate.keys()) - _VALIDATE_VALID_KEYS
     if unknown_top:
         raise ValueError(
@@ -127,6 +248,9 @@ def _validate_rate_limit_block(
             f"using pagination.style 'page_number_url', in the current version"
         )
 
+    if isinstance(rate_limit, dict) and "error" in rate_limit:
+        _validate_error_spec(rate_limit["error"], f"Endpoint {path_hint} rate_limit")
+        rate_limit = {k: v for k, v in rate_limit.items() if k != "error"}
     unknown_top = set(rate_limit.keys()) - _RATE_LIMIT_VALID_KEYS
     if unknown_top:
         raise ValueError(
@@ -144,7 +268,82 @@ def _validate_rate_limit_block(
         )
 
 
-def _parse_endpoint(raw: dict[str, Any], pattern: str, pagination: dict[str, Any] | None = None) -> EndpointDef:
+def _validate_pending_block(pending: Any, response: dict[str, Any], path: str, where: str) -> None:
+    if not isinstance(pending, dict):
+        raise ValueError(f"{where}: 'response.pending' must be a mapping (got {pending!r})")
+    unknown = set(pending) - _PENDING_KEYS
+    if unknown:
+        raise ValueError(f"{where}: unknown key(s) in 'pending:' {sorted(unknown)}. Allowed: {sorted(_PENDING_KEYS)}")
+    times = pending.get("times")
+    if isinstance(times, bool) or not isinstance(times, int) or times <= 0:
+        raise ValueError(f"{where}: 'pending.times' is required and must be a positive integer (got {times!r})")
+    status = pending.get("status", 202)
+    if isinstance(status, bool) or not isinstance(status, int) or not 100 <= status <= 599:
+        raise ValueError(f"{where}: 'pending.status' must be an HTTP status code (got {status!r})")
+    if pending.get("headers") is not None and not isinstance(pending["headers"], dict):
+        raise ValueError(f"{where}: 'pending.headers' must be a mapping")
+    if response.get("generates_id"):
+        raise ValueError(f"{where}: 'pending' cannot be used on the step that generates the id")
+    if "{id}" not in path:
+        raise ValueError(f"{where}: 'pending' needs '{{id}}' in the path, so each request is counted separately")
+
+
+_SIGNATURE_KEYS = {"secret", "header", "algorithm"}
+_SIGNATURE_ALGORITHMS = {"sha256", "sha512", "sha1"}
+_RETRY_KEYS = {"attempts", "backoff_seconds"}
+
+
+def _validate_callback_delivery(response: dict[str, Any], where: str) -> None:
+    headers = response.get("callback_headers")
+    if headers is not None and not isinstance(headers, dict):
+        raise ValueError(f"{where}: 'callback_headers' must be a mapping of header name to value")
+    signature = response.get("callback_signature")
+    if signature is not None:
+        if not isinstance(signature, dict) or set(signature) - _SIGNATURE_KEYS:
+            raise ValueError(f"{where}: 'callback_signature' must be a mapping with keys {sorted(_SIGNATURE_KEYS)}")
+        if not signature.get("secret") or not isinstance(signature["secret"], str):
+            raise ValueError(f"{where}: 'callback_signature.secret' is required (a string)")
+        if signature.get("algorithm", "sha256") not in _SIGNATURE_ALGORITHMS:
+            raise ValueError(f"{where}: 'callback_signature.algorithm' must be one of {sorted(_SIGNATURE_ALGORITHMS)}")
+    retries = response.get("callback_retries")
+    if retries is not None:
+        if not isinstance(retries, dict) or set(retries) - _RETRY_KEYS:
+            raise ValueError(f"{where}: 'callback_retries' must be a mapping with keys {sorted(_RETRY_KEYS)}")
+        attempts = retries.get("attempts", 1)
+        if isinstance(attempts, bool) or not isinstance(attempts, int) or not 1 <= attempts <= 10:
+            raise ValueError(f"{where}: 'callback_retries.attempts' must be an integer from 1 to 10")
+        backoff = retries.get("backoff_seconds", 1)
+        if isinstance(backoff, bool) or not isinstance(backoff, (int, float)) or not 0 <= backoff <= 60:
+            raise ValueError(f"{where}: 'callback_retries.backoff_seconds' must be a number from 0 to 60")
+
+
+def _validate_fail_block(fail: Any, where: str) -> None:
+    if not isinstance(fail, dict):
+        raise ValueError(f"{where}: 'fail' must be a mapping (got {fail!r})")
+    unknown = set(fail) - _FAIL_KEYS
+    if unknown:
+        raise ValueError(f"{where}: unknown key(s) in 'fail:' {sorted(unknown)}. Allowed: {sorted(_FAIL_KEYS)}")
+    _validate_status_and_headers(fail, where, "fail")
+    first_n = fail.get("first_n")
+    if first_n is not None and (isinstance(first_n, bool) or not isinstance(first_n, int) or first_n <= 0):
+        raise ValueError(f"{where}: 'fail.first_n' must be a positive integer (got {first_n!r})")
+
+
+def _check_unknown_keys(raw: dict[str, Any], known: set[str], where: str, warns: list[str] | None) -> None:
+    if warns is None:
+        return
+    for key in sorted(set(raw) - known, key=str):
+        warns.append(f"{where}: unknown key '{key}' (ignored). Known keys: {sorted(known)}")
+
+
+def _parse_endpoint(
+    raw: dict[str, Any],
+    pattern: str,
+    pagination: dict[str, Any] | None = None,
+    warns: list[str] | None = None,
+) -> EndpointDef:
+    if not isinstance(raw, dict):
+        raise ValueError(f"Endpoint must be a mapping, got {raw!r}")
     method = raw.get("method")
     path = raw.get("path")
 
@@ -152,10 +351,53 @@ def _parse_endpoint(raw: dict[str, Any], pattern: str, pagination: dict[str, Any
         raise ValueError(f"Endpoint is missing 'method': {raw}")
     if not path:
         raise ValueError(f"Endpoint is missing 'path': {raw}")
+    if not isinstance(method, str) or method.upper() not in _HTTP_METHODS:
+        raise ValueError(f"Endpoint {path}: 'method' must be one of {sorted(_HTTP_METHODS)} (got {method!r})")
+    if not isinstance(path, str) or not path.startswith("/"):
+        raise ValueError(f"Endpoint {method.upper()} {path}: 'path' must start with '/' (got {path!r})")
+    where = f"Endpoint {method.upper()} {path}"
+    _check_unknown_keys(raw, _ENDPOINT_KEYS, where, warns)
+
+    response = raw.get("response") or {}
+    if not isinstance(response, dict):
+        raise ValueError(f"{where}: 'response' must be a mapping (got {response!r})")
+    status = response.get("status")
+    if status is not None and (isinstance(status, bool) or not isinstance(status, int) or not 100 <= status <= 599):
+        raise ValueError(f"{where}: 'response.status' must be an HTTP status code between 100 and 599 (got {status!r})")
+    _check_unknown_keys(response, _RESPONSE_KEYS[pattern], f"{where} response", warns)
+    if pattern == "callback":
+        _validate_callback_delivery(response, where)
+        has_field, has_header = bool(response.get("callback_url_field")), bool(response.get("callback_url_header"))
+        if has_field == has_header:
+            raise ValueError(
+                f"{where}: callback needs exactly one of "
+                "'response.callback_url_field' or 'response.callback_url_header'"
+            )
+    payload_by = response.get("payload_by")
+    if pattern == "fetch" and payload_by is not None:
+        if not isinstance(payload_by, str) or f"{{{payload_by}}}" not in path:
+            raise ValueError(
+                f"{where}: 'response.payload_by' must name a path parameter, "
+                f"e.g. 'id' for '{{id}}' (got {payload_by!r})"
+            )
+    if pattern == "polling" and response.get("pending") is not None:
+        _validate_pending_block(response["pending"], response, path, where)
+    if pattern == "polling" and response.get("generates_id"):
+        if not (response.get("id_header") and response.get("id_header_value")) and not response.get("id_body_field"):
+            raise ValueError(f"{where}: 'generates_id: true' needs 'id_header' + 'id_header_value' or 'id_body_field'")
 
     raw_validate = raw.get("validate")
     if raw_validate is not None:
         _validate_validate_block(raw_validate, f"{method.upper()} {path}")
+
+    delay_ms = raw.get("delay_ms")
+    if delay_ms is not None and (
+        isinstance(delay_ms, bool) or not isinstance(delay_ms, int) or not 0 <= delay_ms <= MAX_DELAY_MS
+    ):
+        raise ValueError(f"{where}: 'delay_ms' must be an integer between 0 and {MAX_DELAY_MS} (got {delay_ms!r})")
+    fail = raw.get("fail")
+    if fail is not None:
+        _validate_fail_block(fail, where)
 
     raw_rate_limit = raw.get("rate_limit")
     if raw_rate_limit is not None:
@@ -165,13 +407,17 @@ def _parse_endpoint(raw: dict[str, Any], pattern: str, pagination: dict[str, Any
         method=method.upper(),
         path=path.rstrip("/") or "/",
         step=raw.get("step"),  # optional; only polling endpoints carry this
-        response=raw.get("response") or {},
+        response=response,
         validate=raw_validate,
         rate_limit=raw_rate_limit,
+        delay_ms=delay_ms,
+        fail=fail,
     )
 
 
-def _parse_datapoint(raw: dict[str, Any], partner: str) -> DatapointDef:
+def _parse_datapoint(raw: dict[str, Any], partner: str, warns: list[str] | None = None) -> DatapointDef:
+    if not isinstance(raw, dict):
+        raise ValueError(f"Datapoint in partner '{partner}' must be a mapping, got {raw!r}")
     name = raw.get("name")
     pattern = raw.get("pattern")
 
@@ -188,6 +434,9 @@ def _parse_datapoint(raw: dict[str, Any], partner: str) -> DatapointDef:
     raw_endpoints = raw.get("endpoints")
     if not raw_endpoints:
         raise ValueError(f"Datapoint '{name}' in partner '{partner}' has no endpoints")
+    if not isinstance(raw_endpoints, list):
+        raise ValueError(f"Datapoint '{name}' in partner '{partner}': 'endpoints' must be a list")
+    _check_unknown_keys(raw, _DATAPOINT_KEYS, f"Datapoint '{name}' in partner '{partner}'", warns)
 
     pagination: dict[str, Any] | None = None
     if pattern == "paginated":
@@ -238,12 +487,12 @@ def _parse_datapoint(raw: dict[str, Any], partner: str) -> DatapointDef:
         name=name,
         description=raw.get("description", ""),
         pattern=pattern,
-        endpoints=[_parse_endpoint(e, pattern, pagination) for e in raw_endpoints],
+        endpoints=[_parse_endpoint(e, pattern, pagination, warns) for e in raw_endpoints],
         pagination=pagination,
     )
 
 
-def _parse_partner(raw: Any, source_path: Path) -> PartnerDef:
+def _parse_partner(raw: Any, source_path: Path, strict: bool = False) -> PartnerDef:
     if not isinstance(raw, dict):
         raise ValueError(f"Partner YAML at {source_path} must be a YAML mapping with a 'partner' key")
     partner = raw.get("partner")
@@ -253,12 +502,21 @@ def _parse_partner(raw: Any, source_path: Path) -> PartnerDef:
     raw_datapoints = raw.get("datapoints")
     if not raw_datapoints:
         raise ValueError(f"Partner '{partner}' has no datapoints defined")
+    if not isinstance(raw_datapoints, list):
+        raise ValueError(f"Partner '{partner}': 'datapoints' must be a list")
+
+    warns: list[str] = []
+    _check_unknown_keys(raw, _PARTNER_KEYS, f"Partner '{partner}'", warns)
+    datapoints = [_parse_datapoint(dp, partner, warns) for dp in raw_datapoints]
+    if strict and warns:
+        raise ValueError("; ".join(warns))
 
     return PartnerDef(
         partner=partner,
         description=raw.get("description", ""),
-        datapoints=[_parse_datapoint(dp, partner) for dp in raw_datapoints],
+        datapoints=datapoints,
         source_path=source_path,
+        warnings=warns,
     )
 
 
@@ -267,15 +525,17 @@ def _parse_partner(raw: Any, source_path: Path) -> PartnerDef:
 # ---------------------------------------------------------------------------
 
 
-def parse_partner_yaml(text: str, source_path: Path = Path("<input>")) -> PartnerDef:
+def parse_partner_yaml(text: str, source_path: Path = Path("<input>"), strict: bool = False) -> PartnerDef:
     """Parse and validate a partner YAML string.
+
+    With ``strict=True`` unknown keys are errors instead of entries in ``PartnerDef.warnings``.
 
     Raises:
         yaml.YAMLError: if the text is not valid YAML.
         ValueError: if the parsed content fails schema validation.
     """
     raw = yaml.safe_load(text)
-    return _parse_partner(raw, source_path)
+    return _parse_partner(raw, source_path, strict=strict)
 
 
 def load_partners(partners_dir: Path) -> list[PartnerDef]:
@@ -298,6 +558,11 @@ def load_partners(partners_dir: Path) -> list[PartnerDef]:
         try:
             raw = yaml.safe_load(yaml_path.read_text())
             partner = _parse_partner(raw, yaml_path)
+            for warning in partner.warnings:
+                logger.warning("%s: %s", yaml_path, warning)
+            partner.seed_payloads, problems = load_payload_files(partner, yaml_path.parent / "payloads")
+            for problem in problems:
+                logger.warning("%s: %s (skipped)", yaml_path.parent, problem)
             partners.append(partner)
             logger.info(
                 "Loaded partner '%s' with %d datapoint(s) from %s",

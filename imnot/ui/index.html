@@ -2033,6 +2033,19 @@ img, svg {
 
     // ---- Auth ----
     function getToken() { return localStorage.getItem('imnot-admin-key') || ''; }
+
+    // Any 401 from the admin API (sessions, Builder, uploads, Postman, Load Test…) opens the key panel,
+    // instead of each caller showing a toast that disappears before the user can act on it.
+    (function () {
+      var nativeFetch = window.fetch.bind(window);
+      window.fetch = function (input, init) {
+        return nativeFetch(input, init).then(function (r) {
+          var url = typeof input === 'string' ? input : (input && input.url) || '';
+          if (r.status === 401 && url.indexOf('/imnot/admin') !== -1) openKeyPanel();
+          return r;
+        });
+      };
+    })();
     function authHeaders() {
       var h = { 'Content-Type': 'application/json' };
       var t = getToken();
@@ -2084,7 +2097,11 @@ img, svg {
     // ---- Partners ----
     function loadPartners() {
       return fetch('/imnot/admin/partners', { headers: authHeaders() })
-        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (r) {
+          if (r.status === 401) throw new Error('this server needs an admin key — enter it above');
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
         .then(renderPartners)
         .catch(function (e) { notify('Failed to load partners: ' + e.message, 'error'); });
     }
@@ -2095,7 +2112,7 @@ img, svg {
       if (!data || !data.length) {
         c.innerHTML = '<div class="empty-state">'
           + '<p>No partners loaded.</p>'
-          + '<p>Run <code>imnot generate</code> or POST to /imnot/admin/partners.</p>'
+          + '<p>Run <code>imnot init</code> for examples, or add one with the <strong>+</strong> button, <code>imnot generate</code> or POST /imnot/admin/partners.</p>'
           + '</div>';
         return;
       }
@@ -2831,16 +2848,22 @@ img, svg {
 
       // Edit mode
       titleEl.textContent = 'Edit Partner: ' + partnerName;
-      subtitleEl.innerHTML = 'Fields pre-filled from current registration. Pattern-specific config fields show defaults — re-enter as needed.';
+      subtitleEl.innerHTML = 'Pre-filled from partner.yaml. Settings this form can\'t edit (validate, fail, delay_ms, headers, payload_by, pending) are kept when you save; YAML comments are not.';
       submitBtn.textContent = 'Save Changes';
       builderReset();
       _builderMode = 'edit';
       _builderOriginalName = partnerName;
       _builderSyncSubmit();
 
-      fetch('/imnot/admin/partners', { headers: authHeaders() })
-        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-        .then(function (data) {
+      var listReq = fetch('/imnot/admin/partners', { headers: authHeaders() })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+      // The full partner.yaml fills the fields the list endpoint doesn't expose (expires_in, bodies…).
+      var rawReq = fetch('/imnot/admin/partners/' + encodeURIComponent(partnerName), { headers: authHeaders() })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .catch(function () { return null; });
+      Promise.all([listReq, rawReq])
+        .then(function (results) {
+          var data = results[0];
           var found = null;
           for (var i = 0; i < data.length; i++) {
             if (data[i].partner === partnerName) { found = data[i]; break; }
@@ -2850,7 +2873,7 @@ img, svg {
             showSection('partners');
             return;
           }
-          builderPreFill(found);
+          builderPreFill(found, results[1]);
         })
         .catch(function (e) {
           notify('Failed to load partner data: ' + e.message, 'error');
@@ -2871,7 +2894,55 @@ img, svg {
       _builderSyncSubmit();
     }
 
-    function builderPreFill(partnerData) {
+    function _builderSetValue(id, value) {
+      var el = document.getElementById(id);
+      if (el && value !== undefined && value !== null) el.value = value;
+    }
+
+    // Fill the fields the form can edit but GET /imnot/admin/partners doesn't expose, from the raw
+    // partner.yaml (GET /imnot/admin/partners/{name}). Without this they reverted to defaults on save.
+    function _builderPreFillFromRaw(idx, pattern, rawDp) {
+      if (!rawDp) return;
+      var eps = rawDp.endpoints || [];
+      var p = 'b-dp-' + idx;
+      if (pattern === 'polling') {
+        eps.forEach(function (ep, si) {
+          var r = ep.response || {};
+          _builderSetValue(p + '-step-' + si + '-status', r.status);
+          if (r.generates_id) {
+            var cb = document.getElementById(p + '-step-' + si + '-gen-id');
+            if (cb) { cb.checked = true; _builderToggleGenId(idx, si); }
+            var mode = r.id_body_field ? 'body' : 'header';
+            document.querySelectorAll('input[name="' + p + '-step-' + si + '-delivery"]').forEach(function (x) {
+              x.checked = (x.value === mode);
+            });
+            _builderToggleDelivery(idx, si);
+            _builderSetValue(p + '-step-' + si + '-id-header', r.id_header);
+            _builderSetValue(p + '-step-' + si + '-id-header-val', r.id_header_value);
+            _builderSetValue(p + '-step-' + si + '-id-body-field', r.id_body_field);
+          }
+          if (r.returns_payload) {
+            var rp = document.getElementById(p + '-returns-payload');
+            if (rp) rp.checked = true;
+          }
+        });
+        return;
+      }
+      var r0 = (eps[0] || {}).response || {};
+      _builderSetValue(p + '-status', r0.status);
+      if (pattern === 'oauth') {
+        _builderSetValue(p + '-expires-in', r0.expires_in);
+        _builderSetValue(p + '-token-type', r0.token_type);
+      }
+      if (pattern === 'static' && r0.body !== undefined) {
+        var bodyVal = typeof r0.body === 'string' ? r0.body : JSON.stringify(r0.body, null, 2);
+        _builderSetValue(p + '-body', bodyVal);
+      }
+    }
+
+    function builderPreFill(partnerData, rawPartner) {
+      var rawDps = {};
+      ((rawPartner && rawPartner.datapoints) || []).forEach(function (d) { if (d && d.name) rawDps[d.name] = d; });
       document.getElementById('b-partner-name').value = partnerData.partner || '';
       document.getElementById('b-description').value = partnerData.description || '';
 
@@ -2992,6 +3063,8 @@ img, svg {
           }
         }
       });
+
+      dps.forEach(function (dp, i) { _builderPreFillFromRaw(i + 1, dp.pattern, rawDps[dp.name]); });
 
       // Ensure at least one datapoint block
       if (dps.length === 0) builderAddDatapoint();
@@ -3900,7 +3973,9 @@ img, svg {
     function _builderPost(yamlText, submittedPartnerName, compareTo) {
       var url = '/imnot/admin/partners';
       if (_builderMode === 'edit') {
-        url += '?force=true' + (compareTo ? '&compare_to=' + encodeURIComponent(compareTo) : '');
+        // merge_from keeps the fields this form never writes; compare_to then warns about anything still lost.
+        url += '?force=true&merge_from=' + encodeURIComponent(_builderOriginalName)
+          + (compareTo ? '&compare_to=' + encodeURIComponent(compareTo) : '');
       }
       return fetch(url, {
         method: 'POST',
@@ -4022,13 +4097,13 @@ img, svg {
       }
       tbody.innerHTML = data.map(function (s, i) {
         var rowClass = i % 2 !== 0 ? 'stripe' : '';
-        return '<tr class="' + rowClass + '">'
+        return '<tr class="' + rowClass + '" data-session-id="' + escHtml(s.session_id) + '">'
           + '<td class="td-session-id"><div class="session-id-cell"><span>' + escHtml(s.session_id) + '</span><button class="btn-copy" onclick="copyToClipboard(\'' + escHtml(s.session_id) + '\',this)" title="Copy session ID"><svg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'currentColor\' stroke-width=\'2\' width=\'12\' height=\'12\' aria-hidden=\'true\'><rect x=\'9\' y=\'9\' width=\'13\' height=\'13\' rx=\'2\'/><path stroke-linecap=\'round\' stroke-linejoin=\'round\' d=\'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\'/></svg></button></div></td>'
           + '<td class="td-partner">'    + escHtml(s.partner) + '</td>'
           + '<td class="td-datapoint">'  + escHtml(s.datapoint) + '</td>'
           + '<td class="td-created">'    + escHtml(s.created_at || '—') + '</td>'
           + '<td class="td-last-used">'  + escHtml(s.last_used || '—') + '</td>'
-          + '<td><button class="btn-danger-sm" onclick="deleteSession(\'' + escHtml(s.session_id) + '\')">Delete</button></td>'
+          + '<td><button class="btn-danger-sm" onclick="deleteSession(\'' + escHtml(s.session_id) + '\')" title="Deletes the session with all its datapoints">Delete</button></td>'
           + '</tr>';
       }).join('');
     }
@@ -4042,6 +4117,9 @@ img, svg {
     }
 
     function deleteSession(sessionId) {
+      // A session can hold several datapoints (one row each); deleting it removes all of them.
+      var rows = document.querySelectorAll('[data-session-id="' + sessionId + '"]').length;
+      if (rows > 1 && !confirm('Session ' + sessionId + ' has ' + rows + ' datapoints. Delete the whole session?')) return;
       fetch('/imnot/admin/sessions/' + encodeURIComponent(sessionId), {
         method: 'DELETE', headers: authHeaders(),
       })
@@ -4077,8 +4155,23 @@ img, svg {
     function checkHealth() {
       fetch('/healthz')
         .then(function (r) { return r.json(); })
-        .then(function (d) { document.getElementById('server-status').textContent = 'v' + (d.version || '?'); })
+        .then(function (d) {
+          document.getElementById('server-status').textContent = 'v' + (d.version || '?');
+          // Only ask for an admin key when this server actually has one configured.
+          var keyBtn = document.getElementById('key-btn');
+          if (d.auth_required) {
+            if (!localStorage.getItem('imnot-admin-key')) openKeyPanel();
+          } else {
+            document.getElementById('key-panel').setAttribute('hidden', '');
+            keyBtn.title = 'This server has no admin key (IMNOT_ADMIN_KEY is not set)';
+          }
+        })
         .catch(function () { document.getElementById('server-status').textContent = 'offline'; });
+    }
+
+    function openKeyPanel() {
+      document.getElementById('key-panel').removeAttribute('hidden');
+      document.getElementById('key-input').focus();
     }
 
     // ---- Admin key panel ----
@@ -4136,9 +4229,6 @@ img, svg {
     (function () {
       updateThemeIcon(document.documentElement.getAttribute('data-theme') || 'light');
       updateKeyIcon();
-      if (!localStorage.getItem('imnot-admin-key')) {
-        document.getElementById('key-panel').removeAttribute('hidden');
-      }
       var section = localStorage.getItem('imnot-section') || 'partners';
       if (section === 'payload') section = 'partners';
       if (section === 'builder') section = 'partners'; // Builder is transient

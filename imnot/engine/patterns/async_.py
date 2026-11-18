@@ -23,7 +23,10 @@ from typing import Any, Callable
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
+from imnot.engine.errors import validation_error_response
+from imnot.engine.patterns import no_payload_response
 from imnot.engine.session_store import SessionStore
+from imnot.engine.templating import render_response
 from imnot.engine.validator import validate_request
 from imnot.loader.yaml_loader import DatapointDef, EndpointDef
 
@@ -41,7 +44,7 @@ def make_async_handlers(
         elif endpoint.response.get("returns_payload"):
             handler = _make_fetch_handler(partner, datapoint, endpoint, store)
         else:
-            handler = _make_static_handler(partner, datapoint, endpoint)
+            handler = _make_static_handler(partner, datapoint, endpoint, store)
         handlers[endpoint.step] = handler
     return handlers
 
@@ -65,11 +68,7 @@ def _make_submit_handler(
     static_body: dict[str, Any] = endpoint.response.get("body") or {}
     validate_rules = endpoint.validate
 
-    if not (id_header and id_header_value) and not id_body_field:
-        raise ValueError(
-            f"Endpoint step {endpoint.step} has generates_id=true but neither "
-            "'id_header'/'id_header_value' nor 'id_body_field' is set"
-        )
+    # The loader (``_parse_endpoint``) guarantees an id source when generates_id is true.
 
     async def handler(request: Request) -> Response:
         if validate_rules is not None:
@@ -81,7 +80,7 @@ def _make_submit_handler(
                     body = None
             errors = validate_request(validate_rules, body, request.query_params, request.headers)
             if errors:
-                return JSONResponse(status_code=422, content={"detail": errors})
+                return validation_error_response(validate_rules, errors)
 
         session_id: str | None = request.headers.get("X-Imnot-Session")
         async_uuid = store.register_async_request(
@@ -104,6 +103,39 @@ def _make_submit_handler(
 
 
 # ---------------------------------------------------------------------------
+# Pending responses (response.pending: {times, status, body, headers})
+# ---------------------------------------------------------------------------
+
+
+def _make_pending_check(endpoint: EndpointDef) -> Callable[[str], Response | None]:
+    """Return ``check(request_id)``: the pending response for the first ``times`` calls per id, else None.
+
+    Counts live in memory per handler and per request id, so every new submit starts from zero.
+    """
+    pending: dict[str, Any] | None = endpoint.response.get("pending")
+    counts: dict[str, int] = {}
+
+    def check(request_id: str) -> Response | None:
+        if not pending:
+            return None
+        seen = counts.get(request_id, 0)
+        if seen >= pending["times"]:
+            return None
+        counts[request_id] = seen + 1
+        status = pending.get("status", 202)
+        headers = {str(k): str(v) for k, v in (pending.get("headers") or {}).items()}
+        if "body" in pending:
+            return JSONResponse(status_code=status, content=pending["body"], headers=headers)
+        return Response(status_code=status, headers=headers)
+
+    return check
+
+
+def _unknown_id_response(async_uuid: str | None) -> JSONResponse:
+    return JSONResponse(status_code=404, content={"detail": f"Unknown request ID: {async_uuid}"})
+
+
+# ---------------------------------------------------------------------------
 # Static handler
 # ---------------------------------------------------------------------------
 
@@ -112,38 +144,38 @@ def _make_static_handler(
     partner: str,
     datapoint: DatapointDef,
     endpoint: EndpointDef,
+    store: SessionStore,
 ) -> Callable:
     status_code: int = endpoint.response.get("status", 200)
     extra_headers: dict[str, str] = endpoint.response.get("headers") or {}
     static_body: dict[str, Any] | None = endpoint.response.get("body")
     validate_rules = endpoint.validate
+    has_id = "{id}" in endpoint.path
+    pending_check = _make_pending_check(endpoint)
 
-    if static_body is not None:
-
-        async def handler(request: Request) -> Response:
-            if validate_rules is not None:
-                body: Any = None
-                if validate_rules.get("body"):
-                    try:
-                        body = await request.json()
-                    except Exception:
-                        body = None
-                errors = validate_request(validate_rules, body, request.query_params, request.headers)
-                if errors:
-                    return JSONResponse(status_code=422, content={"detail": errors})
-            return JSONResponse(
-                status_code=status_code,
-                content=static_body,
-                headers=extra_headers,
-            )
-    else:
-
-        async def handler(request: Request) -> Response:
-            if validate_rules is not None:
-                errors = validate_request(validate_rules, None, request.query_params, request.headers)
-                if errors:
-                    return JSONResponse(status_code=422, content={"detail": errors})
-            return Response(status_code=status_code, headers=extra_headers)
+    async def handler(request: Request) -> Response:
+        if validate_rules is not None:
+            body: Any = None
+            if validate_rules.get("body"):
+                try:
+                    body = await request.json()
+                except Exception:
+                    body = None
+            errors = validate_request(validate_rules, body, request.query_params, request.headers)
+            if errors:
+                return validation_error_response(validate_rules, errors)
+        if has_id:
+            # A status step for an id that was never submitted must not report it as done.
+            async_uuid: str = request.path_params["id"]
+            if store.get_async_request(async_uuid) is None:
+                return _unknown_id_response(async_uuid)
+            pending = pending_check(async_uuid)
+            if pending is not None:
+                return pending
+        if static_body is not None:
+            content = await render_response(static_body, request)
+            return JSONResponse(status_code=status_code, content=content, headers=extra_headers)
+        return Response(status_code=status_code, headers=extra_headers)
 
     handler.__name__ = f"polling_static_{partner}_{datapoint.name}_{endpoint.step}"
     return handler
@@ -163,6 +195,7 @@ def _make_fetch_handler(
     dp_name = datapoint.name
     status_code: int = endpoint.response.get("status", 200)
     validate_rules = endpoint.validate
+    pending_check = _make_pending_check(endpoint)
 
     async def handler(request: Request) -> Response:
         if validate_rules is not None:
@@ -174,15 +207,15 @@ def _make_fetch_handler(
                     body = None
             errors = validate_request(validate_rules, body, request.query_params, request.headers)
             if errors:
-                return JSONResponse(status_code=422, content={"detail": errors})
+                return validation_error_response(validate_rules, errors)
 
         async_uuid: str | None = request.path_params.get("id")
         row = store.get_async_request(async_uuid)
         if row is None:
-            return JSONResponse(
-                status_code=404,
-                content={"detail": f"Unknown request ID: {async_uuid}"},
-            )
+            return _unknown_id_response(async_uuid)
+        pending = pending_check(async_uuid)
+        if pending is not None:
+            return pending
 
         session_id: str | None = request.headers.get("X-Imnot-Session")
         payload: dict[str, Any] | None = store.resolve_payload(
@@ -192,12 +225,7 @@ def _make_fetch_handler(
         )
 
         if payload is None:
-            detail = (
-                f"No session payload found for session '{session_id}'"
-                if session_id
-                else f"No global payload found for {partner}/{dp_name}"
-            )
-            return JSONResponse(status_code=404, content={"detail": detail})
+            return no_payload_response(partner, dp_name, session_id)
 
         return JSONResponse(status_code=status_code, content=payload)
 

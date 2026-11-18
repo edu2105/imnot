@@ -23,6 +23,8 @@ from typing import Any, Callable
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
+from imnot.engine.errors import rate_limit_response, validation_error_response
+from imnot.engine.patterns import no_payload_response
 from imnot.engine.rate_limiter import RateLimiter
 from imnot.engine.session_store import SessionStore
 from imnot.engine.validator import validate_request
@@ -40,6 +42,7 @@ def make_fetch_handler(
 
     dp_name = datapoint.name
     status_code: int = endpoint.response.get("status", 200)
+    payload_by: str | None = endpoint.response.get("payload_by")  # path param that selects an entry
     validate_rules = endpoint.validate
     rate_limit = endpoint.rate_limit
     capacity = rate_limit["requests_per_minute"] if rate_limit is not None else None
@@ -50,11 +53,7 @@ def make_fetch_handler(
             key = (partner, dp_name, endpoint.method, endpoint.path)
             allowed, retry_after = limiter.check(key, capacity, refill_per_second, time.time())
             if not allowed:
-                return JSONResponse(
-                    status_code=429,
-                    content={"detail": f"Rate limit exceeded: {capacity} requests per minute"},
-                    headers={"Retry-After": str(retry_after)},
-                )
+                return rate_limit_response(rate_limit, capacity, retry_after)
 
         if validate_rules is not None:
             body: Any = None
@@ -65,7 +64,7 @@ def make_fetch_handler(
                     body = None
             errors = validate_request(validate_rules, body, request.query_params, request.headers)
             if errors:
-                return JSONResponse(status_code=422, content={"detail": errors})
+                return validation_error_response(validate_rules, errors)
 
         session_id: str | None = request.headers.get("X-Imnot-Session")
         payload: dict[str, Any] | None = store.resolve_payload(
@@ -75,12 +74,22 @@ def make_fetch_handler(
         )
 
         if payload is None:
-            detail = (
-                f"No session payload found for session '{session_id}'"
-                if session_id
-                else f"No global payload found for {partner}/{dp_name}"
-            )
-            return JSONResponse(status_code=404, content={"detail": detail})
+            return no_payload_response(partner, dp_name, session_id)
+
+        if payload_by is not None:
+            # The payload is a map {<path param value>: <response>}; pick this request's entry.
+            if not isinstance(payload, dict):
+                return JSONResponse(
+                    status_code=422,
+                    content={"detail": f"Payload must be a JSON object keyed by '{payload_by}' (payload_by)"},
+                )
+            param_value = request.path_params.get(payload_by)
+            if param_value not in payload:
+                return JSONResponse(
+                    status_code=404,
+                    content={"detail": f"No payload entry for {payload_by} '{param_value}' in {partner}/{dp_name}"},
+                )
+            payload = payload[param_value]
 
         return JSONResponse(status_code=status_code, content=payload)
 

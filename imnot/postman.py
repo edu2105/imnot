@@ -25,9 +25,8 @@ import json
 import uuid
 from typing import Any
 
-from imnot.loader.yaml_loader import DatapointDef, EndpointDef, PartnerDef
+from imnot.loader.yaml_loader import PAYLOAD_PATTERNS, DatapointDef, EndpointDef, PartnerDef
 
-_PAYLOAD_PATTERNS = {"fetch", "polling", "callback", "paginated"}
 _BODY_METHODS = {"POST", "PUT", "PATCH"}
 
 
@@ -67,7 +66,7 @@ def collection_stats(partners: list[PartnerDef]) -> dict[str, Any]:
         (5 if dp.pattern == "callback" else 4)
         for p in partners
         for dp in p.datapoints
-        if dp.pattern in _PAYLOAD_PATTERNS
+        if dp.pattern in PAYLOAD_PATTERNS
     )
     return {
         "partners": len(partners),
@@ -93,7 +92,7 @@ def _partner_folder(partner: PartnerDef) -> dict[str, Any]:
 
 def _datapoint_folder(partner_name: str, dp: DatapointDef) -> dict[str, Any]:
     items: list[dict[str, Any]] = [_consumer_request(dp, ep) for ep in dp.endpoints]
-    if dp.pattern in _PAYLOAD_PATTERNS:
+    if dp.pattern in PAYLOAD_PATTERNS:
         items.append(_admin_folder(partner_name, dp))
     return {
         "name": dp.name,
@@ -130,7 +129,7 @@ def _consumer_request(dp: DatapointDef, ep: EndpointDef) -> dict[str, Any]:
             )
 
     # X-Imnot-Session — present but disabled for payload-pattern endpoints
-    if dp.pattern in _PAYLOAD_PATTERNS:
+    if dp.pattern in PAYLOAD_PATTERNS:
         headers.append(
             {
                 "key": "X-Imnot-Session",
