@@ -340,30 +340,139 @@ def test_start_reload_passes_base_url_flag_to_the_factory(runner, project):
 
 
 # ---------------------------------------------------------------------------
-# Admin API with partners that cannot be written
+# Partners through the admin API: in memory when stateless, on disk otherwise
 # ---------------------------------------------------------------------------
 
 _NEW_PARTNER = _PARTNER.format(name="bookingco")
+_EDITED = """\
+partner: staylink
+datapoints:
+  - name: ping
+    pattern: static
+    endpoints:
+      - method: GET
+        path: /staylink/ping
+        validate:
+          query:
+            token: {required: true}
+        response:
+          status: 200
+          body: {ok: edited}
+"""
 
 
-def test_partners_admin_writes_are_refused_when_read_only(project):
-    app = create_app(partners_dir=project / "partners", db_path=Path(":memory:"), partners_read_only=True)
+@pytest.fixture
+def stateless_client(project):
+    app = create_app(partners_dir=project / "partners", db_path=Path(":memory:"), stateless=True)
     with TestClient(app) as c:
-        created = c.post("/imnot/admin/partners", content=_NEW_PARTNER)
-        assert created.status_code == 403
-        assert created.json()["status"] == "error" and "stateless" in created.json()["detail"]
-        assert not (project / "partners" / "bookingco").exists()
+        yield c, project
 
-        deleted = c.delete("/imnot/admin/partners/staylink")
-        assert deleted.status_code == 403
-        assert (project / "partners" / "staylink" / "partner.yaml").exists()
-        assert c.get("/staylink/ping").status_code == 200
 
-        # Everything that does not write partner files keeps working.
-        assert c.get("/imnot/admin/partners").status_code == 200
-        assert c.get("/imnot/admin/partners/staylink").status_code == 200
-        assert c.post("/imnot/admin/reload").json()["status"] == "ok"
-        assert c.post("/imnot/admin/staylink/charges/payload", json={"a": 1}).status_code == 200
+def test_healthz_reports_the_mode(project):
+    with TestClient(create_app(partners_dir=None, db_path=Path(":memory:"), stateless=True)) as c:
+        assert c.get("/healthz").json()["stateless"] is True
+    with TestClient(create_app(partners_dir=None, db_path=Path(":memory:"))) as c:
+        body = c.get("/healthz").json()
+        assert body["stateless"] is False
+        assert body["status"] == "ok" and body["auth_required"] is False  # the old keys are still there
+
+
+def test_stateless_create_partner_lives_in_memory(stateless_client):
+    c, project = stateless_client
+    before = _files(project)
+    created = c.post("/imnot/admin/partners", content=_NEW_PARTNER)
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert body["created"] is True and body["file"] is None and body["directory"] is None
+    assert "GET /bookingco/ping" in body["routes_added"]
+    assert _files(project) == before  # nothing written
+
+    assert c.get("/bookingco/ping").json() == {"ok": True}
+    assert "bookingco" in [p["partner"] for p in c.get("/imnot/admin/partners").json()]
+    assert c.get("/imnot/admin/partners/bookingco").json()["partner"] == "bookingco"
+    # Payload routes of the new partner work too.
+    assert c.post("/imnot/admin/bookingco/charges/payload", json={"a": 1}).status_code == 200
+    assert c.get("/bookingco/charges").json() == {"a": 1}
+
+    assert c.post("/imnot/admin/partners", content=_NEW_PARTNER).status_code == 409
+    assert c.post("/imnot/admin/partners?force=true", content=_NEW_PARTNER).status_code == 200
+    assert c.post("/imnot/admin/partners", content="partner: [").status_code == 422
+    assert c.post("/imnot/admin/partners", content=_PARTNER.format(name="bad name")).status_code == 422
+
+
+def test_stateless_works_without_a_partners_dir():
+    with TestClient(create_app(partners_dir=None, db_path=Path(":memory:"), stateless=True)) as c:
+        assert c.post("/imnot/admin/partners", content=_NEW_PARTNER).status_code == 201
+        assert c.get("/bookingco/ping").status_code == 200
+        assert c.get("/imnot/admin/partners/bookingco?format=yaml").text == _NEW_PARTNER
+        assert c.get("/imnot/admin/partners/nope").status_code == 404
+
+
+def test_stateless_edit_replaces_the_partner_completely(stateless_client):
+    """An edit applies whole, with no reload: removed endpoints stop answering, validate: is enforced."""
+    c, project = stateless_client
+    on_disk = (project / "partners" / "staylink" / "partner.yaml").read_text()
+    assert c.post("/imnot/admin/partners", content=_EDITED).status_code == 409  # exists: needs force
+    assert c.post("/imnot/admin/partners?force=true", content=_EDITED).status_code == 200
+
+    assert c.get("/staylink/ping").status_code == 422  # the new validate: rule
+    assert c.get("/staylink/ping?token=x").json() == {"ok": "edited"}
+    assert c.get("/staylink/charges").status_code == 404  # datapoint removed by the edit
+    assert c.post("/imnot/admin/staylink/charges/payload", json={}).status_code in (404, 405)
+    assert c.get("/imnot/admin/partners/staylink").json()["datapoints"][0]["endpoints"][0]["validate"]
+    assert (project / "partners" / "staylink" / "partner.yaml").read_text() == on_disk
+
+
+def test_stateless_builder_guards_read_the_in_memory_yaml(stateless_client):
+    c, _ = stateless_client
+    assert c.post("/imnot/admin/partners?force=true", content=_EDITED).status_code == 200
+    from_form = _EDITED.replace("        validate:\n          query:\n            token: {required: true}\n", "")
+
+    guarded = c.post("/imnot/admin/partners?force=true&compare_to=staylink", content=from_form)
+    assert guarded.status_code == 409
+    assert any("validate" in d for d in guarded.json()["dropped"])
+
+    merged = c.post("/imnot/admin/partners?force=true&merge_from=staylink&compare_to=staylink", content=from_form)
+    assert merged.status_code == 200, merged.text
+    assert c.get("/staylink/ping").status_code == 422  # validate: was carried over from memory
+
+
+def test_stateless_delete_is_in_memory_and_reload_goes_back_to_the_files(stateless_client):
+    c, project = stateless_client
+    c.post("/imnot/admin/partners", content=_NEW_PARTNER)
+    c.post("/imnot/admin/partners?force=true", content=_EDITED)
+    c.post("/imnot/admin/staylink/charges/payload", json={"uploaded": True})  # route is gone: no effect
+
+    assert c.delete("/imnot/admin/partners/staylink").status_code == 200
+    assert c.get("/staylink/ping?token=x").status_code == 404
+    assert c.get("/imnot/admin/partners/staylink").status_code == 404
+    assert c.delete("/imnot/admin/partners/staylink").status_code == 404
+    assert (project / "partners" / "staylink" / "partner.yaml").exists()
+
+    reloaded = c.post("/imnot/admin/reload")
+    assert reloaded.status_code == 200 and reloaded.json()["status"] == "ok"
+    assert c.get("/staylink/ping").json() == {"ok": True}  # the file's version, without validate:
+    assert c.get("/staylink/charges").json() == {"total": 42}
+    assert c.get("/bookingco/ping").status_code == 404  # the UI-made partner is gone
+    assert c.get("/imnot/admin/partners/bookingco").status_code == 404
+    assert [p["partner"] for p in c.get("/imnot/admin/partners").json()] == ["staylink"]
+
+
+def test_download_partner_yaml(stateless_client, project):
+    c, _ = stateless_client
+    on_disk = (project / "partners" / "staylink" / "partner.yaml").read_text()
+    r = c.get("/imnot/admin/partners/staylink?format=yaml")
+    assert r.status_code == 200 and r.text == on_disk
+    assert "attachment" in r.headers["content-disposition"] and "staylink" in r.headers["content-disposition"]
+    c.post("/imnot/admin/partners?force=true", content=_EDITED)
+    assert c.get("/imnot/admin/partners/staylink?format=yaml").text == _EDITED
+    assert c.get("/imnot/admin/partners/nope?format=yaml").status_code == 404
+
+    # Classic mode serves the file as it is, comments included.
+    (project / "partners" / "staylink" / "partner.yaml").write_text("# mine\n" + on_disk)
+    with TestClient(create_app(partners_dir=project / "partners", db_path=Path(":memory:"))) as classic:
+        assert classic.get("/imnot/admin/partners/staylink?format=yaml").text.startswith("# mine\n")
+        assert classic.get("/imnot/admin/partners/staylink").json()["partner"] == "staylink"
 
 
 def test_partners_admin_writes_still_work_by_default(project):
@@ -387,6 +496,7 @@ def test_unwritable_partners_dir_gives_403_not_500(project):
             created = c.post("/imnot/admin/partners", content=_NEW_PARTNER)
             assert created.status_code == 403
             assert "not writable" in created.json()["detail"]
+            assert c.get("/bookingco/ping").status_code == 404  # classic mode never falls back to memory
             overwritten = c.post("/imnot/admin/partners?force=true", content=_PARTNER.format(name="staylink"))
             assert overwritten.status_code in (200, 403)  # the file itself may still be writable
             deleted = c.delete("/imnot/admin/partners/staylink")

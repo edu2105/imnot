@@ -76,7 +76,7 @@ def create_app(
     base_url: str = "http://localhost:8000",
     default_limit: int = 50,
     ui_config: UIConfig | None = None,
-    partners_read_only: bool = False,
+    stateless: bool = False,
 ) -> FastAPI:
     """Build and return a fully configured FastAPI application.
 
@@ -86,8 +86,8 @@ def create_app(
     If *admin_key* is provided, all ``/imnot/admin/*`` endpoints require
     ``Authorization: Bearer <admin_key>``.
 
-    With *partners_read_only* (stateless mode), ``POST`` and ``DELETE /imnot/admin/partners`` answer 403
-    instead of writing to *partners_dir*.
+    With *stateless*, partners created, edited or deleted through the admin API live in memory only
+    (nothing is written to *partners_dir*), and a reload goes back to what *partners_dir* holds.
     """
     store = SessionStore(db_path=db_path)
     stress_store = StressStore(db_path=db_path)
@@ -114,7 +114,7 @@ def create_app(
     )
 
     app.state.stress_store = stress_store
-    app.state.partners_read_only = partners_read_only
+    app.state.stateless = stateless
     app.add_middleware(LoggingMiddleware)
     app.add_middleware(JournalMiddleware)
     register_routes(

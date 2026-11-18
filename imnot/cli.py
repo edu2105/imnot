@@ -180,7 +180,8 @@ def cli() -> None:
     default=False,
     envvar="IMNOT_STATELESS",
     help="Write nothing to disk: in-memory database (ignores --db), logs to stdout only, no pid file, "
-    "no imnot.toml, partners cannot be changed through the admin API. A restart starts clean. [env: IMNOT_STATELESS]",
+    "no imnot.toml; partners changed through the admin API or the UI live in memory. A restart starts clean. "
+    "[env: IMNOT_STATELESS]",
 )
 @click.option(
     "--strict",
@@ -323,7 +324,7 @@ def start(
                 base_url=effective_base_url,
                 default_limit=config.pagination.default_limit,
                 ui_config=config.ui,
-                partners_read_only=stateless,
+                stateless=stateless,
             )
             uvicorn.run(app, host=effective_host, port=effective_port)
     finally:
