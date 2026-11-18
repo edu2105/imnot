@@ -105,7 +105,7 @@ def register_routes(
 
     if admin_key:
         _register_admin_auth_middleware(app, admin_key)
-    _register_docs_routes(app, partners_dir)
+    _register_docs_routes(app)
     _register_infra_routes(app, partners, store)
     stress_store = getattr(app.state, "stress_store", None)
     if stress_store is not None:
@@ -467,30 +467,37 @@ def _register_admin_routes(
 # ---------------------------------------------------------------------------
 
 
-def _register_docs_routes(app: FastAPI, partners_dir: Path | None) -> None:
-    """Register public read-only endpoints that serve README files as plain text.
+# Where imnot's own docs live: inside the wheel (pip/Docker installs, see force-include in
+# pyproject.toml) or at the repo root (editable installs and local dev).
+_PACKAGED_DOCS_DIR = Path(__file__).parents[1] / "_docs"
+_REPO_ROOT = Path(__file__).parents[2]
+_DOC_FILES = {
+    "readme": (_PACKAGED_DOCS_DIR / "README.md", _REPO_ROOT / "README.md"),
+    "partners": (_PACKAGED_DOCS_DIR / "partners-README.md", _REPO_ROOT / "partners" / "README.md"),
+}
 
-    Path resolution: prefer ``partners_dir.parent`` (reliable in Docker where the
-    package is installed into site-packages but files live under ``/app/``).
-    Falls back to a package-relative path for editable installs and local dev.
+
+def _find_doc(name: str) -> Path | None:
+    return next((p for p in _DOC_FILES[name] if p.is_file()), None)
+
+
+def _register_docs_routes(app: FastAPI) -> None:
+    """Register public read-only endpoints that serve imnot's README files as plain text.
+
+    They always serve imnot's own docs (see ``_DOC_FILES``), never the user's project files.
     """
-    if partners_dir is not None:
-        project_root = partners_dir.parent
-    else:
-        project_root = Path(__file__).parents[2]
-
-    readme_path = project_root / "README.md"
-    partners_readme_path = project_root / "partners" / "README.md"
 
     async def serve_readme() -> PlainTextResponse:
-        if not readme_path.exists():
+        path = _find_doc("readme")
+        if path is None:
             return PlainTextResponse("README.md not found.", status_code=404)
-        return PlainTextResponse(readme_path.read_text(encoding="utf-8"))
+        return PlainTextResponse(path.read_text(encoding="utf-8"))
 
     async def serve_partners_readme() -> PlainTextResponse:
-        if not partners_readme_path.exists():
+        path = _find_doc("partners")
+        if path is None:
             return PlainTextResponse("partners/README.md not found.", status_code=404)
-        return PlainTextResponse(partners_readme_path.read_text(encoding="utf-8"))
+        return PlainTextResponse(path.read_text(encoding="utf-8"))
 
     app.add_api_route("/imnot/docs", serve_readme, methods=["GET"])
     app.add_api_route("/imnot/docs/partners", serve_partners_readme, methods=["GET"])

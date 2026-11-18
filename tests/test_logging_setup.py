@@ -16,7 +16,7 @@ from imnot.logging_setup import ArchivingRotatingHandler, configure_logging
 
 def _clean_loggers():
     """Remove all handlers from imnot.cli and imnot.http and re-enable propagation."""
-    for name in ("imnot.cli", "imnot.http"):
+    for name in ("imnot.cli", "imnot.http", "imnot"):
         log = logging.getLogger(name)
         log.handlers.clear()
         log.propagate = True
@@ -204,3 +204,32 @@ def test_dorollover_creates_archive_dir(tmp_path):
     handler.close()
 
     assert archived_dir.is_dir()
+
+
+def test_module_loggers_reach_the_cli_log_file(tmp_path):
+    configure_logging(LoggingConfig(), log_dir=tmp_path)
+    logging.getLogger("imnot.loader.yaml_loader").error("Failed to load partner from x")
+    logging.getLogger("imnot.engine.patterns.push").info("Callback: to http://x returned 200")
+    for h in logging.getLogger("imnot").handlers:
+        h.flush()
+    text = (tmp_path / "imnot.cli.log").read_text()
+    assert "Failed to load partner from x" in text
+    assert "Callback: to http://x returned 200" in text
+    assert "Failed to load partner" not in (tmp_path / "imnot.http.log").read_text()
+
+
+def test_module_logger_warnings_still_reach_the_console(tmp_path, capsys):
+    configure_logging(LoggingConfig(), log_dir=tmp_path)
+    logging.getLogger("imnot.loader.yaml_loader").warning("unknown key 'respose'")
+    logging.getLogger("imnot.loader.yaml_loader").info("Loaded partner quietly")
+    err = capsys.readouterr().err
+    assert "unknown key 'respose'" in err
+    assert "Loaded partner quietly" not in err
+
+
+def test_cli_messages_are_not_written_twice(tmp_path):
+    configure_logging(LoggingConfig(), log_dir=tmp_path)
+    logging.getLogger("imnot.cli").info("once")
+    for h in logging.getLogger("imnot.cli").handlers:
+        h.flush()
+    assert (tmp_path / "imnot.cli.log").read_text().count("once") == 1

@@ -2,10 +2,12 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Copy package metadata and source, then install
+# Copy package metadata and source, then install. partners/README.md is bundled into the wheel
+# (served by /imnot/docs/partners); it is removed afterwards so /app/partners starts empty.
 COPY pyproject.toml README.md ./
+COPY partners/README.md partners/README.md
 COPY imnot/ imnot/
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir . && rm -rf partners
 
 # Partners and data directories are expected to be volume-mounted at runtime.
 # Create them so the container starts cleanly even without mounts.

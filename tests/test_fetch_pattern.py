@@ -36,7 +36,7 @@ def client(store):
     app = FastAPI()
     datapoint = _make_datapoint()
     endpoint = _make_endpoint()
-    handler = make_fetch_handler("leanpms", datapoint, endpoint, store, RateLimiter())
+    handler = make_fetch_handler("bookingco", datapoint, endpoint, store, RateLimiter())
     app.add_api_route("/api/v2/charges", handler, methods=["GET"])
     return TestClient(app, raise_server_exceptions=True), store
 
@@ -47,14 +47,14 @@ def client(store):
 
 
 def test_handler_is_callable(store):
-    handler = make_fetch_handler("leanpms", _make_datapoint(), _make_endpoint(), store, RateLimiter())
+    handler = make_fetch_handler("bookingco", _make_datapoint(), _make_endpoint(), store, RateLimiter())
     assert callable(handler)
 
 
 def test_handler_has_unique_name(store):
-    handler = make_fetch_handler("leanpms", _make_datapoint(), _make_endpoint(), store, RateLimiter())
+    handler = make_fetch_handler("bookingco", _make_datapoint(), _make_endpoint(), store, RateLimiter())
     assert "fetch" in handler.__name__
-    assert "leanpms" in handler.__name__
+    assert "bookingco" in handler.__name__
 
 
 # ---------------------------------------------------------------------------
@@ -83,7 +83,7 @@ def test_returns_404_when_session_payload_missing(client):
 
 def test_returns_global_payload(client):
     c, store = client
-    store.store_global_payload("leanpms", "charges", {"charges": [{"id": "C1", "amount": 100}]})
+    store.store_global_payload("bookingco", "charges", {"charges": [{"id": "C1", "amount": 100}]})
     r = c.get("/api/v2/charges")
     assert r.status_code == 200
     assert r.json() == {"charges": [{"id": "C1", "amount": 100}]}
@@ -92,10 +92,10 @@ def test_returns_global_payload(client):
 def test_respects_custom_status_code(store):
     app = FastAPI()
     endpoint = _make_endpoint(status=202)
-    handler = make_fetch_handler("leanpms", _make_datapoint(), endpoint, store, RateLimiter())
+    handler = make_fetch_handler("bookingco", _make_datapoint(), endpoint, store, RateLimiter())
     app.add_api_route("/api/v2/charges", handler, methods=["GET"])
     c = TestClient(app)
-    store.store_global_payload("leanpms", "charges", {"ok": True})
+    store.store_global_payload("bookingco", "charges", {"ok": True})
     r = c.get("/api/v2/charges")
     assert r.status_code == 202
 
@@ -107,7 +107,7 @@ def test_respects_custom_status_code(store):
 
 def test_returns_session_payload_when_header_present(client):
     c, store = client
-    session_id = store.store_session_payload("leanpms", "charges", {"charges": [{"id": "S1"}]})
+    session_id = store.store_session_payload("bookingco", "charges", {"charges": [{"id": "S1"}]})
     r = c.get("/api/v2/charges", headers={"X-Imnot-Session": session_id})
     assert r.status_code == 200
     assert r.json() == {"charges": [{"id": "S1"}]}
@@ -115,7 +115,7 @@ def test_returns_session_payload_when_header_present(client):
 
 def test_session_does_not_leak_to_global(client):
     c, store = client
-    store.store_session_payload("leanpms", "charges", {"charges": []})
+    store.store_session_payload("bookingco", "charges", {"charges": []})
     # No global payload set — request without session header should 404
     r = c.get("/api/v2/charges")
     assert r.status_code == 404
@@ -123,8 +123,8 @@ def test_session_does_not_leak_to_global(client):
 
 def test_two_sessions_are_isolated(client):
     c, store = client
-    s1 = store.store_session_payload("leanpms", "charges", {"user": "alice"})
-    s2 = store.store_session_payload("leanpms", "charges", {"user": "bob"})
+    s1 = store.store_session_payload("bookingco", "charges", {"user": "alice"})
+    s2 = store.store_session_payload("bookingco", "charges", {"user": "bob"})
     assert c.get("/api/v2/charges", headers={"X-Imnot-Session": s1}).json() == {"user": "alice"}
     assert c.get("/api/v2/charges", headers={"X-Imnot-Session": s2}).json() == {"user": "bob"}
 
@@ -145,7 +145,7 @@ def validated_client(store):
         response={"status": 200},
         validate={"body": {"reservation_id": {"required": True}}},
     )
-    handler = make_fetch_handler("leanpms", datapoint, endpoint, store, RateLimiter())
+    handler = make_fetch_handler("bookingco", datapoint, endpoint, store, RateLimiter())
     app.add_api_route("/api/v2/charges", handler, methods=["GET"])
     return TestClient(app, raise_server_exceptions=True), store
 
@@ -161,14 +161,14 @@ def query_validated_client(store):
         response={"status": 200},
         validate={"query": {"format": {"required": True}}},
     )
-    handler = make_fetch_handler("leanpms", datapoint, endpoint, store, RateLimiter())
+    handler = make_fetch_handler("bookingco", datapoint, endpoint, store, RateLimiter())
     app.add_api_route("/api/v2/charges", handler, methods=["GET"])
     return TestClient(app, raise_server_exceptions=True), store
 
 
 def test_fetch_valid_body_passes_validation(validated_client):
     c, store = validated_client
-    store.store_global_payload("leanpms", "charges", {"amount": 100})
+    store.store_global_payload("bookingco", "charges", {"amount": 100})
     r = c.request("GET", "/api/v2/charges", json={"reservation_id": "R-001"})
     assert r.status_code == 200
 
@@ -197,7 +197,7 @@ def test_fetch_malformed_json_body_treated_as_none_fires_required_error(store):
         response={"status": 200},
         validate={"body": {"reservation_id": {"required": True}}},
     )
-    handler = make_fetch_handler("leanpms", datapoint, endpoint, store, RateLimiter())
+    handler = make_fetch_handler("bookingco", datapoint, endpoint, store, RateLimiter())
     app.add_api_route("/api/v2/charges", handler, methods=["POST"])
     c = TestClient(app, raise_server_exceptions=True)
     r = c.post(
@@ -225,14 +225,14 @@ def _make_rate_limited_client(store, requests_per_minute, validate=None):
         validate=validate,
         rate_limit={"requests_per_minute": requests_per_minute},
     )
-    handler = make_fetch_handler("leanpms", datapoint, endpoint, store, RateLimiter())
+    handler = make_fetch_handler("bookingco", datapoint, endpoint, store, RateLimiter())
     app.add_api_route("/api/v2/charges", handler, methods=["GET"])
     return TestClient(app, raise_server_exceptions=True), store
 
 
 def test_request_within_limit_returns_normal_response(store):
     c, store = _make_rate_limited_client(store, requests_per_minute=10)
-    store.store_global_payload("leanpms", "charges", {"charges": []})
+    store.store_global_payload("bookingco", "charges", {"charges": []})
     r = c.get("/api/v2/charges")
     assert r.status_code == 200
     assert r.json() == {"charges": []}
@@ -240,7 +240,7 @@ def test_request_within_limit_returns_normal_response(store):
 
 def test_request_exceeding_limit_returns_429(store):
     c, store = _make_rate_limited_client(store, requests_per_minute=1)
-    store.store_global_payload("leanpms", "charges", {"charges": []})
+    store.store_global_payload("bookingco", "charges", {"charges": []})
     r1 = c.get("/api/v2/charges")
     assert r1.status_code == 200
 
@@ -265,7 +265,7 @@ def test_rate_limit_checked_before_validation(store):
 
 def test_no_rate_limit_never_returns_429(client):
     c, store = client
-    store.store_global_payload("leanpms", "charges", {"charges": []})
+    store.store_global_payload("bookingco", "charges", {"charges": []})
     for _ in range(20):
         r = c.get("/api/v2/charges")
         assert r.status_code != 429

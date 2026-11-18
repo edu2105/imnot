@@ -40,12 +40,12 @@ def _request(
 
 
 def test_handler_is_callable():
-    handler = _make_handler("POST", "/leanpms/token", {"status": 200, "body": {"token": "abc"}})
+    handler = _make_handler("POST", "/bookingco/token", {"status": 200, "body": {"token": "abc"}})
     assert callable(handler)
 
 
 def test_handler_has_unique_name():
-    handler = _make_handler("POST", "/leanpms/token", {"status": 200, "body": {"token": "abc"}})
+    handler = _make_handler("POST", "/bookingco/token", {"status": 200, "body": {"token": "abc"}})
     assert "static" in handler.__name__
 
 
@@ -62,7 +62,7 @@ def _empty_request() -> Request:
 async def test_returns_body_from_yaml():
     handler = _make_handler(
         "POST",
-        "/leanpms/token",
+        "/bookingco/token",
         {"status": 200, "body": {"token": "2893e0a65fcfffcbb86e16fb1bc1c612fcd3eb78"}},
     )
     response = await handler(_empty_request())

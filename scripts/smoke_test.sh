@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Smoke test — runs the full OHIP reservation flow against a live imnot server.
+# Smoke test — runs the full StayLink reservation flow against a live imnot server.
 # Usage: ./scripts/smoke_test.sh [BASE_URL]
 # Default BASE_URL: http://127.0.0.1:8000
 #

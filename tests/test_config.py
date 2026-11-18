@@ -180,3 +180,20 @@ def test_load_config_ui_unknown_keys_ignored(tmp_path):
     toml.write_text("[ui]\nenabled = true\nunknown_key = 42\n", encoding="utf-8")
     config = load_config(toml)
     assert config.ui.enabled is True
+
+
+def test_imnot_toml_template_shows_the_real_defaults():
+    """The template written by `imnot start` says "All values shown are defaults": keep it true."""
+    import re
+    import tomllib
+
+    from imnot.cli import _IMNOT_TOML_TEMPLATE
+    from imnot.config import ImnotConfig
+
+    uncommented = re.sub(r"^# ?(\[|[a-z_]+ =)", r"\1", _IMNOT_TOML_TEMPLATE, flags=re.M)
+    uncommented = re.sub(r"\s+#.*$", "", uncommented, flags=re.M)
+    shown = tomllib.loads(uncommented)
+    defaults = ImnotConfig()
+    for section, values in shown.items():
+        for key, value in values.items():
+            assert getattr(getattr(defaults, section), key) == value, f"[{section}] {key}"
