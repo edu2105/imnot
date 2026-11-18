@@ -402,6 +402,21 @@ img, svg {
   font-weight: 600;
 }
 
+/* Instance name (--instance-name): which team's or environment's imnot this is. */
+.brand-instance {
+  margin-left: var(--space-2);
+  padding: 0.125rem 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ============================================================
    main.css
    Everything inside <main>: sections, partner cards, buttons,
@@ -1606,6 +1621,7 @@ img, svg {
         <span class="brand-name">imnot</span>
         <span class="brand-sep">/</span>
         <span class="brand-sub">admin</span>
+        <span class="brand-instance" id="instance-name" title="This server's instance name" hidden></span>
       </div>
 
       <div class="header-actions">
@@ -4216,6 +4232,13 @@ img, svg {
         .then(function (d) {
           document.getElementById('server-status').textContent = 'v' + (d.version || '?');
           _stateless = !!d.stateless;
+          if (d.instance) {
+            // Which imnot is this? Set with --instance-name when several teams run their own.
+            var instanceEl = document.getElementById('instance-name');
+            instanceEl.textContent = d.instance;
+            instanceEl.removeAttribute('hidden');
+            document.title = d.instance + ' \u00b7 imnot \u2014 admin';
+          }
           if (_stateless) {
             document.getElementById('stateless-banner').removeAttribute('hidden');
             document.getElementById('footer-info').textContent = 'imnot \u2014 API mock server \u00b7 stateless mode';

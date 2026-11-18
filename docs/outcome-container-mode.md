@@ -82,6 +82,11 @@ COPY partners /app/partners
 ENV IMNOT_STATELESS=1 IMNOT_STRICT=1
 ```
 
+The teams can share one contracts repo (`teams/<team>/partners/`, one `Dockerfile` with `ARG TEAM`, a
+CI matrix per folder): see "Several teams, one contracts repo" in `docs/deployment.md`.
+`--instance-name` / `IMNOT_INSTANCE_NAME` labels each instance in the UI header, the tab title,
+`/healthz` and the startup summary, so a user can tell which team's imnot they are on.
+
 CI runs `imnot validate` before the build; `--strict` is the second net at start-up. A shared instance
 stays possible for teams that agree to it (a path prefix per partner avoids collisions), but nothing in
 imnot isolates them from each other.

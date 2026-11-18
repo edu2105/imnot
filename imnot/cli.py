@@ -36,6 +36,7 @@ from imnot.postman import build_postman_collection, collection_stats
 
 DEFAULT_PARTNERS_DIR = "partners"
 DEFAULT_DB = Path("imnot.db")
+_INSTANCE_NAME_MAX = 64
 
 _IMNOT_TOML_TEMPLATE = """\
 # imnot.toml — runtime configuration for imnot
@@ -173,6 +174,13 @@ def cli() -> None:
     help="Public URL of this server, used in pagination links and Postman collections. "
     "[env: IMNOT_BASE_URL] [default: http://localhost:8000]",
 )
+@click.option(
+    "--instance-name",
+    default=None,
+    envvar="IMNOT_INSTANCE_NAME",
+    help="A short name for this server (a team, an environment), shown in the admin UI, /healthz and the "
+    "startup summary. [env: IMNOT_INSTANCE_NAME]",
+)
 @click.option("--reload", is_flag=True, default=False, help="Enable auto-reload (development only).")
 @click.option(
     "--stateless",
@@ -204,12 +212,16 @@ def start(
     host: str | None,
     port: int | None,
     base_url: str | None,
+    instance_name: str | None,
     reload: bool,
     stateless: bool,
     strict: bool,
     admin_key: str | None,
 ) -> None:
     """Start the mock server and load partner definitions."""
+    instance_name = (instance_name or "").strip() or None
+    if instance_name and len(instance_name) > _INSTANCE_NAME_MAX:
+        raise click.UsageError(f"--instance-name is too long (max {_INSTANCE_NAME_MAX} characters).")
     if stateless and reload:
         raise click.UsageError("--stateless cannot be combined with --reload (a development mode that writes files).")
 
@@ -284,6 +296,8 @@ def start(
         cli_log.warning("Binding to 0.0.0.0 with no IMNOT_ADMIN_KEY — admin endpoints are unauthenticated")
 
     click.echo(f"Starting imnot on http://{effective_host}:{effective_port}")
+    if instance_name:
+        click.echo(f"  Instance:  {instance_name}")
     _print_startup_summary(resolved_partners_dir, db_path, effective_host, effective_port, config.ui.enabled)
     cli_log.info(
         "Starting imnot host=%s port=%d db=%s partners_dir=%s admin_key=%s",
@@ -308,6 +322,8 @@ def start(
                 os.environ["IMNOT_ADMIN_KEY"] = effective_admin_key
             if base_url:
                 os.environ["IMNOT_BASE_URL"] = base_url
+            if instance_name:
+                os.environ["IMNOT_INSTANCE_NAME"] = instance_name
             uvicorn.run(
                 "imnot.api.server:create_app_from_env",
                 host=effective_host,
@@ -325,6 +341,7 @@ def start(
                 default_limit=config.pagination.default_limit,
                 ui_config=config.ui,
                 stateless=stateless,
+                instance_name=instance_name,
             )
             uvicorn.run(app, host=effective_host, port=effective_port)
     finally:

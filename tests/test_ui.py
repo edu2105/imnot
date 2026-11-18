@@ -131,3 +131,10 @@ def test_ui_ships_the_stateless_banner_hidden_and_the_classic_footer(ui_client):
     assert "API mock server \\u00b7 stateless mode" in html
     assert "downloadPartnerYaml(" in html and "?format=yaml" in html
     assert "will be lost" in html  # the reload confirmation
+
+
+def test_ui_ships_the_instance_name_slot_hidden(ui_client):
+    html = ui_client.get("/imnot/admin/ui").text
+    assert 'id="instance-name" title="This server\'s instance name" hidden' in html
+    assert "<title>imnot — admin</title>" in html  # unchanged unless /healthz reports an instance
+    assert ".brand-instance" in html

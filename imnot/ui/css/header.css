@@ -204,3 +204,18 @@
   color: var(--color-brand);
   font-weight: 600;
 }
+
+/* Instance name (--instance-name): which team's or environment's imnot this is. */
+.brand-instance {
+  margin-left: var(--space-2);
+  padding: 0.125rem 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

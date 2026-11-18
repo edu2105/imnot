@@ -340,6 +340,44 @@ def test_start_reload_passes_base_url_flag_to_the_factory(runner, project):
 
 
 # ---------------------------------------------------------------------------
+# --instance-name
+# ---------------------------------------------------------------------------
+
+
+def test_instance_name_in_healthz_and_startup_summary(runner, project):
+    result, mock_run = _start(runner, "--stateless", "--instance-name", "  team-a  ")
+    assert result.exit_code == 0, result.output
+    assert "  Instance:  team-a\n" in result.output
+    with TestClient(mock_run.call_args.args[0]) as c:
+        assert c.get("/healthz").json()["instance"] == "team-a"
+
+    result, mock_run = _start(runner, "--stateless", env={"IMNOT_INSTANCE_NAME": "team-b"})
+    with TestClient(mock_run.call_args.args[0]) as c:
+        assert c.get("/healthz").json()["instance"] == "team-b"
+
+
+def test_without_instance_name_nothing_is_shown(runner, project):
+    result, mock_run = _start(runner, "--stateless")
+    assert "Instance:" not in result.output
+    with TestClient(mock_run.call_args.args[0]) as c:
+        assert c.get("/healthz").json()["instance"] is None
+
+
+def test_instance_name_too_long_is_rejected(runner, project):
+    result, mock_run = _start(runner, "--stateless", "--instance-name", "x" * 65)
+    assert result.exit_code == 2 and "too long" in result.output
+    assert not mock_run.called
+
+
+def test_instance_name_reaches_the_reload_factory(runner, project, monkeypatch):
+    result, _ = _start(runner, "--reload", "--instance-name", "team-a")
+    assert result.exit_code == 0, result.output
+    monkeypatch.setenv("IMNOT_PARTNERS_DIR", "")
+    with TestClient(create_app_from_env()) as c:
+        assert c.get("/healthz").json()["instance"] == "team-a"
+
+
+# ---------------------------------------------------------------------------
 # Partners through the admin API: in memory when stateless, on disk otherwise
 # ---------------------------------------------------------------------------
 

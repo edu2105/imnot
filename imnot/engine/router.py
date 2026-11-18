@@ -579,7 +579,13 @@ def _register_infra_routes(
         auth_required = bool(getattr(request.app.state, "auth_required", False))
         stateless = bool(getattr(request.app.state, "stateless", False))
         return JSONResponse(
-            {"status": "ok", "version": _IMNOT_VERSION, "auth_required": auth_required, "stateless": stateless}
+            {
+                "status": "ok",
+                "version": _IMNOT_VERSION,
+                "auth_required": auth_required,
+                "stateless": stateless,
+                "instance": getattr(request.app.state, "instance_name", None),  # --instance-name, or null
+            }
         )
 
     async def list_sessions() -> JSONResponse:

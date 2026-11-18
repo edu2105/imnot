@@ -37,6 +37,7 @@ Every `imnot start` option can also come from the environment. Precedence: flag,
 | `IMNOT_BIND_HOST` | `--host` | |
 | `IMNOT_BIND_PORT` | `--port` | Not `IMNOT_PORT`: Kubernetes sets that one itself for a Service named `imnot` |
 | `IMNOT_BASE_URL` | `--base-url` | Public URL used in `page_number_url` links and Postman collections |
+| `IMNOT_INSTANCE_NAME` | `--instance-name` | Optional label (a team, an environment), up to 64 characters. Shown in the admin UI header and tab title, in `/healthz` (`instance`) and in the startup summary |
 | `IMNOT_STATELESS` | `--stateless` | `1`, `true`, `yes` or `on` |
 | `IMNOT_STRICT` | `--strict` | `1`, `true`, `yes` or `on` |
 | `IMNOT_ADMIN_KEY` | `--admin-key` | |

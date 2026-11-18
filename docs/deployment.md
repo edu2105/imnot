@@ -80,6 +80,46 @@ Without `--stateless`, partners are written to the partners directory as before;
 
 imnot keeps its state in one process (uploaded payloads, sessions, `polling` and `callback` request ids, cursors, `fail.first_n` and `pending` counters, rate-limit buckets, the request journal). Two replicas behind one Service do not share any of it: a `polling` submit answered by one replica gets a 404 from the other. Run **one replica** and do not autoscale it. To serve more teams, run more instances — each team with its own contracts image, admin key and journal — rather than a bigger shared one: on a shared instance a route collision or a broken partner under `--strict` stops every team's rollout.
 
+### Several teams, one contracts repo
+
+One repository can hold every team's partners, and still give each team its own instance:
+
+```
+imnot-contracts/
+├── Dockerfile
+├── CODEOWNERS                 # /teams/team-a/ @team-a-owners, /teams/team-b/ @team-b-owners
+└── teams/
+    ├── team-a/partners/<partner>/partner.yaml   (+ payloads/*.json)
+    └── team-b/partners/<partner>/partner.yaml
+```
+
+```dockerfile
+FROM ghcr.io/edu2105/imnot:<version>
+ARG TEAM
+COPY teams/${TEAM}/partners /app/partners
+ENV IMNOT_STATELESS=1 IMNOT_STRICT=1 IMNOT_INSTANCE_NAME=${TEAM}
+```
+
+CI validates and builds one image per folder, for example with a GitHub Actions matrix:
+
+```yaml
+jobs:
+  contracts:
+    strategy:
+      fail-fast: false               # team-a's broken partner does not stop team-b's image
+      matrix:
+        team: [team-a, team-b]       # or list teams/* in a previous job
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pipx run imnot validate --partners-dir teams/${{ matrix.team }}/partners
+      - run: docker build --build-arg TEAM=${{ matrix.team }} -t registry.example.test/imnot-${{ matrix.team }}:${{ github.sha }} .
+```
+
+- **One instance and one admin key per team.** Each team deploys its own image with its own `IMNOT_ADMIN_KEY` secret. `IMNOT_INSTANCE_NAME` puts the team's name in the admin UI header, the browser tab and `/healthz`, so nobody edits the wrong one.
+- **`CODEOWNERS` per folder**, so a team reviews changes to its own partners only.
+- **Why not one shared instance?** Two teams defining the same route is a start-up error for everybody; under `--strict` one team's broken `partner.yaml` blocks every team's rollout; there is a single admin key, so any team can replace another's payloads; and the request journal, `fail.first_n` counters and rate limits are shared.
+
 A minimal Kubernetes Deployment:
 
 ```yaml

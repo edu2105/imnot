@@ -31,7 +31,7 @@ Always available regardless of which partners are loaded:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET`  | `/healthz` | Health check — always returns `{"status":"ok","version":"…","auth_required":bool,"stateless":bool}`, no auth required. `auth_required` tells the admin UI whether to ask for a key; `stateless` is true under `imnot start --stateless` |
+| `GET`  | `/healthz` | Health check — always returns `{"status":"ok","version":"…","auth_required":bool,"stateless":bool,"instance":"…"}`, no auth required. `auth_required` tells the admin UI whether to ask for a key; `stateless` is true under `imnot start --stateless`; `instance` is the `--instance-name` label, or `null` |
 | `GET`  | `/imnot/admin/partners` | List all loaded partners and their datapoints |
 | `POST` | `/imnot/admin/partners` | Validate and register a new partner from a raw YAML body — routes go live immediately. `?force=true` overwrites; `&merge_from=<name>` first copies over that partner's fields the admin UI Builder never writes (`validate`, `fail`, `delay_ms`, `headers`, `payload_by`, `pending`, `callback_method`, descriptions); `&compare_to=<name>` returns `409` with a `dropped` list instead of writing if anything would still be lost. `403` if the partners directory is read-only. In stateless mode nothing is written: the partner is kept in memory (replacing one of the same name loaded from disk) until a reload or restart, and `file`/`directory` in the response are `null` |
 | `GET`  | `/imnot/admin/partners/{partner_name}` | The partner's full `partner.yaml` as JSON (used by the Builder to pre-fill every field) — `404` if not found. `?format=yaml` returns the YAML text itself as a download |
