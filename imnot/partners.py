@@ -58,6 +58,9 @@ def register_partner(
 
     if file_exists and not force:
         raise FileExistsError(f"partners/{partner.partner}/partner.yaml already exists. Use --force to overwrite.")
+    # The parsed partner points at its real file, like the ones load_partners returns, so reload can
+    # tell "file exists but no longer loads" from "file deleted".
+    partner.source_path = dest_file
 
     if not dry_run:
         dest_dir.mkdir(parents=True, exist_ok=True)

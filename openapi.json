@@ -231,7 +231,7 @@
     "/imnot/admin/reload": {
       "post": {
         "summary": "Admin Reload Partners",
-        "description": "Re-read all partner YAML files and hot-swap config for existing routes.\n\n- For ``static`` pattern datapoints: the response config (status + body)\n  is updated in place so the very next request serves the new YAML body.\n- For entirely new partners or datapoints: consumer routes (and admin routes\n  for payload patterns) are registered dynamically on the running app.\n- Removed partners/datapoints are NOT unregistered (existing routes stay\n  active but serve their last-known config).  Restart the server to\n  fully purge removed definitions.",
+        "description": "Re-read all partner YAML files and hot-swap config for existing routes.\n\n- For ``static`` pattern datapoints: the response config (status + body)\n  is updated in place so the very next request serves the new YAML body.\n- For entirely new partners or datapoints: consumer routes (and admin routes\n  for payload patterns) are registered dynamically on the running app.\n- Routes whose endpoint, datapoint or partner is no longer in the YAML (or moved to\n  another datapoint) are unregistered, with their admin routes; they are listed in\n  ``removed``. Changed validate:/rate_limit:/fail: on an existing route still need a restart.",
         "operationId": "admin_reload_partners_imnot_admin_reload_post",
         "responses": {
           "200": {

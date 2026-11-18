@@ -213,6 +213,10 @@ def _register_consumer_routes(
     default_limit: int = 50,
 ) -> None:
     owner = f"{partner.partner}/{datapoint.name}"
+    # Called again for a datapoint that gained endpoints (reload, POST /partners): register only
+    # the new ones. Re-adding a live route would leave two routes (the old one still wins) and,
+    # for paginated, point its config ref at a list the live handler no longer reads.
+    known = {key for key, who in registered_routes.items() if who == owner}
 
     def _add(endpoint: EndpointDef, handler: Any) -> None:
         """Register canonical path + trailing-slash alias (hidden from schema), with delay_ms/fail applied."""
@@ -224,6 +228,8 @@ def _register_consumer_routes(
 
     if datapoint.pattern == "oauth":
         for endpoint in datapoint.endpoints:
+            if (endpoint.method.upper(), endpoint.path) in known:
+                continue
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             handler = make_oauth_handler(endpoint)
             _add(endpoint, handler)
@@ -232,6 +238,8 @@ def _register_consumer_routes(
 
     elif datapoint.pattern == "static":
         for endpoint in datapoint.endpoints:
+            if (endpoint.method.upper(), endpoint.path) in known:
+                continue
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             handler = make_static_handler(partner.partner, datapoint.name, endpoint, configs)
             _add(endpoint, handler)
@@ -240,6 +248,8 @@ def _register_consumer_routes(
 
     elif datapoint.pattern == "fetch":
         for endpoint in datapoint.endpoints:
+            if (endpoint.method.upper(), endpoint.path) in known:
+                continue
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             handler = make_fetch_handler(partner.partner, datapoint, endpoint, store, limiter)
             _add(endpoint, handler)
@@ -255,6 +265,8 @@ def _register_consumer_routes(
         )
         for step_num, handler in handlers.items():
             endpoint = step_map[step_num]
+            if (endpoint.method.upper(), endpoint.path) in known:
+                continue
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             _add(endpoint, handler)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
@@ -267,6 +279,8 @@ def _register_consumer_routes(
 
     elif datapoint.pattern == "callback":
         for endpoint in datapoint.endpoints:
+            if (endpoint.method.upper(), endpoint.path) in known:
+                continue
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             handler = make_push_handler(partner.partner, datapoint, endpoint, store)
             _add(endpoint, handler)
@@ -275,6 +289,8 @@ def _register_consumer_routes(
 
     elif datapoint.pattern == "paginated":
         for endpoint in datapoint.endpoints:
+            if (endpoint.method.upper(), endpoint.path) in known:
+                continue
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             ref_key = (partner.partner, datapoint.name, endpoint.method.upper(), endpoint.path)
             pagination_ref: list[dict] = [datapoint.pagination or {}]
@@ -303,7 +319,14 @@ def _unregister_routes(app: FastAPI, route_keys: set[tuple[str, str]], admin_dps
     routes are matched by the exact paths ``_register_admin_routes`` builds, not by prefix.
     """
     registered: dict[tuple[str, str], str] = app.state.registered_routes
-    owners = {registered[key] for key in route_keys if key in registered}
+    # Static/pagination configs are keyed (partner, datapoint, METHOD, path): drop those whose route
+    # is going away under that same owner (computed before registered_routes is updated).
+    config_keys = {
+        (store_dict_name, key)
+        for store_dict_name, store_dict in (("configs", app.state.configs), ("refs", app.state.paginated_config_refs))
+        for key in store_dict
+        if (key[2], key[3]) in route_keys and registered.get((key[2], key[3])) == f"{key[0]}/{key[1]}"
+    }
     admin_suffixes = ("payload", "payload/session", "payload/session/{session_id}", "callback/{request_id}/retrigger")
     admin_paths = {f"/imnot/admin/{p}/{dp}/{suffix}" for (p, dp) in admin_dps for suffix in admin_suffixes}
 
@@ -321,9 +344,9 @@ def _unregister_routes(app: FastAPI, route_keys: set[tuple[str, str]], admin_dps
     for key in route_keys:
         registered.pop(key, None)
     app.state.registered_admin_dps.difference_update(admin_dps)
-    for store_dict in (app.state.configs, app.state.paginated_config_refs):
-        for key in [k for k in store_dict if (k[2], k[3]) in route_keys and f"{k[0]}/{k[1]}" in owners]:
-            del store_dict[key]
+    stores = {"configs": app.state.configs, "refs": app.state.paginated_config_refs}
+    for store_dict_name, key in config_keys:
+        stores[store_dict_name].pop(key, None)
     app.openapi_schema = None  # rebuild /openapi.json without the removed routes
 
 
@@ -644,9 +667,9 @@ def _register_infra_routes(
         # current routes; only definitions that are really gone are unregistered.
         on_disk = {f.resolve() for f in partners_dir.glob("*/partner.yaml")}
         loaded_files = {p.source_path.resolve() for p in new_partners}
-        kept = [p for p in partners if p.source_path.resolve() in on_disk - loaded_files]
-        kept_names = {p.partner for p in kept}
-        skipped = sorted(kept_names)
+        failing_files = on_disk - loaded_files
+        kept_names = {p.partner for p in partners if p.source_path.resolve() in failing_files}
+        skipped = sorted(f.parent.name for f in failing_files)  # kept partners and broken new ones
 
         # Unregister what the YAML no longer defines, so a deleted fixture stops answering.
         wanted = {

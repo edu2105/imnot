@@ -1599,3 +1599,52 @@ def test_reload_moves_an_endpoint_to_another_datapoint(tmp_path, store):
     r = c.post("/imnot/admin/reload").json()
     assert "GET /relo/a2" in r["removed"] and "GET /relo/a2" in r["added"]
     assert c.get("/relo/a2").json() == {"moved": True}
+
+
+def test_reload_keeps_routes_of_an_http_registered_partner_whose_yaml_breaks(tmp_path, store):
+    c, partners_dir = _make_client(tmp_path, store)
+    c.post("/imnot/admin/partners", content=_STATIC_PARTNER_YAML)  # Builder-style registration
+    (partners_dir / "staticco" / "partner.yaml").write_text("partner: staticco\ndatapoints: [")
+    r = c.post("/imnot/admin/reload").json()
+    assert r["skipped"] == ["staticco"] and r["removed"] == []
+    assert c.get("/staticco/status").json() == {"ok": True}
+
+
+def test_reload_reports_a_broken_new_partner_in_skipped(tmp_path, store):
+    c, partners_dir = _make_client(tmp_path, store)
+    (partners_dir / "newbie").mkdir()
+    (partners_dir / "newbie" / "partner.yaml").write_text("partner: newbie\n")
+    r = c.post("/imnot/admin/reload").json()
+    assert r["status"] == "partial" and r["skipped"] == ["newbie"]
+
+
+def test_adding_an_endpoint_to_a_paginated_datapoint_keeps_one_live_route_per_path(tmp_path, store):
+    yaml_text = """\
+partner: pg
+datapoints:
+  - name: items
+    pattern: paginated
+    pagination: {style: offset_limit, items_field: items, total_field: total}
+    endpoints:
+      - method: GET
+        path: /pg/items
+        response: {status: 200}
+"""
+    partners_dir = tmp_path / "partners"
+    (partners_dir / "pg").mkdir(parents=True)
+    yaml_path = partners_dir / "pg" / "partner.yaml"
+    yaml_path.write_text(yaml_text)
+    app = FastAPI()
+    register_routes(app, load_partners(partners_dir), store, partners_dir=partners_dir)
+    c = TestClient(app)
+    c.post("/imnot/admin/pg/items/payload", json=[{"id": 1}])
+
+    with_second = yaml_text + "      - method: GET\n        path: /pg/items2\n        response: {status: 200}\n"
+    yaml_path.write_text(with_second)
+    c.post("/imnot/admin/reload")
+    yaml_path.write_text(with_second.replace("total_field: total", "total_field: count"))
+    c.post("/imnot/admin/reload")
+
+    assert "count" in c.get("/pg/items").json() and "count" in c.get("/pg/items2").json()
+    live = [r for r in app.router.routes if getattr(r, "path", None) == "/pg/items"]
+    assert len(live) == 1
