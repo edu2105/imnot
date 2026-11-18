@@ -4117,7 +4117,7 @@ img, svg {
         .then(function (blob) {
           var link = document.createElement('a');
           link.href = URL.createObjectURL(blob);
-          link.download = 'partner.yaml';
+          link.download = partnerName + '.partner.yaml';  // same name the server sends; save it as partners/<name>/partner.yaml
           document.body.appendChild(link);
           link.click();
           link.remove();

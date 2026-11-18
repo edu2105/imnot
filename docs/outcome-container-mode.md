@@ -33,7 +33,8 @@ not take that away; the only difference is that nothing survives a restart.
   save replaces the partner whole (old routes out, new ones in), so an edit applies without a reload.
 - `GET /imnot/admin/partners/{name}` serves the in-memory YAML, so the Builder's pre-fill and its
   "fields would be dropped" guard work on partners made in the UI. `?format=yaml` downloads it: that
-  is how a partner built in the UI gets into the partners repo.
+  is how a partner built in the UI gets into the partners repo. The download button is on every
+  partner card in both modes on purpose (it is useful in classic mode too); it saves `<name>.partner.yaml`.
 - Reload goes back to the partners directory and drops what was changed over HTTP. The UI asks first.
 - `/healthz` reports `stateless`; the UI shows a fixed banner and the footer names the mode.
 - Rule for the classic mode: unchanged. Partners are written to disk, and a read-only directory is a
