@@ -17,7 +17,7 @@ For every `fetch`, `polling`, `callback`, or `paginated` datapoint, imnot auto-g
 |--------|------|-------------|
 | `POST` | `/imnot/admin/{partner}/{datapoint}/payload` | Upload global payload |
 | `GET`  | `/imnot/admin/{partner}/{datapoint}/payload` | Inspect current global payload |
-| `POST` | `/imnot/admin/{partner}/{datapoint}/payload/session` | Upload session payload → returns `session_id` |
+| `POST` | `/imnot/admin/{partner}/{datapoint}/payload/session` | Upload session payload → returns `session_id`. Send an existing id in `X-Imnot-Session` (or `?session=<id>`) to add this datapoint to that session — one id can cover every datapoint a test touches. The id can be your own (1–128 of `A-Z a-z 0-9 . _ : -`), e.g. the test name |
 | `GET`  | `/imnot/admin/{partner}/{datapoint}/payload/session/{session_id}` | Inspect a session payload |
 | `POST` | `/imnot/admin/{partner}/{datapoint}/callback/{request_id}/retrigger` | Re-fire callback for a prior submit (`callback` pattern only) |
 
@@ -37,7 +37,7 @@ Always available regardless of which partners are loaded:
 | `GET`  | `/imnot/admin/partners/{partner_name}` | The partner's full `partner.yaml` as JSON (used by the Builder to pre-fill every field) — `404` if not found |
 | `DELETE` | `/imnot/admin/partners/{partner_name}` | Delete the partner's directory and unregister its routes immediately — returns `200 {"status":"ok","partner":"…"}` or `404` |
 | `GET`    | `/imnot/admin/sessions` | List all active sessions with `session_id`, `partner`, `datapoint`, `created_at`, `last_used` |
-| `DELETE` | `/imnot/admin/sessions/{session_id}` | Delete a single session — returns `200 {"status":"ok","session_id":"…"}` or `404` |
+| `DELETE` | `/imnot/admin/sessions/{session_id}` | Delete a session with all its datapoints — returns `200 {"status":"ok","session_id":"…"}` or `404` |
 | `DELETE` | `/imnot/admin/faults` | Reset every `fail.first_n` counter, so failing endpoints fail again from the first call — returns `{"status":"ok","cleared":N}` |
 | `POST` | `/imnot/admin/reload` | Hot-reload partner YAMLs without restarting: updates static bodies and pagination in place, registers new routes, and unregisters routes whose endpoint, datapoint or partner was removed. Returns `added`, `updated`, `removed`, `skipped` (partners whose YAML exists but fails to load keep their current routes; status `partial`) and `conflicts` |
 | `GET`  | `/imnot/admin/postman` | Download a Postman collection v2.1 JSON for all loaded partners |

@@ -40,12 +40,13 @@ CREATE TABLE IF NOT EXISTS global_payloads (
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
-    session_id  TEXT PRIMARY KEY,
+    session_id  TEXT NOT NULL,           -- one session can hold payloads for several datapoints
     partner     TEXT NOT NULL,
     datapoint   TEXT NOT NULL,
     payload     TEXT NOT NULL,           -- JSON blob
     created_at  TEXT NOT NULL,
-    last_used   TEXT
+    last_used   TEXT,
+    PRIMARY KEY (session_id, partner, datapoint)
 );
 
 CREATE TABLE IF NOT EXISTS async_requests (
@@ -119,9 +120,42 @@ class SessionStore:
             logger.info("Migrated sessions table: added last_used column")
         except sqlite3.OperationalError:
             pass
+        self._migrate_sessions_primary_key()
         self._conn.executescript(_DDL)
         self._conn.commit()
         logger.info("Session store initialised at %s", self.db_path)
+
+    def _migrate_sessions_primary_key(self) -> None:
+        """Older DBs keyed sessions by session_id alone; re-key them by (session_id, partner, datapoint).
+
+        SQLite cannot change a primary key in place, so the rows are copied to a new table inside one
+        transaction. Runs only when the old single-column key is detected.
+        """
+        assert self._conn is not None  # nosec B101
+        pk_columns = [row["name"] for row in self._conn.execute("PRAGMA table_info(sessions)") if row["pk"]]
+        if pk_columns != ["session_id"]:
+            return  # new DB (table not created yet) or already migrated
+        with self._conn:
+            self._conn.execute("ALTER TABLE sessions RENAME TO sessions_v1")
+            self._conn.execute(
+                """
+                CREATE TABLE sessions (
+                    session_id  TEXT NOT NULL,
+                    partner     TEXT NOT NULL,
+                    datapoint   TEXT NOT NULL,
+                    payload     TEXT NOT NULL,
+                    created_at  TEXT NOT NULL,
+                    last_used   TEXT,
+                    PRIMARY KEY (session_id, partner, datapoint)
+                )
+                """
+            )
+            self._conn.execute(
+                "INSERT INTO sessions (session_id, partner, datapoint, payload, created_at, last_used) "
+                "SELECT session_id, partner, datapoint, payload, created_at, last_used FROM sessions_v1"
+            )
+            self._conn.execute("DROP TABLE sessions_v1")
+        logger.info("Migrated sessions table: key is now (session_id, partner, datapoint)")
 
     def close(self) -> None:
         if self._conn:
@@ -165,14 +199,20 @@ class SessionStore:
     # Session payloads
     # ------------------------------------------------------------------
 
-    def store_session_payload(self, partner: str, datapoint: str, payload: dict[str, Any]) -> str:
-        """Create a new session with an isolated payload. Returns the session_id."""
-        session_id = _new_id()
+    def store_session_payload(
+        self, partner: str, datapoint: str, payload: dict[str, Any], session_id: str | None = None
+    ) -> str:
+        """Store a session payload for (partner, datapoint). Returns the session_id.
+
+        Without *session_id* a new session is created. With one, this datapoint is added to (or
+        replaced in) that session, so one X-Imnot-Session can cover several datapoints.
+        """
+        session_id = session_id or _new_id()
         now = _now()
         with self._cursor() as cur:
             cur.execute(
                 """
-                INSERT INTO sessions (session_id, partner, datapoint, payload, created_at)
+                INSERT OR REPLACE INTO sessions (session_id, partner, datapoint, payload, created_at)
                 VALUES (?, ?, ?, ?, ?)
                 """,
                 (session_id, partner, datapoint, json.dumps(payload), now),
@@ -264,8 +304,8 @@ class SessionStore:
                 row = cur.fetchone()
                 if row is not None:
                     cur.execute(
-                        "UPDATE sessions SET last_used = ? WHERE session_id = ?",
-                        (_now(), session_id),
+                        "UPDATE sessions SET last_used = ? WHERE session_id = ? AND partner = ? AND datapoint = ?",
+                        (_now(), session_id, partner, datapoint),
                     )
             else:
                 cur.execute(
@@ -294,13 +334,17 @@ class SessionStore:
             return None
         return {"payload": json.loads(row["payload"]), "updated_at": row["updated_at"]}
 
-    def get_session_payload(self, session_id: str) -> dict[str, Any] | None:
-        """Return the payload and metadata for a session_id, or None if not found."""
+    def get_session_payload(
+        self, session_id: str, partner: str | None = None, datapoint: str | None = None
+    ) -> dict[str, Any] | None:
+        """Return the payload and metadata for a session_id (for one datapoint if given), or None."""
+        query = "SELECT session_id, partner, datapoint, payload, created_at FROM sessions WHERE session_id = ?"
+        params: list[Any] = [session_id]
+        if partner is not None and datapoint is not None:
+            query += " AND partner = ? AND datapoint = ?"
+            params += [partner, datapoint]
         with self._cursor() as cur:
-            cur.execute(
-                "SELECT session_id, partner, datapoint, payload, created_at FROM sessions WHERE session_id = ?",
-                (session_id,),
-            )
+            cur.execute(query, params)
             row = cur.fetchone()
         if row is None:
             return None

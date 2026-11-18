@@ -53,7 +53,7 @@ imnot start
 | `callback` | Webhook simulation — imnot fires the outbound call after receiving a submit |
 | `paginated` | Paginated list endpoints (offset/limit, cursor, or page-number) sliced from an uploaded array at request time |
 
-All `fetch`, `polling`, and `paginated` endpoints support `X-Imnot-Session` for per-test isolation — parallel test runs stay independent.
+All `fetch`, `polling`, and `paginated` endpoints support `X-Imnot-Session` for per-test isolation — parallel test runs stay independent. One session can hold payloads for several datapoints: upload each one with the same `X-Imnot-Session` header.
 
 → [Full pattern reference with YAML examples](docs/patterns.md)
 
