@@ -76,7 +76,25 @@ CREATE TABLE IF NOT EXISTS paginated_cursors (
     created_at  TEXT NOT NULL,
     expires_at  TEXT               -- NULL means no TTL
 );
+
+-- Request journal: what consumers sent to the mock routes (newest JOURNAL_MAX_ENTRIES kept).
+CREATE TABLE IF NOT EXISTS request_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    received_at TEXT NOT NULL,
+    partner     TEXT,              -- NULL when the request matched no mock route
+    datapoint   TEXT,
+    session_id  TEXT,
+    method      TEXT NOT NULL,
+    path        TEXT NOT NULL,
+    query       TEXT NOT NULL,
+    headers     TEXT NOT NULL,     -- JSON object, secrets redacted
+    body        TEXT NOT NULL,
+    body_truncated INTEGER NOT NULL,
+    status      INTEGER
+);
 """
+
+JOURNAL_MAX_ENTRIES = 1000
 
 
 # ---------------------------------------------------------------------------
@@ -371,6 +389,70 @@ class SessionStore:
                 "SELECT session_id, partner, datapoint, created_at, last_used FROM sessions ORDER BY created_at DESC"
             )
             return [dict(row) for row in cur.fetchall()]
+
+    # ------------------------------------------------------------------
+    # Request journal
+    # ------------------------------------------------------------------
+
+    def log_request(self, entry: dict[str, Any]) -> None:
+        """Append one journal entry and drop the oldest beyond ``JOURNAL_MAX_ENTRIES``."""
+        with self._cursor() as cur:
+            cur.execute(
+                "INSERT INTO request_log (received_at, partner, datapoint, session_id, method, path, query, "
+                "headers, body, body_truncated, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    _now(),
+                    entry.get("partner"),
+                    entry.get("datapoint"),
+                    entry.get("session_id"),
+                    entry["method"],
+                    entry["path"],
+                    entry.get("query", ""),
+                    json.dumps(entry.get("headers", {})),
+                    entry.get("body", ""),
+                    int(bool(entry.get("body_truncated"))),
+                    entry.get("status"),
+                ),
+            )
+            cur.execute("DELETE FROM request_log WHERE id <= ?", (cur.lastrowid - JOURNAL_MAX_ENTRIES,))
+
+    def list_requests(
+        self,
+        partner: str | None = None,
+        datapoint: str | None = None,
+        session_id: str | None = None,
+        method: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Return journal entries, newest first, filtered by any of the given fields."""
+        clauses, params = [], []
+        for column, value in (("partner", partner), ("datapoint", datapoint), ("session_id", session_id)):
+            if value is not None:
+                clauses.append(f"{column} = ?")  # nosec B608 — column names are fixed literals
+                params.append(value)
+        if method is not None:
+            clauses.append("method = ?")
+            params.append(method.upper())
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with self._cursor() as cur:
+            cur.execute(
+                f"SELECT * FROM request_log {where} ORDER BY id DESC LIMIT ?",  # nosec B608
+                (*params, limit),
+            )
+            rows = [dict(row) for row in cur.fetchall()]
+        for row in rows:
+            row["headers"] = json.loads(row["headers"])
+            row["body_truncated"] = bool(row["body_truncated"])
+        return rows
+
+    def clear_requests(self, session_id: str | None = None) -> int:
+        """Delete journal entries (all, or one session's). Returns the number deleted."""
+        with self._cursor() as cur:
+            if session_id is None:
+                cur.execute("DELETE FROM request_log")
+            else:
+                cur.execute("DELETE FROM request_log WHERE session_id = ?", (session_id,))
+            return cur.rowcount
 
     def delete_session(self, session_id: str) -> bool:
         """Delete a single session by ID. Returns True if deleted, False if not found."""

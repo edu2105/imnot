@@ -549,6 +549,29 @@ def _register_infra_routes(
         counters.clear()
         return JSONResponse({"status": "ok", "cleared": cleared})
 
+    async def list_requests(request: Request) -> JSONResponse:
+        """Request journal, newest first. Filters: partner, datapoint, session, method; limit (1-1000, default 50)."""
+        q = request.query_params
+        try:
+            limit = int(q.get("limit", "50"))
+        except ValueError:
+            return JSONResponse(status_code=422, content={"detail": "'limit' must be an integer"})
+        if not 1 <= limit <= 1000:
+            return JSONResponse(status_code=422, content={"detail": "'limit' must be between 1 and 1000"})
+        entries = store.list_requests(
+            partner=q.get("partner"),
+            datapoint=q.get("datapoint"),
+            session_id=q.get("session"),
+            method=q.get("method"),
+            limit=limit,
+        )
+        return JSONResponse(entries)
+
+    async def clear_requests(request: Request) -> JSONResponse:
+        """Clear the request journal, or only one session's entries with ?session=<id>."""
+        deleted = store.clear_requests(session_id=request.query_params.get("session"))
+        return JSONResponse({"status": "ok", "deleted": deleted})
+
     async def delete_session(session_id: str) -> JSONResponse:
         deleted = store.delete_session(session_id)
         if not deleted:
@@ -937,6 +960,8 @@ def _register_infra_routes(
     app.add_api_route("/imnot/admin/sessions", list_sessions, methods=["GET"])
     app.add_api_route("/imnot/admin/sessions/{session_id}", delete_session, methods=["DELETE"])
     app.add_api_route("/imnot/admin/faults", reset_faults, methods=["DELETE"])
+    app.add_api_route("/imnot/admin/requests", list_requests, methods=["GET"])
+    app.add_api_route("/imnot/admin/requests", clear_requests, methods=["DELETE"])
     app.add_api_route("/imnot/admin/partners", list_partners, methods=["GET"])
     app.add_api_route("/imnot/admin/partners", create_partner_handler, methods=["POST"])
     app.add_api_route("/imnot/admin/partners/{partner_name}", get_partner, methods=["GET"])

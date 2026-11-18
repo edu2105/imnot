@@ -25,6 +25,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 from imnot.config import UIConfig, load_config
+from imnot.engine.journal import JournalMiddleware
 from imnot.engine.router import _IMNOT_VERSION, register_routes, seed_payloads
 from imnot.engine.session_store import SessionStore
 from imnot.engine.stress import StressStore
@@ -110,6 +111,7 @@ def create_app(
 
     app.state.stress_store = stress_store
     app.add_middleware(LoggingMiddleware)
+    app.add_middleware(JournalMiddleware)
     register_routes(
         app,
         partners,

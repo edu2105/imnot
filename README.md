@@ -22,6 +22,7 @@
 - **Rate-limit aware.** Declare a `requests_per_minute` ceiling on `fetch` endpoints (and on `paginated` endpoints using the DRF-style `page_number_url` pagination) — imnot enforces it with a token bucket and returns realistic `429` responses with a `Retry-After` header.
 - **Echoes the request.** `{{path.id}}`, `{{body.x}}` or `{{request_id}}` inside a response or callback payload, so callbacks can be correlated with their submit.
 - **Fails on demand.** `delay_ms` and `fail: {status, first_n}` on any endpoint simulate a slow or flaky partner, to test timeouts and retries.
+- **Records what your integration sent.** Every request to a mock route lands in a journal (`GET /imnot/admin/requests`, secrets redacted), so a test can assert the exact body and headers your code produced.
 - **Ships with your tests.** Partner definitions — and, optionally, their payloads as `payloads/<datapoint>.json` — are version-controlled alongside the integration they test and run anywhere Docker runs.
 
 ---
