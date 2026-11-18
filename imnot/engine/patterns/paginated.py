@@ -7,6 +7,8 @@ from urllib.parse import urlencode
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
+from imnot.engine.errors import rate_limit_response, validation_error_response
+from imnot.engine.patterns import no_payload_response
 from imnot.engine.rate_limiter import RateLimiter
 from imnot.engine.session_store import SessionStore, _now
 from imnot.engine.validator import validate_request
@@ -38,16 +40,12 @@ def make_paginated_handler(
             key = (partner, dp_name, endpoint.method, endpoint.path)
             allowed, retry_after = limiter.check(key, capacity, refill_per_second, time.time())
             if not allowed:
-                return JSONResponse(
-                    status_code=429,
-                    content={"detail": f"Rate limit exceeded: {capacity} requests per minute"},
-                    headers={"Retry-After": str(retry_after)},
-                )
+                return rate_limit_response(rate_limit, capacity, retry_after)
 
         if validate_rules is not None:
             errors = validate_request(validate_rules, None, request.query_params, request.headers)
             if errors:
-                return JSONResponse(status_code=422, content={"detail": errors})
+                return validation_error_response(validate_rules, errors)
 
         pagination = pagination_ref[0]
         style = pagination.get("style", "offset_limit")
@@ -60,12 +58,7 @@ def make_paginated_handler(
         )
 
         if payload is None:
-            detail = (
-                f"No session payload found for session '{session_id}'"
-                if session_id
-                else f"No global payload found for {partner}/{dp_name}"
-            )
-            return JSONResponse(status_code=404, content={"detail": detail})
+            return no_payload_response(partner, dp_name, session_id)
 
         if not isinstance(payload, list):
             return JSONResponse(

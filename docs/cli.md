@@ -4,13 +4,14 @@
 
 | Command | Description |
 |---------|-------------|
-| `imnot init` | Scaffold a new project with example partners and `imnot.toml` |
+| `imnot init` | Scaffold a new project with three example partners covering all six patterns (`ratesync` ships example payloads) and `imnot.toml` |
 | `imnot init --dir <path>` | Scaffold into a specific directory (created if it does not exist) |
 | `imnot start` | Load partner YAMLs and start the server. Starts with zero partners if no `partners/` exists. Auto-creates `imnot.toml` on first run. |
 | `imnot start --reload` | Start with auto-restart on any YAML change (recommended for development) |
 | `imnot stop` | Stop the running server (sends SIGTERM to PID in `imnot.pid`) |
 | `imnot stop --pid-file <path>` | Stop using an explicit PID file path |
-| `imnot generate --file <path>` | Validate and scaffold a partner YAML into `partners/` |
+| `imnot validate` | Check every `partner.yaml` strictly (schema, unknown keys, route conflicts across partners); exits 1 on any problem. Good for CI |
+| `imnot generate --file <path>` | Validate (strictly, like `imnot validate`) and scaffold a partner YAML into `partners/` |
 | `imnot generate --file <path> --dry-run --json` | Validate only — print structured result, write nothing |
 | `imnot export postman` | Generate a Postman collection v2.1 JSON from all loaded partners |
 | `imnot export postman --out <file>` | Write the collection to a specific file (default: `imnot-collection.json`) |
@@ -72,3 +73,7 @@ When a log file reaches `max_bytes`, it is moved to `archived-logs/` with a time
 ## Partner auto-discovery
 
 `imnot start`, `imnot routes`, and other commands all walk up from the current working directory to find `partners/`, `imnot.db`, and `imnot.pid`. You can run any command from any subdirectory of your project.
+
+The search for `imnot.db` and `imnot.pid` stops at the project root — the first directory with an `imnot.toml` (created by `imnot init` and `imnot start`) — so a project nested inside another one never uses the outer project's database.
+
+`imnot start` prints a short summary: the admin UI URL, the partners loaded, the ones skipped (run `imnot validate` for why), and the payload-backed datapoints that have no payload yet.

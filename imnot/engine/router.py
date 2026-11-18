@@ -30,29 +30,33 @@ from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
 from imnot.config import UIConfig
+from imnot.engine.faults import with_faults
 from imnot.engine.patterns.async_ import make_async_handlers
 from imnot.engine.patterns.fetch import make_fetch_handler
 from imnot.engine.patterns.oauth import make_oauth_handler
 from imnot.engine.patterns.paginated import make_paginated_handler
-from imnot.engine.patterns.push import fire_callback, make_push_handler
+from imnot.engine.patterns.push import delivery_config, fire_callback, make_push_handler
 from imnot.engine.patterns.static import make_static_handler
 from imnot.engine.rate_limiter import RateLimiter
 from imnot.engine.session_store import SessionStore
 from imnot.engine.stress_router import register_stress_routes
-from imnot.loader.yaml_loader import DatapointDef, EndpointDef, PartnerDef, load_partners
-from imnot.partners import dropped_fields, register_partner
+from imnot.loader.yaml_loader import (
+    PAYLOAD_PATTERNS,
+    DatapointDef,
+    EndpointDef,
+    PartnerDef,
+    load_partners,
+    payload_shape_error,
+)
+from imnot.partners import dropped_fields, is_safe_partner_name, merge_unmanaged_fields, register_partner
 from imnot.postman import build_postman_collection
 
 _cli_logger = logging.getLogger("imnot.cli")
+_SESSION_ID = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 _http_logger = logging.getLogger("imnot.http")
 logger = _cli_logger  # startup / registration events go to the CLI stream
 
 _IMNOT_VERSION = _pkg_version("imnot")
-
-# Patterns that store payload in the session store and therefore need admin
-# payload endpoints (GET/POST global + session).  oauth and static are fully
-# defined by the YAML and never consult the store, so they get no admin routes.
-_PAYLOAD_PATTERNS = {"fetch", "polling", "callback", "paginated"}
 
 
 def register_routes(
@@ -93,6 +97,8 @@ def register_routes(
     app.state.partners_dir = partners_dir
     app.state.base_url = base_url
     app.state.registered_routes = registered_routes
+    app.state.auth_required = bool(admin_key)  # reported by /healthz so the UI knows whether to ask for a key
+    app.state.fault_counters = {}  # fail.first_n call counts, see engine/faults.py
     app.state.registered_admin_dps = registered_admin_dps
     app.state.default_limit = default_limit
     app.state.rate_limiter = RateLimiter()
@@ -119,7 +125,7 @@ def register_routes(
                 app.state.rate_limiter,
                 default_limit,
             )
-            if datapoint.pattern in _PAYLOAD_PATTERNS:
+            if datapoint.pattern in PAYLOAD_PATTERNS:
                 _register_admin_routes(app, partner, datapoint, store)
                 registered_admin_dps.add((partner.partner, datapoint.name))
     logger.info(
@@ -127,6 +133,19 @@ def register_routes(
         len(partners),
         [p.partner for p in partners],
     )
+
+
+def seed_payloads(store: SessionStore, partners: list[PartnerDef]) -> None:
+    """Store payloads from ``partners/<partner>/payloads/*.json`` as global payloads.
+
+    The files are the source of truth: they overwrite any global payload uploaded earlier for the
+    same datapoint (sessions are untouched). Called from the app lifespan once the store is
+    initialised (``create_app``), and on every reload.
+    """
+    for partner in partners:
+        for dp_name, payload in partner.seed_payloads.items():
+            store.store_global_payload(partner.partner, dp_name, payload)
+            _cli_logger.info("Seeded global payload for %s/%s from payloads/%s.json", partner.partner, dp_name, dp_name)
 
 
 # ---------------------------------------------------------------------------
@@ -196,34 +215,46 @@ def _register_consumer_routes(
     default_limit: int = 50,
 ) -> None:
     owner = f"{partner.partner}/{datapoint.name}"
+    # Called again for a datapoint that gained endpoints (reload, POST /partners): register only
+    # the new ones. Re-adding a live route would leave two routes (the old one still wins) and,
+    # for paginated, point its config ref at a list the live handler no longer reads.
+    known = {key for key, who in registered_routes.items() if who == owner}
 
-    def _add(path: str, handler: Any, method: str) -> None:
-        """Register canonical path + trailing-slash alias (hidden from schema)."""
+    def _add(endpoint: EndpointDef, handler: Any) -> None:
+        """Register canonical path + trailing-slash alias (hidden from schema), with delay_ms/fail applied."""
+        path, method = endpoint.path, endpoint.method
+        handler = with_faults(handler, endpoint, app.state.fault_counters)
         app.add_api_route(path, handler, methods=[method])
         if path != "/":
             app.add_api_route(path + "/", handler, methods=[method], include_in_schema=False)
 
     if datapoint.pattern == "oauth":
         for endpoint in datapoint.endpoints:
+            if (endpoint.method.upper(), endpoint.path) in known:
+                continue
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             handler = make_oauth_handler(endpoint)
-            _add(endpoint.path, handler, endpoint.method)
+            _add(endpoint, handler)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered oauth route %s %s", endpoint.method, endpoint.path)
 
     elif datapoint.pattern == "static":
         for endpoint in datapoint.endpoints:
+            if (endpoint.method.upper(), endpoint.path) in known:
+                continue
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             handler = make_static_handler(partner.partner, datapoint.name, endpoint, configs)
-            _add(endpoint.path, handler, endpoint.method)
+            _add(endpoint, handler)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered static route %s %s", endpoint.method, endpoint.path)
 
     elif datapoint.pattern == "fetch":
         for endpoint in datapoint.endpoints:
+            if (endpoint.method.upper(), endpoint.path) in known:
+                continue
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             handler = make_fetch_handler(partner.partner, datapoint, endpoint, store, limiter)
-            _add(endpoint.path, handler, endpoint.method)
+            _add(endpoint, handler)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered fetch route %s %s", endpoint.method, endpoint.path)
 
@@ -236,8 +267,10 @@ def _register_consumer_routes(
         )
         for step_num, handler in handlers.items():
             endpoint = step_map[step_num]
+            if (endpoint.method.upper(), endpoint.path) in known:
+                continue
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
-            _add(endpoint.path, handler, endpoint.method)
+            _add(endpoint, handler)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug(
                 "Registered polling step %d route %s %s",
@@ -248,14 +281,18 @@ def _register_consumer_routes(
 
     elif datapoint.pattern == "callback":
         for endpoint in datapoint.endpoints:
+            if (endpoint.method.upper(), endpoint.path) in known:
+                continue
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             handler = make_push_handler(partner.partner, datapoint, endpoint, store)
-            _add(endpoint.path, handler, endpoint.method)
+            _add(endpoint, handler)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered callback route %s %s", endpoint.method, endpoint.path)
 
     elif datapoint.pattern == "paginated":
         for endpoint in datapoint.endpoints:
+            if (endpoint.method.upper(), endpoint.path) in known:
+                continue
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             ref_key = (partner.partner, datapoint.name, endpoint.method.upper(), endpoint.path)
             pagination_ref: list[dict] = [datapoint.pagination or {}]
@@ -263,22 +300,37 @@ def _register_consumer_routes(
             handler = make_paginated_handler(
                 partner.partner, datapoint, endpoint, store, default_limit, pagination_ref, limiter
             )
-            _add(endpoint.path, handler, endpoint.method)
+            _add(endpoint, handler)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered paginated route %s %s", endpoint.method, endpoint.path)
 
 
 def _unregister_partner_routes(app: FastAPI, partner_name: str) -> None:
-    """Remove every consumer and admin route that *partner_name* registered, and its bookkeeping.
+    """Remove every consumer and admin route that *partner_name* registered, and its bookkeeping."""
+    registered: dict[tuple[str, str], str] = app.state.registered_routes
+    owned = {key for key, owner in registered.items() if owner.split("/", 1)[0] == partner_name}
+    admin_dps = {k for k in app.state.registered_admin_dps if k[0] == partner_name}
+    _unregister_routes(app, owned, admin_dps)
 
+
+def _unregister_routes(app: FastAPI, route_keys: set[tuple[str, str]], admin_dps: set[tuple[str, str]]) -> None:
+    """Remove the given consumer routes ``(METHOD, path)`` and the admin routes of ``(partner, datapoint)``.
+
+    Also drops their bookkeeping (registered_routes, registered_admin_dps, static/pagination configs).
     Infra routes (``/imnot/admin/partners``, ``/imnot/admin/reload``…) are never touched: admin
     routes are matched by the exact paths ``_register_admin_routes`` builds, not by prefix.
     """
     registered: dict[tuple[str, str], str] = app.state.registered_routes
-    owned = {key for key, owner in registered.items() if owner.split("/", 1)[0] == partner_name}
-    admin_prefixes = {f"/imnot/admin/{p}/{dp}/" for (p, dp) in app.state.registered_admin_dps if p == partner_name}
+    # Static/pagination configs are keyed (partner, datapoint, METHOD, path): drop those whose route
+    # is going away under that same owner (computed before registered_routes is updated).
+    config_keys = {
+        (store_dict_name, key)
+        for store_dict_name, store_dict in (("configs", app.state.configs), ("refs", app.state.paginated_config_refs))
+        for key in store_dict
+        if (key[2], key[3]) in route_keys and registered.get((key[2], key[3])) == f"{key[0]}/{key[1]}"
+    }
     admin_suffixes = ("payload", "payload/session", "payload/session/{session_id}", "callback/{request_id}/retrigger")
-    admin_paths = {prefix + suffix for prefix in admin_prefixes for suffix in admin_suffixes}
+    admin_paths = {f"/imnot/admin/{p}/{dp}/{suffix}" for (p, dp) in admin_dps for suffix in admin_suffixes}
 
     def _belongs(route: Any) -> bool:
         path: str | None = getattr(route, "path", None)
@@ -288,17 +340,15 @@ def _unregister_partner_routes(app: FastAPI, partner_name: str) -> None:
         if path in admin_paths:
             return True
         canonical = path[:-1] if path.endswith("/") and path != "/" else path
-        return any((m, path) in owned or (m, canonical) in owned for m in methods)
+        return any((m, path) in route_keys or (m, canonical) in route_keys for m in methods)
 
     app.router.routes[:] = [r for r in app.router.routes if not _belongs(r)]
-    for key in owned:
-        del registered[key]
-    app.state.registered_admin_dps.difference_update(
-        {k for k in app.state.registered_admin_dps if k[0] == partner_name}
-    )
-    for store_dict in (app.state.configs, app.state.paginated_config_refs):
-        for key in [k for k in store_dict if k[0] == partner_name]:
-            del store_dict[key]
+    for key in route_keys:
+        registered.pop(key, None)
+    app.state.registered_admin_dps.difference_update(admin_dps)
+    stores = {"configs": app.state.configs, "refs": app.state.paginated_config_refs}
+    for store_dict_name, key in config_keys:
+        stores[store_dict_name].pop(key, None)
     app.openapi_schema = None  # rebuild /openapi.json without the removed routes
 
 
@@ -319,11 +369,20 @@ def _register_admin_routes(
     global_path = f"/imnot/admin/{partner_name}/{dp_name}/payload"
     session_path = f"/imnot/admin/{partner_name}/{dp_name}/payload/session"
 
+    def _shape_error(payload: Any) -> JSONResponse | None:
+        """Reject a payload the routes could never serve, at upload time instead of on every GET."""
+        problem = payload_shape_error(datapoint, payload)
+        if problem is None:
+            return None
+        return JSONResponse(status_code=422, content={"detail": problem[0].upper() + problem[1:]})
+
     async def upload_global(request: Request) -> JSONResponse:
         try:
             payload: dict[str, Any] = await request.json()
         except Exception:
             return JSONResponse(status_code=400, content={"detail": "Invalid JSON body"})
+        if (error := _shape_error(payload)) is not None:
+            return error
         store.store_global_payload(partner_name, dp_name, payload)
         return JSONResponse({"status": "ok", "partner": partner_name, "datapoint": dp_name})
 
@@ -332,7 +391,16 @@ def _register_admin_routes(
             payload: dict[str, Any] = await request.json()
         except Exception:
             return JSONResponse(status_code=400, content={"detail": "Invalid JSON body"})
-        session_id = store.store_session_payload(partner_name, dp_name, payload)
+        if (error := _shape_error(payload)) is not None:
+            return error
+        # Reuse a session (header or ?session=) to put several datapoints under one X-Imnot-Session.
+        wanted = request.headers.get("X-Imnot-Session") or request.query_params.get("session")
+        if wanted is not None and not _SESSION_ID.match(wanted):
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Session id must be 1-128 letters, digits, '.', '_', ':' or '-'"},
+            )
+        session_id = store.store_session_payload(partner_name, dp_name, payload, session_id=wanted)
         return JSONResponse({"session_id": session_id})
 
     async def get_global(request: Request) -> JSONResponse:
@@ -345,7 +413,7 @@ def _register_admin_routes(
         return JSONResponse(result)
 
     async def get_session(session_id: str) -> JSONResponse:
-        result = store.get_session_payload(session_id)
+        result = store.get_session_payload(session_id, partner_name, dp_name)
         if result is None:
             return JSONResponse(
                 status_code=404,
@@ -383,6 +451,8 @@ def _register_admin_routes(
                 session_id=row["session_id"],
                 callback_url=row["callback_url"],
                 callback_method=row["callback_method"],
+                context={"request_id": request_id},  # the submit request itself is not stored
+                delivery=delivery_config(datapoint.endpoints[0].response),
             )
             return JSONResponse({"status": "dispatched", "request_id": request_id})
 
@@ -465,11 +535,19 @@ def _register_infra_routes(
     partners: list[PartnerDef],
     store: SessionStore,
 ) -> None:
-    async def healthz() -> JSONResponse:
-        return JSONResponse({"status": "ok", "version": _IMNOT_VERSION})
+    async def healthz(request: Request) -> JSONResponse:
+        auth_required = bool(getattr(request.app.state, "auth_required", False))
+        return JSONResponse({"status": "ok", "version": _IMNOT_VERSION, "auth_required": auth_required})
 
     async def list_sessions() -> JSONResponse:
         return JSONResponse(store.list_sessions())
+
+    async def reset_faults(request: Request) -> JSONResponse:
+        """Reset fail.first_n counters, so failing endpoints fail again from the first call."""
+        counters: dict = request.app.state.fault_counters
+        cleared = len(counters)
+        counters.clear()
+        return JSONResponse({"status": "ok", "cleared": cleared})
 
     async def list_requests(request: Request) -> JSONResponse:
         """Request journal, newest first. Filters: partner, datapoint, session, method; limit (1-1000, default 50)."""
@@ -507,7 +585,7 @@ def _register_infra_routes(
                 status_code=400,
                 content={"detail": "No partners_dir configured — server was not started via `imnot start`."},
             )
-        if not re.match(r"^[a-zA-Z0-9_-]{1,64}$", partner_name):
+        if not is_safe_partner_name(partner_name):
             return JSONResponse(status_code=400, content={"detail": "Invalid partner name."})
         partner_dir = partners_dir / partner_name
         try:
@@ -529,6 +607,20 @@ def _register_infra_routes(
                 partners.pop(i)
                 break
         return JSONResponse({"status": "ok", "partner": partner_name})
+
+    async def get_partner(partner_name: str, request: Request) -> JSONResponse:
+        """The partner's full partner.yaml as JSON, so the Builder can pre-fill every field it edits."""
+        partners_dir: Path | None = request.app.state.partners_dir
+        if partners_dir is None or not is_safe_partner_name(partner_name):
+            return JSONResponse(status_code=404, content={"detail": f"Partner '{partner_name}' not found."})
+        path = partners_dir / partner_name / "partner.yaml"
+        if not path.is_file():
+            return JSONResponse(status_code=404, content={"detail": f"Partner '{partner_name}' not found."})
+        try:
+            raw = yaml.safe_load(path.read_text())
+        except yaml.YAMLError as exc:
+            return JSONResponse(status_code=422, content={"detail": f"partner.yaml is not valid YAML: {exc}"})
+        return JSONResponse(raw)
 
     async def list_partners() -> JSONResponse:
         def _serialize_dp(dp: DatapointDef) -> dict:
@@ -576,9 +668,9 @@ def _register_infra_routes(
           is updated in place so the very next request serves the new YAML body.
         - For entirely new partners or datapoints: consumer routes (and admin routes
           for payload patterns) are registered dynamically on the running app.
-        - Removed partners/datapoints are NOT unregistered (existing routes stay
-          active but serve their last-known config).  Restart the server to
-          fully purge removed definitions.
+        - Routes whose endpoint, datapoint or partner is no longer in the YAML (or moved to
+          another datapoint) are unregistered, with their admin routes; they are listed in
+          ``removed``. Changed validate:/rate_limit:/fail: on an existing route still need a restart.
         """
         partners_dir: Path | None = request.app.state.partners_dir
         if partners_dir is None:
@@ -602,6 +694,36 @@ def _register_infra_routes(
         updated: list[str] = []
         added: list[str] = []
         conflicts: list[str] = []
+        removed: list[str] = []
+
+        # A partner whose partner.yaml still exists but no longer loads (a typo mid-edit) keeps its
+        # current routes; only definitions that are really gone are unregistered.
+        on_disk = {f.resolve() for f in partners_dir.glob("*/partner.yaml")}
+        loaded_files = {p.source_path.resolve() for p in new_partners}
+        failing_files = on_disk - loaded_files
+        kept_names = {p.partner for p in partners if p.source_path.resolve() in failing_files}
+        skipped = sorted(f.parent.name for f in failing_files)  # kept partners and broken new ones
+
+        # Unregister what the YAML no longer defines, so a deleted fixture stops answering.
+        wanted = {
+            (ep.method.upper(), ep.path): f"{p.partner}/{dp.name}"
+            for p in new_partners
+            for dp in p.datapoints
+            for ep in dp.endpoints
+        }
+        stale = {
+            key
+            for key, owner in registered.items()
+            if wanted.get(key) != owner and owner.split("/", 1)[0] not in kept_names
+        }
+        wanted_admin = {
+            (p.partner, dp.name) for p in new_partners for dp in p.datapoints if dp.pattern in PAYLOAD_PATTERNS
+        }
+        stale_admin = {k for k in registered_admin if k not in wanted_admin and k[0] not in kept_names}
+        if stale or stale_admin:
+            removed = sorted(f"{method} {path}" for method, path in stale)
+            removed += sorted(f"admin routes for {p}/{dp}" for p, dp in stale_admin)
+            _unregister_routes(request.app, stale, stale_admin)
 
         for partner in new_partners:
             for dp in partner.datapoints:
@@ -642,10 +764,12 @@ def _register_infra_routes(
                         conflicts.append(str(exc))
 
                 # Register admin routes for new payload-pattern datapoints
-                if dp.pattern in _PAYLOAD_PATTERNS and (partner.partner, dp.name) not in registered_admin:
+                if dp.pattern in PAYLOAD_PATTERNS and (partner.partner, dp.name) not in registered_admin:
                     _register_admin_routes(request.app, partner, dp, store_)
                     registered_admin.add((partner.partner, dp.name))
                     added.append(f"admin routes for {partner.partner}/{dp.name}")
+
+        seed_payloads(store_, new_partners)
 
         # Sync partners list in-place so list_partners() closure sees the change.
         existing_names = {p.partner for p in partners}
@@ -658,15 +782,29 @@ def _register_infra_routes(
                         partners[i] = new_partner
                         break
 
-        _http_logger.info("Reload: updated=%s added=%s conflicts=%s", updated, added, conflicts)
-        status = "ok" if not conflicts else "partial"
-        return JSONResponse({"status": status, "updated": updated, "added": added, "conflicts": conflicts})
+        keep_names = {p.partner for p in new_partners} | kept_names
+        partners[:] = [p for p in partners if p.partner in keep_names]
+
+        _http_logger.info("Reload: updated=%s added=%s removed=%s conflicts=%s", updated, added, removed, conflicts)
+        status = "ok" if not conflicts and not skipped else "partial"
+        return JSONResponse(
+            {
+                "status": status,
+                "updated": updated,
+                "added": added,
+                "removed": removed,
+                "skipped": skipped,
+                "conflicts": conflicts,
+            }
+        )
 
     async def create_partner_handler(request: Request) -> JSONResponse:
         """Validate raw YAML body, write it to disk, and hot-load its routes.
 
         Query params:
             force (bool, default false) — overwrite if partner already exists.
+            merge_from (partner name, optional) — first copy over the fields of that partner's current
+                partner.yaml that the Builder form never writes (validate:, fail:, headers, …).
             compare_to (partner name, optional) — before writing, compare against that partner's
                 current partner.yaml and return 409 with ``dropped`` if fields would be lost. Used by
                 the Builder's edit mode, which does not round-trip every field.
@@ -683,9 +821,20 @@ def _register_infra_routes(
         force = request.query_params.get("force", "false").lower() == "true"
         yaml_text = (await request.body()).decode()
 
+        merge_from = request.query_params.get("merge_from")
+        if merge_from:
+            if not is_safe_partner_name(merge_from):
+                return JSONResponse(status_code=400, content={"detail": "Invalid merge_from partner name."})
+            merge_file = partners_dir / merge_from / "partner.yaml"
+            if merge_file.is_file():
+                try:
+                    yaml_text = merge_unmanaged_fields(merge_file.read_text(), yaml_text)
+                except yaml.YAMLError:
+                    pass  # invalid new YAML: register_partner below returns the 422
+
         compare_to = request.query_params.get("compare_to")
         if compare_to:
-            if not re.match(r"^[a-zA-Z0-9_-]{1,64}$", compare_to):
+            if not is_safe_partner_name(compare_to):
                 return JSONResponse(status_code=400, content={"detail": "Invalid compare_to partner name."})
             current_file = partners_dir / compare_to / "partner.yaml"
             if current_file.is_file():
@@ -756,7 +905,7 @@ def _register_infra_routes(
                     conflicts.append(str(exc))
 
             # Register admin routes for new payload-pattern datapoints
-            if dp.pattern in _PAYLOAD_PATTERNS and (partner.partner, dp.name) not in registered_admin_:
+            if dp.pattern in PAYLOAD_PATTERNS and (partner.partner, dp.name) not in registered_admin_:
                 _register_admin_routes(request.app, partner, dp, store_)
                 registered_admin_.add((partner.partner, dp.name))
                 added.append(f"admin routes for {partner.partner}/{dp.name}")
@@ -771,7 +920,7 @@ def _register_infra_routes(
                     partners[i] = partner
                     break
 
-        payload_dp_names = {dp.name for dp in partner.datapoints if dp.pattern in _PAYLOAD_PATTERNS}
+        payload_dp_names = {dp.name for dp in partner.datapoints if dp.pattern in PAYLOAD_PATTERNS}
         status_code = 201 if result.created else 200
         return JSONResponse(
             status_code=status_code,
@@ -810,10 +959,12 @@ def _register_infra_routes(
     app.add_api_route("/healthz", healthz, methods=["GET"])
     app.add_api_route("/imnot/admin/sessions", list_sessions, methods=["GET"])
     app.add_api_route("/imnot/admin/sessions/{session_id}", delete_session, methods=["DELETE"])
+    app.add_api_route("/imnot/admin/faults", reset_faults, methods=["DELETE"])
     app.add_api_route("/imnot/admin/requests", list_requests, methods=["GET"])
     app.add_api_route("/imnot/admin/requests", clear_requests, methods=["DELETE"])
     app.add_api_route("/imnot/admin/partners", list_partners, methods=["GET"])
     app.add_api_route("/imnot/admin/partners", create_partner_handler, methods=["POST"])
+    app.add_api_route("/imnot/admin/partners/{partner_name}", get_partner, methods=["GET"])
     app.add_api_route("/imnot/admin/partners/{partner_name}", delete_partner, methods=["DELETE"])
     app.add_api_route("/imnot/admin/reload", reload_partners, methods=["POST"])
     app.add_api_route("/imnot/admin/postman", postman_collection, methods=["GET"])

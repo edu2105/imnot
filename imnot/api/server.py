@@ -26,7 +26,7 @@ from starlette.requests import Request
 
 from imnot.config import UIConfig, load_config
 from imnot.engine.journal import JournalMiddleware
-from imnot.engine.router import _IMNOT_VERSION, register_routes
+from imnot.engine.router import _IMNOT_VERSION, register_routes, seed_payloads
 from imnot.engine.session_store import SessionStore
 from imnot.engine.stress import StressStore
 from imnot.loader.yaml_loader import load_partners
@@ -93,6 +93,7 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         store.init()
         stress_store.init()
+        seed_payloads(store, partners)  # needs an initialised store, so not in register_routes
         logger.info("imnot starting — %d partner(s) loaded", len(partners))
         if admin_key:
             logger.info("Admin endpoints protected by Bearer token auth")

@@ -20,8 +20,10 @@
 - **Stateful, not just stubbed.** OAuth, polling, callbacks, paginated lists, and per-test session isolation — all modeled in YAML.
 - **Validation-aware.** Declare field rules in YAML — imnot rejects malformed requests with realistic 422 errors before returning a mock response.
 - **Rate-limit aware.** Declare a `requests_per_minute` ceiling on `fetch` endpoints (and on `paginated` endpoints using the DRF-style `page_number_url` pagination) — imnot enforces it with a token bucket and returns realistic `429` responses with a `Retry-After` header.
+- **Echoes the request.** `{{path.id}}`, `{{body.x}}` or `{{request_id}}` inside a response or callback payload, so callbacks can be correlated with their submit.
+- **Fails on demand.** `delay_ms` and `fail: {status, first_n}` on any endpoint simulate a slow or flaky partner, to test timeouts and retries.
 - **Records what your integration sent.** Every request to a mock route lands in a journal (`GET /imnot/admin/requests`, secrets redacted), so a test can assert the exact body and headers your code produced.
-- **Ships with your tests.** Partner definitions are version-controlled alongside the integration they test and run anywhere Docker runs.
+- **Ships with your tests.** Partner definitions — and, optionally, their payloads as `payloads/<datapoint>.json` — are version-controlled alongside the integration they test and run anywhere Docker runs.
 
 ---
 
@@ -37,7 +39,7 @@ imnot start
 
 > `pipx` installs CLI tools into isolated environments. Alternatively: `pip install imnot` inside an existing virtual environment.
 
-`imnot init` creates a `partners/` directory with two working example partners (`staylink` and `bookingco`) that cover all six patterns. Edit or replace them whenever you're ready.
+`imnot init` creates a `partners/` directory with three working example partners that cover all six patterns: `staylink` (oauth + polling), `bookingco` (static + fetch) and `ratesync` (callback + paginated, with example payloads in `payloads/`, so it answers right away). Edit or replace them whenever you're ready.
 
 ---
 
@@ -52,7 +54,7 @@ imnot start
 | `callback` | Webhook simulation — imnot fires the outbound call after receiving a submit |
 | `paginated` | Paginated list endpoints (offset/limit, cursor, or page-number) sliced from an uploaded array at request time |
 
-All `fetch`, `polling`, and `paginated` endpoints support `X-Imnot-Session` for per-test isolation — parallel test runs stay independent.
+All `fetch`, `polling`, and `paginated` endpoints support `X-Imnot-Session` for per-test isolation — parallel test runs stay independent. One session can hold payloads for several datapoints: upload each one with the same `X-Imnot-Session` header.
 
 → [Full pattern reference with YAML examples](docs/patterns.md)
 
@@ -115,7 +117,6 @@ Output only the YAML — no code, no explanation.
 
 ## Limitations
 
-- **Callback retries** — no built-in retry logic; use the retrigger endpoint to re-fire.
 - **JSON only** — response bodies are always JSON, no XML support.
 - **Single-node** — SQLite session store is not shared across instances.
 - **Admin UI** — desktop layout only; no mobile breakpoints.

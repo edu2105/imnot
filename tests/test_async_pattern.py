@@ -35,6 +35,18 @@ def _request(headers: list[tuple[bytes, bytes]] | None = None) -> Request:
     return Request({"type": "http", "headers": headers or []})
 
 
+def _request_with_id(async_uuid: str, session_id: str | None = None) -> Request:
+    headers = []
+    if session_id:
+        headers.append((b"x-imnot-session", session_id.encode()))
+    scope = {
+        "type": "http",
+        "headers": headers,
+        "path_params": {"id": async_uuid},
+    }
+    return Request(scope)
+
+
 # ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
@@ -224,24 +236,36 @@ def static_handler_with_body(store):
     return make_async_handlers("partner", _make_datapoint([ep]), store)[2]
 
 
+@pytest.fixture
+def known_id(store):
+    return store.register_async_request("partner", "job", None)
+
+
 @pytest.mark.asyncio
-async def test_static_returns_configured_status(static_handler_headers_only):
-    response = await static_handler_headers_only(_request())
+async def test_static_returns_configured_status(static_handler_headers_only, known_id):
+    response = await static_handler_headers_only(_request_with_id(known_id))
     assert response.status_code == 201
 
 
 @pytest.mark.asyncio
-async def test_static_returns_configured_headers(static_handler_headers_only):
-    response = await static_handler_headers_only(_request())
+async def test_static_returns_configured_headers(static_handler_headers_only, known_id):
+    response = await static_handler_headers_only(_request_with_id(known_id))
     assert response.headers.get("Status") == "COMPLETED"
 
 
 @pytest.mark.asyncio
-async def test_static_with_body_returns_body(static_handler_with_body):
-    response = await static_handler_with_body(_request())
+async def test_static_with_body_returns_body(static_handler_with_body, known_id):
+    response = await static_handler_with_body(_request_with_id(known_id))
     assert response.status_code == 200
     body = json.loads(response.body)
     assert body == {"status": "COMPLETED"}
+
+
+@pytest.mark.asyncio
+async def test_static_step_with_unknown_id_returns_404(static_handler_headers_only):
+    response = await static_handler_headers_only(_request_with_id("never-submitted"))
+    assert response.status_code == 404
+    assert "never-submitted" in json.loads(response.body)["detail"]
 
 
 # ---------------------------------------------------------------------------
@@ -258,18 +282,6 @@ def fetch_handler(store):
         response={"status": 200, "returns_payload": True},
     )
     return make_async_handlers("partner", _make_datapoint([ep]), store)[3]
-
-
-def _request_with_id(async_uuid: str, session_id: str | None = None) -> Request:
-    headers = []
-    if session_id:
-        headers.append((b"x-imnot-session", session_id.encode()))
-    scope = {
-        "type": "http",
-        "headers": headers,
-        "path_params": {"id": async_uuid},
-    }
-    return Request(scope)
 
 
 @pytest.mark.asyncio
@@ -400,22 +412,6 @@ async def test_fetch_step_invalid_header_returns_422(store):
 
     body = json.loads(response.body)
     assert any("X-Correlation-ID" in e for e in body["detail"])
-
-
-# ---------------------------------------------------------------------------
-# generates_id missing id delivery config — ValueError at startup (L69)
-# ---------------------------------------------------------------------------
-
-
-def test_submit_generates_id_without_delivery_config_raises(store):
-    ep = EndpointDef(
-        method="POST",
-        path="/jobs",
-        step=1,
-        response={"status": 202, "generates_id": True},
-    )
-    with pytest.raises(ValueError, match="generates_id"):
-        make_async_handlers("partner", _make_datapoint([ep]), store)
 
 
 # ---------------------------------------------------------------------------

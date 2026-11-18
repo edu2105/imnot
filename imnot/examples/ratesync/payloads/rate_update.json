@@ -1,0 +1,1 @@
+{"requestId": "{{request_id}}", "propertyId": "{{body.propertyId}}", "status": "APPLIED"}

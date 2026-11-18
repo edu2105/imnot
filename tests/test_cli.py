@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import signal
 from pathlib import Path
 from unittest.mock import patch
@@ -1271,3 +1272,149 @@ def test_start_reload_hands_resolved_toml_to_factory(runner, tmp_path, monkeypat
         )
     assert result.exit_code == 0, result.output
     assert os.environ.get("IMNOT_CONFIG_PATH") == str((data / "imnot.toml").resolve())
+
+
+# ---------------------------------------------------------------------------
+# imnot validate
+# ---------------------------------------------------------------------------
+
+_VALID_PARTNER = """\
+partner: {name}
+datapoints:
+  - name: ping
+    pattern: static
+    endpoints:
+      - method: GET
+        path: {path}
+        response:
+          status: 200
+"""
+
+
+def _write_partner(root, name, text):
+    (root / name).mkdir(parents=True)
+    (root / name / "partner.yaml").write_text(text)
+
+
+def test_validate_ok_on_bundled_partners(runner):
+    result = runner.invoke(cli, ["validate", "--partners-dir", str(PARTNERS_DIR)])
+    assert result.exit_code == 0, result.output
+    assert "OK" in result.output and "FAIL" not in result.output
+
+
+def test_validate_fails_on_unknown_key(runner, tmp_path):
+    _write_partner(tmp_path, "acme", _VALID_PARTNER.format(name="acme", path="/acme").replace("response:", "respose:"))
+    result = runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "FAIL" in result.output and "unknown key 'respose'" in result.output
+
+
+def test_validate_fails_on_route_conflict_between_partners(runner, tmp_path):
+    _write_partner(tmp_path, "aaa", _VALID_PARTNER.format(name="aaa", path="/shared"))
+    _write_partner(tmp_path, "bbb", _VALID_PARTNER.format(name="bbb", path="/shared"))
+    result = runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "Route conflict: GET /shared is already defined by 'aaa/ping'" in result.output
+
+
+def test_validate_reports_every_file_not_just_the_first(runner, tmp_path):
+    _write_partner(tmp_path, "bad1", "")
+    _write_partner(tmp_path, "bad2", _VALID_PARTNER.format(name="bad2", path="no-slash"))
+    _write_partner(tmp_path, "good", _VALID_PARTNER.format(name="good", path="/good"))
+    result = runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path)])
+    assert result.exit_code == 1
+    assert result.output.count("FAIL") == 2 and "OK    good/partner.yaml" in result.output
+    assert "2 of 3" in result.output
+
+
+def test_validate_empty_and_missing_dir(runner, tmp_path):
+    assert runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path)]).exit_code == 0
+    assert runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path / "nope")]).exit_code == 1
+
+
+def test_generate_dry_run_rejects_unknown_key(runner, tmp_path):
+    f = tmp_path / "p.yaml"
+    f.write_text(
+        _VALID_PARTNER.format(name="acme", path="/acme").replace("status: 200", "status: 200\n          bodyy: {}")
+    )
+    result = runner.invoke(cli, ["generate", "--file", str(f), "--partners-dir", str(tmp_path), "--dry-run"])
+    assert result.exit_code != 0
+    assert "bodyy" in result.output
+
+
+def test_validate_reports_bad_payload_files(runner, tmp_path):
+    _write_partner(tmp_path, "acme", _VALID_PARTNER.format(name="acme", path="/acme"))
+    (tmp_path / "acme" / "payloads").mkdir()
+    (tmp_path / "acme" / "payloads" / "ping.json").write_text("{}")
+    result = runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "payloads/ping.json" in result.output and "takes no payload" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Stage 4 UX: startup summary, project-root discovery
+# ---------------------------------------------------------------------------
+
+
+def test_start_prints_a_summary_with_ui_partners_skipped_and_missing_payloads(runner, tmp_path):
+    shutil.copytree(PARTNERS_DIR, tmp_path / "partners", ignore=shutil.ignore_patterns("README.md"))
+    (tmp_path / "partners" / "broken").mkdir()
+    (tmp_path / "partners" / "broken" / "partner.yaml").write_text("partner: broken\n")
+    with patch("imnot.cli.uvicorn.run"):
+        result = runner.invoke(
+            cli, ["start", "--partners-dir", str(tmp_path / "partners"), "--db", str(tmp_path / "imnot.db")]
+        )
+    assert result.exit_code == 0, result.output
+    assert "Admin UI:  http://localhost:8000/imnot/admin/ui" in result.output
+    assert "Partners:  2 loaded (bookingco, staylink)" in result.output
+    assert "Skipped:   broken" in result.output
+    assert "No payload yet: bookingco/charges" in result.output
+
+
+def test_db_discovery_stops_at_the_project_root(runner, tmp_path, monkeypatch):
+    (tmp_path / "imnot.db").touch()  # an outer project's DB
+    inner = tmp_path / "inner"
+    inner.mkdir()
+    (inner / "imnot.toml").write_text("")
+    monkeypatch.chdir(inner)
+    result = runner.invoke(cli, ["status"])
+    assert result.exit_code == 1
+    assert "project root" in result.output
+
+
+def test_db_discovery_still_walks_up_inside_a_project(tmp_path, monkeypatch):
+    from imnot.cli import _resolve_db
+
+    (tmp_path / "imnot.toml").write_text("")
+    (tmp_path / "imnot.db").touch()
+    sub = tmp_path / "tests" / "deep"
+    sub.mkdir(parents=True)
+    monkeypatch.chdir(sub)
+    assert _resolve_db("imnot.db") == tmp_path / "imnot.db"
+
+
+def test_init_examples_cover_all_six_patterns_and_ship_payloads(runner, tmp_path):
+    from imnot.loader.yaml_loader import load_partners
+
+    result = runner.invoke(cli, ["init", "--dir", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert "partners/ratesync/payloads/properties.json" in result.output
+
+    partners = load_partners(tmp_path / "partners")
+    patterns = {dp.pattern for p in partners for dp in p.datapoints}
+    assert patterns == {"oauth", "polling", "static", "fetch", "callback", "paginated"}
+    ratesync = next(p for p in partners if p.partner == "ratesync")
+    assert set(ratesync.seed_payloads) == {"rate_update", "properties"}
+    assert runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path / "partners")]).exit_code == 0
+
+
+def test_init_paginated_example_answers_without_any_upload(runner, tmp_path):
+    from fastapi.testclient import TestClient
+
+    from imnot.api.server import create_app
+
+    runner.invoke(cli, ["init", "--dir", str(tmp_path)])
+    with TestClient(create_app(partners_dir=tmp_path / "partners", db_path=tmp_path / "imnot.db")) as c:
+        page = c.get("/ratesync/v1/properties?limit=2").json()
+    assert [p["id"] for p in page["properties"]] == ["P-001", "P-002"]
+    assert page["total"] == 3 and page["hasMore"] is True

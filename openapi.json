@@ -107,6 +107,23 @@
         }
       }
     },
+    "/imnot/admin/faults": {
+      "delete": {
+        "summary": "Reset Faults",
+        "description": "Reset fail.first_n counters, so failing endpoints fail again from the first call.",
+        "operationId": "reset_faults_imnot_admin_faults_delete",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/imnot/admin/requests": {
       "get": {
         "summary": "List Requests",
@@ -156,7 +173,7 @@
       },
       "post": {
         "summary": "Admin Create Partner",
-        "description": "Validate raw YAML body, write it to disk, and hot-load its routes.\n\nQuery params:\n    force (bool, default false) \u2014 overwrite if partner already exists.\n    compare_to (partner name, optional) \u2014 before writing, compare against that partner's\n        current partner.yaml and return 409 with ``dropped`` if fields would be lost. Used by\n        the Builder's edit mode, which does not round-trip every field.\n\nReturns 201 on create, 200 on overwrite, 409 on conflict or dropped fields, 422 on bad YAML.",
+        "description": "Validate raw YAML body, write it to disk, and hot-load its routes.\n\nQuery params:\n    force (bool, default false) \u2014 overwrite if partner already exists.\n    merge_from (partner name, optional) \u2014 first copy over the fields of that partner's current\n        partner.yaml that the Builder form never writes (validate:, fail:, headers, \u2026).\n    compare_to (partner name, optional) \u2014 before writing, compare against that partner's\n        current partner.yaml and return 409 with ``dropped`` if fields would be lost. Used by\n        the Builder's edit mode, which does not round-trip every field.\n\nReturns 201 on create, 200 on overwrite, 409 on conflict or dropped fields, 422 on bad YAML.",
         "operationId": "admin_create_partner_imnot_admin_partners_post",
         "responses": {
           "200": {
@@ -171,6 +188,42 @@
       }
     },
     "/imnot/admin/partners/{partner_name}": {
+      "get": {
+        "summary": "Get Partner",
+        "description": "The partner's full partner.yaml as JSON, so the Builder can pre-fill every field it edits.",
+        "operationId": "get_partner_imnot_admin_partners__partner_name__get",
+        "parameters": [
+          {
+            "name": "partner_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Partner Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "summary": "Delete Partner",
         "operationId": "delete_partner_imnot_admin_partners__partner_name__delete",
@@ -210,7 +263,7 @@
     "/imnot/admin/reload": {
       "post": {
         "summary": "Admin Reload Partners",
-        "description": "Re-read all partner YAML files and hot-swap config for existing routes.\n\n- For ``static`` pattern datapoints: the response config (status + body)\n  is updated in place so the very next request serves the new YAML body.\n- For entirely new partners or datapoints: consumer routes (and admin routes\n  for payload patterns) are registered dynamically on the running app.\n- Removed partners/datapoints are NOT unregistered (existing routes stay\n  active but serve their last-known config).  Restart the server to\n  fully purge removed definitions.",
+        "description": "Re-read all partner YAML files and hot-swap config for existing routes.\n\n- For ``static`` pattern datapoints: the response config (status + body)\n  is updated in place so the very next request serves the new YAML body.\n- For entirely new partners or datapoints: consumer routes (and admin routes\n  for payload patterns) are registered dynamically on the running app.\n- Routes whose endpoint, datapoint or partner is no longer in the YAML (or moved to\n  another datapoint) are unregistered, with their admin routes; they are listed in\n  ``removed``. Changed validate:/rate_limit:/fail: on an existing route still need a restart.",
         "operationId": "admin_reload_partners_imnot_admin_reload_post",
         "responses": {
           "200": {

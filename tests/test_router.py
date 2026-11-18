@@ -7,6 +7,7 @@ from click.testing import CliRunner
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from imnot.api.server import create_app
 from imnot.cli import cli
 from imnot.engine.router import register_routes
 from imnot.engine.session_store import SessionStore
@@ -1171,6 +1172,39 @@ def test_create_partner_compare_to_with_invalid_yaml_returns_422(tmp_path, store
     assert r.status_code == 422
 
 
+def test_create_partner_with_unknown_key_returns_422(tmp_path, store):
+    c, partners_dir = _make_client(tmp_path, store)
+    r = c.post("/imnot/admin/partners", content=_NEW_PARTNER_YAML.replace("response:", "respose:"))
+    assert r.status_code == 422
+    assert "unknown key 'respose'" in r.json()["detail"]
+    assert not (partners_dir / "bookingco").exists()
+
+
+def test_get_partner_returns_the_full_yaml_as_json(tmp_path, store):
+    c, _ = _make_client(tmp_path, store)
+    c.post("/imnot/admin/partners", content=_NEW_PARTNER_YAML)
+    raw = c.get("/imnot/admin/partners/bookingco").json()
+    assert raw["datapoints"][0]["endpoints"][0]["path"] == "/bookingco/v1/reservations/{id}"
+    assert c.get("/imnot/admin/partners/nope").status_code == 404
+    assert c.get("/imnot/admin/partners/..%2Fetc").status_code == 404
+
+
+def test_builder_save_with_merge_from_keeps_unmanaged_fields(tmp_path, store):
+    c, partners_dir = _make_client(tmp_path, store)
+    with_extras = _NEW_PARTNER_YAML.replace(
+        "        response:",
+        "        delay_ms: 50\n        validate:\n          query:\n            v: {required: true}\n        response:",
+    )
+    c.post("/imnot/admin/partners", content=with_extras)
+    form_output = _NEW_PARTNER_YAML.replace("description: BookingCo mock", "description: Edited in the Builder")
+
+    r = c.post("/imnot/admin/partners?force=true&merge_from=bookingco&compare_to=bookingco", content=form_output)
+
+    assert r.status_code == 200, r.json()
+    saved = (partners_dir / "bookingco" / "partner.yaml").read_text()
+    assert "Edited in the Builder" in saved and "validate:" in saved and "delay_ms: 50" in saved
+
+
 def test_delete_partner_not_found_returns_404(tmp_path, store):
     c, _ = _make_client(tmp_path, store)
     r = c.delete("/imnot/admin/partners/nonexistent")
@@ -1396,3 +1430,221 @@ def test_e2e_paginated_url_rate_limit_drains_then_429(paginated_url_rate_limit_e
     assert r2.status_code == 429
     assert "Retry-After" in r2.headers
     assert "detail" in r2.json()
+
+
+# ---------------------------------------------------------------------------
+# Payload files seeded as global payloads
+# ---------------------------------------------------------------------------
+
+_SEED_YAML = """\
+partner: seedco
+datapoints:
+  - name: charges
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /seedco/charges
+        response:
+          status: 200
+"""
+
+
+def _seed_client(tmp_path, payload_text):
+    partners_dir = tmp_path / "partners"
+    (partners_dir / "seedco" / "payloads").mkdir(parents=True)
+    (partners_dir / "seedco" / "partner.yaml").write_text(_SEED_YAML)
+    (partners_dir / "seedco" / "payloads" / "charges.json").write_text(payload_text)
+    app = create_app(partners_dir=partners_dir, db_path=tmp_path / "seed.db")
+    return TestClient(app), partners_dir
+
+
+def test_payload_file_is_served_without_any_upload(tmp_path):
+    """Through create_app, so the lifespan (store.init → seed) runs exactly like `imnot start`."""
+    c, _ = _seed_client(tmp_path, '{"total": 3}')
+    with c:
+        assert c.get("/seedco/charges").json() == {"total": 3}
+
+
+def test_payload_file_wins_over_an_earlier_upload_on_reload_but_sessions_are_kept(tmp_path):
+    c, partners_dir = _seed_client(tmp_path, '{"v": 1}')
+    with c:
+        c.post("/imnot/admin/seedco/charges/payload", json={"v": "uploaded"})
+        session = c.post("/imnot/admin/seedco/charges/payload/session", json={"v": "session"}).json()
+        (partners_dir / "seedco" / "payloads" / "charges.json").write_text('{"v": 2}')
+
+        assert c.post("/imnot/admin/reload").status_code == 200
+
+        assert c.get("/seedco/charges").json() == {"v": 2}
+        headers = {"X-Imnot-Session": session["session_id"]}
+        assert c.get("/seedco/charges", headers=headers).json() == {"v": "session"}
+
+
+# ---------------------------------------------------------------------------
+# Stage 4 UX: no-payload hint, upload-time shape checks
+# ---------------------------------------------------------------------------
+
+
+def test_missing_payload_404_explains_how_to_fix_it(client):
+    r = client.get("/bookingco/v1/charges")
+    assert r.status_code == 404
+    body = r.json()
+    assert body["detail"] == "No global payload found for bookingco/charges"  # wording kept for scripts
+    assert "POST /imnot/admin/bookingco/charges/payload" in body["hint"]
+    assert r.headers["x-imnot-hint"] == body["hint"]
+
+
+def test_missing_session_payload_404_hints_at_the_session_endpoint(client):
+    r = client.get("/bookingco/v1/charges", headers={"X-Imnot-Session": "nope"})
+    assert "payload/session" in r.json()["hint"]
+
+
+def test_paginated_upload_rejects_an_envelope(tmp_path, store):
+    yaml_text = """\
+partner: pageco
+datapoints:
+  - name: items
+    pattern: paginated
+    pagination: {style: offset_limit, items_field: items}
+    endpoints:
+      - method: GET
+        path: /pageco/items
+        response: {status: 200}
+"""
+    c, _ = _make_client(tmp_path, store)
+    c.post("/imnot/admin/partners", content=yaml_text)
+    r = c.post("/imnot/admin/pageco/items/payload", json={"items": [], "total": 0})
+    assert r.status_code == 422 and "JSON array" in r.json()["detail"]
+    assert c.post("/imnot/admin/pageco/items/payload", json=[{"id": 1}]).status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Reload removes what the YAML no longer defines
+# ---------------------------------------------------------------------------
+
+_RELOAD_YAML = """\
+partner: relo
+datapoints:
+  - name: a
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /relo/a
+        response: {status: 200}
+      - method: GET
+        path: /relo/a2
+        response: {status: 200}
+  - name: b
+    pattern: static
+    endpoints:
+      - method: GET
+        path: /relo/b
+        response: {status: 200, body: {b: true}}
+"""
+
+
+def _reload_client(tmp_path, store):
+    partners_dir = tmp_path / "partners"
+    (partners_dir / "relo").mkdir(parents=True)
+    (partners_dir / "relo" / "partner.yaml").write_text(_RELOAD_YAML)
+    app = FastAPI()
+    register_routes(app, load_partners(partners_dir), store, partners_dir=partners_dir)
+    return TestClient(app), partners_dir / "relo" / "partner.yaml"
+
+
+def test_reload_unregisters_a_removed_endpoint_and_datapoint(tmp_path, store):
+    c, yaml_path = _reload_client(tmp_path, store)
+    c.post("/imnot/admin/relo/a/payload", json={"ok": True})
+    assert c.get("/relo/a2").status_code == 200 and c.get("/relo/b").status_code == 200
+
+    yaml_path.write_text(
+        _RELOAD_YAML.replace(
+            "      - method: GET\n        path: /relo/a2\n        response: {status: 200}\n", ""
+        ).split("  - name: b")[0]
+    )
+    r = c.post("/imnot/admin/reload").json()
+
+    assert r["status"] == "ok"
+    assert "GET /relo/a2" in r["removed"] and "GET /relo/b" in r["removed"]
+    assert c.get("/relo/a2").status_code == 404 and c.get("/relo/a2/").status_code == 404
+    assert c.get("/relo/b").status_code == 404
+    assert c.get("/relo/a").json() == {"ok": True}  # untouched route keeps working
+    assert "b" not in [d["name"] for d in c.get("/imnot/admin/partners").json()[0]["datapoints"]]
+
+
+def test_reload_unregisters_a_deleted_partner_including_admin_routes(tmp_path, store):
+    c, yaml_path = _reload_client(tmp_path, store)
+    yaml_path.unlink()
+    r = c.post("/imnot/admin/reload").json()
+    assert "admin routes for relo/a" in r["removed"]
+    assert c.get("/relo/b").status_code == 404
+    assert c.post("/imnot/admin/relo/a/payload", json={}).status_code == 404
+    assert c.get("/imnot/admin/partners").json() == []
+
+
+def test_reload_keeps_routes_of_a_partner_whose_yaml_is_temporarily_broken(tmp_path, store):
+    c, yaml_path = _reload_client(tmp_path, store)
+    yaml_path.write_text("partner: relo\ndatapoints: [")  # mid-edit typo
+    r = c.post("/imnot/admin/reload").json()
+    assert r["status"] == "partial" and r["skipped"] == ["relo"] and r["removed"] == []
+    assert c.get("/relo/b").json() == {"b": True}
+
+
+def test_reload_moves_an_endpoint_to_another_datapoint(tmp_path, store):
+    c, yaml_path = _reload_client(tmp_path, store)
+    moved = (
+        _RELOAD_YAML.replace("      - method: GET\n        path: /relo/a2\n        response: {status: 200}\n", "")
+        + "      - method: GET\n        path: /relo/a2\n        response: {status: 200, body: {moved: true}}\n"
+    )
+    yaml_path.write_text(moved)
+    r = c.post("/imnot/admin/reload").json()
+    assert "GET /relo/a2" in r["removed"] and "GET /relo/a2" in r["added"]
+    assert c.get("/relo/a2").json() == {"moved": True}
+
+
+def test_reload_keeps_routes_of_an_http_registered_partner_whose_yaml_breaks(tmp_path, store):
+    c, partners_dir = _make_client(tmp_path, store)
+    c.post("/imnot/admin/partners", content=_STATIC_PARTNER_YAML)  # Builder-style registration
+    (partners_dir / "staticco" / "partner.yaml").write_text("partner: staticco\ndatapoints: [")
+    r = c.post("/imnot/admin/reload").json()
+    assert r["skipped"] == ["staticco"] and r["removed"] == []
+    assert c.get("/staticco/status").json() == {"ok": True}
+
+
+def test_reload_reports_a_broken_new_partner_in_skipped(tmp_path, store):
+    c, partners_dir = _make_client(tmp_path, store)
+    (partners_dir / "newbie").mkdir()
+    (partners_dir / "newbie" / "partner.yaml").write_text("partner: newbie\n")
+    r = c.post("/imnot/admin/reload").json()
+    assert r["status"] == "partial" and r["skipped"] == ["newbie"]
+
+
+def test_adding_an_endpoint_to_a_paginated_datapoint_keeps_one_live_route_per_path(tmp_path, store):
+    yaml_text = """\
+partner: pg
+datapoints:
+  - name: items
+    pattern: paginated
+    pagination: {style: offset_limit, items_field: items, total_field: total}
+    endpoints:
+      - method: GET
+        path: /pg/items
+        response: {status: 200}
+"""
+    partners_dir = tmp_path / "partners"
+    (partners_dir / "pg").mkdir(parents=True)
+    yaml_path = partners_dir / "pg" / "partner.yaml"
+    yaml_path.write_text(yaml_text)
+    app = FastAPI()
+    register_routes(app, load_partners(partners_dir), store, partners_dir=partners_dir)
+    c = TestClient(app)
+    c.post("/imnot/admin/pg/items/payload", json=[{"id": 1}])
+
+    with_second = yaml_text + "      - method: GET\n        path: /pg/items2\n        response: {status: 200}\n"
+    yaml_path.write_text(with_second)
+    c.post("/imnot/admin/reload")
+    yaml_path.write_text(with_second.replace("total_field: total", "total_field: count"))
+    c.post("/imnot/admin/reload")
+
+    assert "count" in c.get("/pg/items").json() and "count" in c.get("/pg/items2").json()
+    live = [r for r in app.router.routes if getattr(r, "path", None) == "/pg/items"]
+    assert len(live) == 1

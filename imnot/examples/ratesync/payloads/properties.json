@@ -1,0 +1,5 @@
+[
+  {"id": "P-001", "name": "Hotel Aurora", "rooms": 42},
+  {"id": "P-002", "name": "Casa Lumen", "rooms": 12},
+  {"id": "P-003", "name": "Posada Brisa", "rooms": 8}
+]
