@@ -12,7 +12,7 @@ volume, partners baked into an image built from a contracts repo, logs on stdout
 | A broken `partner.yaml` is skipped and the server starts healthy with fewer partners | `--strict` exits 1 (same bar as `imnot validate`), so the rollout stops |
 | `imnot validate` exits 0 when it finds no `partner.yaml` (for example a wrongly nested layout) | Exits 1 |
 | Only `IMNOT_ADMIN_KEY` is read from the environment | Every `start` option has a variable: `IMNOT_PARTNERS_DIR`, `IMNOT_DB_PATH`, `IMNOT_BIND_HOST`, `IMNOT_BIND_PORT`, `IMNOT_BASE_URL` (new `--base-url`), `IMNOT_STATELESS`, `IMNOT_STRICT`. Flag > variable > `imnot.toml` > default |
-| `POST`/`DELETE /imnot/admin/partners` answer 500 when `partners/` is read-only | 403 with the reason; always 403 in stateless mode |
+| `POST`/`DELETE /imnot/admin/partners` answer 500 when `partners/` is read-only | 403 with the reason. In stateless mode they work in memory (see below) |
 | The image runs as a named user and fixes host, db and partners dir in the `ENTRYPOINT` | Runs as uid/gid `10001`; the same defaults are `ENV` values, overridable one by one |
 | A data directory the user cannot write fails with a traceback | One line saying which directory, which uid, and that `--stateless` needs none |
 
@@ -23,6 +23,21 @@ with 0 requests (now 422); a `validate:` rule on `body.` in a `paginated` endpoi
 Nothing changes unless a new option is used, with three exceptions, all listed under "Decisions":
 `imnot validate` on an empty directory, the image's uid, and `IMNOT_PARTNERS_DIR` / `IMNOT_DB_PATH`
 being read by a plain `imnot start` (before, only `--reload` used them internally).
+
+## The UI stays fully usable in stateless mode
+
+The admin UI exists so that people who do not write YAML can use every feature. Stateless mode must
+not take that away; the only difference is that nothing survives a restart.
+
+- `POST` and `DELETE /imnot/admin/partners` keep the partner in memory instead of writing a file. A
+  save replaces the partner whole (old routes out, new ones in), so an edit applies without a reload.
+- `GET /imnot/admin/partners/{name}` serves the in-memory YAML, so the Builder's pre-fill and its
+  "fields would be dropped" guard work on partners made in the UI. `?format=yaml` downloads it: that
+  is how a partner built in the UI gets into the partners repo.
+- Reload goes back to the partners directory and drops what was changed over HTTP. The UI asks first.
+- `/healthz` reports `stateless`; the UI shows a fixed banner and the footer names the mode.
+- Rule for the classic mode: unchanged. Partners are written to disk, and a read-only directory is a
+  403 with the reason. Memory is used only when `--stateless` was asked for, never as a silent fallback.
 
 ## Does it scale? One replica per instance
 
@@ -76,8 +91,6 @@ imnot isolates them from each other.
 - **`/readyz`**: not needed. Seeding runs before the server accepts connections and `--strict` exits
   before that, so `GET /healthz` answering 200 already means "ready".
 - **A shared store, multi-replica support**: see above.
-- **Hiding the Builder in the UI in stateless mode**: saving shows the 403 message. Worth doing with the
-  next UI change, not on its own.
 - **Variables for log level, UI and page size**: `imnot.toml` covers them and can be copied into the
   image (`/app/imnot.toml`); it is read in stateless mode, only never created.
 - **JSON logs, journal body redaction, sessions seeded from files, Helm chart, metrics**: useful, none
@@ -107,7 +120,8 @@ imnot isolates them from each other.
 | 4 | With a broken partner, `--strict` exits 1 and names the file; without `--strict` it is skipped as before | same |
 | 5 | `imnot validate` on a directory with no `partner.yaml` exits 1 | `tests/test_cli.py` |
 | 6 | Options come from the environment; flag > variable > toml; `IMNOT_PORT=tcp://…` (injected by Kubernetes for a Service named `imnot`) does not break start-up | `tests/test_container_mode.py` |
-| 7 | `POST`/`DELETE /imnot/admin/partners` answer 403 in stateless mode and on an unwritable directory; payload, session, journal and reload routes still work | same |
+| 7 | In stateless mode a partner created or edited in the UI answers at once, writes no file, can be downloaded as YAML, and is gone after Reload (the UI warns) or a restart. Without stateless, an unwritable directory gives 403 | same; headless browser run by hand |
+| 7b | The UI shows the stateless banner and footer only when `/healthz` says `"stateless": true` | `tests/test_ui.py`; headless browser run by hand |
 | 8 | The image runs with `docker run --read-only --user 10001 -e IMNOT_STATELESS=1` and no volume or tmpfs; and without stateless it still works with a writable `/app/data` | by hand; CI `docker-smoke` |
 | 9 | Without the new options, `imnot start` writes the same files as 1.6.0 | `test_default_start_still_writes_db_dir_files` and the existing suite |
 | 10 | `tools/verify.sh` ends in `PASS` | — |

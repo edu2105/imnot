@@ -60,11 +60,21 @@ ENV IMNOT_STATELESS=1 IMNOT_STRICT=1
 docker run --read-only -e IMNOT_ADMIN_KEY=<secret> -p 8000:8000 <your-image>
 ```
 
-- **`IMNOT_STATELESS=1`** (`--stateless`) — in-memory database, logs to stdout only, no `imnot.pid`, no `imnot.toml`, no volume and no writable directory needed. Payloads and sessions uploaded through the admin API work as usual and are gone after a restart; `payloads/<datapoint>.json` files are loaded again at every start. `POST` and `DELETE /imnot/admin/partners` answer `403`: partners change in the contracts repo, not over HTTP. `imnot stop`, `imnot status`, `imnot payload` and `imnot sessions` cannot reach an in-memory server: stop it with `SIGTERM` and use the admin API.
+- **`IMNOT_STATELESS=1`** (`--stateless`) — in-memory database, logs to stdout only, no `imnot.pid`, no `imnot.toml`, no volume and no writable directory needed. Payloads and sessions uploaded through the admin API work as usual and are gone after a restart; `payloads/<datapoint>.json` files are loaded again at every start. Partners created, edited or deleted from the admin UI or `POST`/`DELETE /imnot/admin/partners` work too, in memory: see [below](#changing-partners-on-a-stateless-server). `imnot stop`, `imnot status`, `imnot payload` and `imnot sessions` cannot reach an in-memory server: stop it with `SIGTERM` and use the admin API.
 - **`IMNOT_STRICT=1`** (`--strict`) — start-up exits 1 unless every partner passes `imnot validate` (and there is at least one). Without it a broken `partner.yaml` is skipped and the container still reports healthy. Run `imnot validate --partners-dir partners` in the contracts repo's CI as well.
 - **Configuration** — every `imnot start` option has an environment variable (see [cli.md](cli.md#environment-variables)). Set `IMNOT_BASE_URL` to the public URL if you use `page_number_url` pagination or the Postman export. Other settings go in an `imnot.toml` copied to `/app/imnot.toml`.
 - **Admin key** — set `IMNOT_ADMIN_KEY` from a secret. Required for any deployment reachable outside localhost.
 - **Health checks** — `GET /healthz` for liveness and readiness. It answers `200 {"status":"ok","version":"…"}` with no auth and no I/O, and only once partners are loaded and payload files seeded.
+
+### Changing partners on a stateless server
+
+The admin UI stays fully usable: the Builder creates and edits partners, and their routes answer at once. Nothing is written — the partner lives in memory, on top of the ones the image ships:
+
+- A **restart** goes back to the image. So does **Reload** (`POST /imnot/admin/reload`): it re-reads the partners directory and drops every partner created, edited or deleted over HTTP. The UI asks before reloading.
+- To **keep** a partner, download its YAML (the download button on its card, or `GET /imnot/admin/partners/<name>?format=yaml`) and commit it to your partners repo as `partners/<name>/partner.yaml`.
+- The UI shows a "Stateless mode" banner, and `GET /healthz` reports `"stateless": true`.
+
+Without `--stateless`, partners are written to the partners directory as before; if that directory is read-only the admin API answers `403` with the reason (it never falls back to memory on its own).
 
 ### One replica per instance, one instance per team
 
@@ -149,7 +159,7 @@ curl -X POST "http://localhost:8000/imnot/admin/partners?force=true" \
      --data-binary @/path/to/partner.yaml
 ```
 
-In stateless mode, or when `/app/partners` is read-only, this answers `403` with the reason: change the partner in its repo and redeploy.
+In stateless mode the partner is kept in memory instead of written (see [above](#changing-partners-on-a-stateless-server)). When `/app/partners` is read-only and the server is not stateless, this answers `403` with the reason.
 
 `imnot generate` and `POST /imnot/admin/partners` use identical validation — both write the same `partners/<name>/partner.yaml` and produce the same result shape.
 
