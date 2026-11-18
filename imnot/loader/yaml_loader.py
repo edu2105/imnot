@@ -333,7 +333,7 @@ def _check_unknown_keys(raw: dict[str, Any], known: set[str], where: str, warns:
     if warns is None:
         return
     for key in sorted(set(raw) - known, key=str):
-        warns.append(f"{where}: unknown key '{key}' (ignored). Known keys: {sorted(known)}")
+        warns.append(f"{where}: unknown key '{key}'. Known keys: {sorted(known)}")
 
 
 def _parse_endpoint(
@@ -559,7 +559,7 @@ def load_partners(partners_dir: Path) -> list[PartnerDef]:
             raw = yaml.safe_load(yaml_path.read_text())
             partner = _parse_partner(raw, yaml_path)
             for warning in partner.warnings:
-                logger.warning("%s: %s", yaml_path, warning)
+                logger.warning("%s: %s (ignored)", yaml_path, warning)
             partner.seed_payloads, problems = load_payload_files(partner, yaml_path.parent / "payloads")
             for problem in problems:
                 logger.warning("%s: %s (skipped)", yaml_path.parent, problem)

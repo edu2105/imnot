@@ -21,8 +21,13 @@ pytest -q --cov=imnot --cov-report=term-missing:skip-covered 2>&1 | tail -n 25
 if [[ "${1:-}" != "--quick" ]]; then
 	echo "== E2E"
 	# Capture the exit code before filtering: an "|| true" after grep would overwrite PIPESTATUS.
-	out=$(bash scripts/qa/run.sh 2>&1) || status=1
-	grep -E "\[FAIL\]|Results:" <<<"$out"
+	if out=$(bash scripts/qa/run.sh 2>&1); then
+		grep -E "\[FAIL\]|Results:" <<<"$out"
+	else
+		status=1
+		# Show why: a failed check, or a startup problem such as the port being in use (set IMNOT_QA_PORT).
+		grep -E "\[FAIL\]|Results:" <<<"$out" || tail -n 15 <<<"$out"
+	fi
 fi
 
 if [[ $status -eq 0 ]]; then echo "PASS"; else echo "FAIL"; fi
