@@ -10,9 +10,14 @@ from pathlib import Path
 
 import yaml
 
-from imnot.loader.yaml_loader import PartnerDef, parse_partner_yaml
+from imnot.loader.yaml_loader import _RESPONSE_KEYS, PartnerDef, parse_partner_yaml
 
 _SAFE_NAME = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+
+
+def is_safe_partner_name(name: str) -> bool:
+    """Partner names are letters, digits, '-' and '_', 1-64 chars: safe as a directory name."""
+    return bool(_SAFE_NAME.match(name))
 
 
 @dataclass
@@ -95,9 +100,11 @@ def dropped_fields(old_yaml: str, new_yaml: str) -> list[str]:
             if not isinstance(old_ep, dict):
                 continue
             new_ep = by_key.get(_endpoint_key(old_ep)) or (new_eps[i] if i < len(new_eps) else None)
-            if new_ep is None:
-                continue
             label = f"{str(old_ep.get('method', '')).upper()} {old_ep.get('path', '')}".strip()
+            if new_ep is None:
+                # e.g. a second endpoint the Builder form can't show (it edits one per datapoint)
+                dropped.append(f"{where}.endpoints[{label}]")
+                continue
             _diff_keys(old_ep, new_ep, f"{where}.endpoints[{label}]", dropped)
     return dropped
 
@@ -156,7 +163,9 @@ def merge_unmanaged_fields(old_yaml: str, new_yaml: str) -> str:
             old_resp, new_resp = old_ep.get("response"), new_ep.get("response")
             if isinstance(old_resp, dict) and isinstance(new_resp, dict):
                 keys = _UNMANAGED_RESPONSE_KEYS | _UNMANAGED_RESPONSE_KEYS_BY_PATTERN.get(pattern, set())
-                _carry(old_resp, new_resp, keys)
+                # Only keys the (possibly changed) pattern accepts, or a pattern switch in the form
+                # would carry e.g. static `headers` into a fetch response and fail strict validation.
+                _carry(old_resp, new_resp, keys & _RESPONSE_KEYS.get(pattern, set()))
     return yaml.safe_dump(new, sort_keys=False, allow_unicode=True)
 
 

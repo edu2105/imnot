@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import hmac
 import logging
-import re
 import shutil
 from importlib.metadata import version as _pkg_version
 from importlib.resources import files as _res_files
@@ -48,7 +47,7 @@ from imnot.loader.yaml_loader import (
     load_partners,
     payload_shape_error,
 )
-from imnot.partners import dropped_fields, merge_unmanaged_fields, register_partner
+from imnot.partners import dropped_fields, is_safe_partner_name, merge_unmanaged_fields, register_partner
 from imnot.postman import build_postman_collection
 
 _cli_logger = logging.getLogger("imnot.cli")
@@ -524,7 +523,7 @@ def _register_infra_routes(
                 status_code=400,
                 content={"detail": "No partners_dir configured — server was not started via `imnot start`."},
             )
-        if not re.match(r"^[a-zA-Z0-9_-]{1,64}$", partner_name):
+        if not is_safe_partner_name(partner_name):
             return JSONResponse(status_code=400, content={"detail": "Invalid partner name."})
         partner_dir = partners_dir / partner_name
         try:
@@ -550,7 +549,7 @@ def _register_infra_routes(
     async def get_partner(partner_name: str, request: Request) -> JSONResponse:
         """The partner's full partner.yaml as JSON, so the Builder can pre-fill every field it edits."""
         partners_dir: Path | None = request.app.state.partners_dir
-        if partners_dir is None or not re.match(r"^[a-zA-Z0-9_-]{1,64}$", partner_name):
+        if partners_dir is None or not is_safe_partner_name(partner_name):
             return JSONResponse(status_code=404, content={"detail": f"Partner '{partner_name}' not found."})
         path = partners_dir / partner_name / "partner.yaml"
         if not path.is_file():
@@ -720,7 +719,7 @@ def _register_infra_routes(
 
         merge_from = request.query_params.get("merge_from")
         if merge_from:
-            if not re.match(r"^[a-zA-Z0-9_-]{1,64}$", merge_from):
+            if not is_safe_partner_name(merge_from):
                 return JSONResponse(status_code=400, content={"detail": "Invalid merge_from partner name."})
             merge_file = partners_dir / merge_from / "partner.yaml"
             if merge_file.is_file():
@@ -731,7 +730,7 @@ def _register_infra_routes(
 
         compare_to = request.query_params.get("compare_to")
         if compare_to:
-            if not re.match(r"^[a-zA-Z0-9_-]{1,64}$", compare_to):
+            if not is_safe_partner_name(compare_to):
                 return JSONResponse(status_code=400, content={"detail": "Invalid compare_to partner name."})
             current_file = partners_dir / compare_to / "partner.yaml"
             if current_file.is_file():

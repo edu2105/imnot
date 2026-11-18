@@ -2033,6 +2033,19 @@ img, svg {
 
     // ---- Auth ----
     function getToken() { return localStorage.getItem('imnot-admin-key') || ''; }
+
+    // Any 401 from the admin API (sessions, Builder, uploads, Postman, Load Test…) opens the key panel,
+    // instead of each caller showing a toast that disappears before the user can act on it.
+    (function () {
+      var nativeFetch = window.fetch.bind(window);
+      window.fetch = function (input, init) {
+        return nativeFetch(input, init).then(function (r) {
+          var url = typeof input === 'string' ? input : (input && input.url) || '';
+          if (r.status === 401 && url.indexOf('/imnot/admin') !== -1) openKeyPanel();
+          return r;
+        });
+      };
+    })();
     function authHeaders() {
       var h = { 'Content-Type': 'application/json' };
       var t = getToken();
@@ -2085,10 +2098,7 @@ img, svg {
     function loadPartners() {
       return fetch('/imnot/admin/partners', { headers: authHeaders() })
         .then(function (r) {
-          if (r.status === 401) {
-            openKeyPanel();
-            throw new Error('this server needs an admin key — enter it above');
-          }
+          if (r.status === 401) throw new Error('this server needs an admin key — enter it above');
           if (!r.ok) throw new Error('HTTP ' + r.status);
           return r.json();
         })

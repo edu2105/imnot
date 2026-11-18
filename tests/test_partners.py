@@ -325,3 +325,53 @@ datapoints:
     merged = yaml.safe_load(merge_unmanaged_fields(old, new))
     assert merged["datapoints"][0]["endpoints"][1]["response"]["body"] == {"state": "DONE"}
     assert [d["name"] for d in merged["datapoints"]] == ["job"]
+
+
+def test_merge_after_a_pattern_switch_only_carries_keys_the_new_pattern_accepts():
+    import yaml
+
+    from imnot.loader.yaml_loader import parse_partner_yaml
+    from imnot.partners import merge_unmanaged_fields
+
+    old = """\
+partner: sw
+datapoints:
+  - name: thing
+    pattern: static
+    endpoints:
+      - method: GET
+        path: /sw/thing
+        validate: {query: {a: {required: true}}}
+        response: {status: 200, headers: {X-A: "1"}, body: {}}
+"""
+    switched_to_fetch = """\
+partner: sw
+datapoints:
+  - name: thing
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /sw/thing
+        response: {status: 200}
+"""
+    merged = merge_unmanaged_fields(old, switched_to_fetch)
+    ep = yaml.safe_load(merged)["datapoints"][0]["endpoints"][0]
+    assert "headers" not in ep["response"]  # static-only key: dropped, not carried into fetch
+    assert ep["validate"] == {"query": {"a": {"required": True}}}  # valid for every pattern: kept
+    parse_partner_yaml(merged, strict=True)  # and the result passes strict validation
+
+
+def test_dropped_fields_reports_endpoints_the_form_could_not_show():
+    from imnot.partners import dropped_fields
+
+    two_endpoints = """\
+partner: m
+datapoints:
+  - name: charges
+    pattern: fetch
+    endpoints:
+      - {method: GET, path: /m/charges, response: {status: 200}}
+      - {method: POST, path: /m/charges, response: {status: 200}}
+"""
+    one_endpoint = two_endpoints.split("      - {method: POST")[0]
+    assert dropped_fields(two_endpoints, one_endpoint) == ["datapoints[charges].endpoints[POST /m/charges]"]
