@@ -144,3 +144,32 @@ def test_valid_delivery_config_passes_strict_validation():
         "          callback_retries: {attempts: 3, backoff_seconds: 1}"
     )
     parse_partner_yaml(_YAML.format(extra=extra), strict=True)
+
+
+@pytest.mark.asyncio
+async def test_a_header_whose_placeholder_has_no_value_is_not_sent(monkeypatch):
+    """A retrigger only knows request_id: {{body.x}} has nothing to render."""
+    rec, _ = await _fire(
+        monkeypatch,
+        [200],
+        {"headers": {"X-Order": "{{body.orderId}}", "X-Id": "{{request_id}}"}},
+        context={"request_id": "r-1"},
+    )
+    assert rec.calls[0]["headers"] == {"X-Id": "r-1"}
+
+
+def test_builder_save_keeps_callback_delivery_settings():
+    import yaml
+
+    from imnot.partners import merge_unmanaged_fields
+
+    old = _YAML.format(
+        extra="          callback_signature: {secret: k}\n"
+        "          callback_retries: {attempts: 3}\n"
+        "          callback_headers: {X-Source: imnot}"
+    )
+    form_output = _YAML.format(extra="")
+    resp = yaml.safe_load(merge_unmanaged_fields(old, form_output))["datapoints"][0]["endpoints"][0]["response"]
+    assert resp["callback_signature"] == {"secret": "k"}
+    assert resp["callback_retries"] == {"attempts": 3}
+    assert resp["callback_headers"] == {"X-Source": "imnot"}

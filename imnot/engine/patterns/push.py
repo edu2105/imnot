@@ -13,6 +13,14 @@ Config fields (all under `response:` in the endpoint YAML):
     callback_url_header   — request header that contains the callback URL (mutually exclusive with field)
     callback_method       — HTTP method for the outbound call (default: POST)
     callback_delay_seconds — seconds to wait before firing (default: 0)
+    callback_headers      — extra headers, templated ({{request_id}}, {{body.x}}); a header whose
+                            value renders empty or null is not sent
+    callback_signature    — {secret, header, algorithm}: HMAC of the exact JSON bytes sent; with a
+                            signature the body goes as compact JSON via content=, without one via json=
+    callback_retries      — {attempts, backoff_seconds}: retry on non-2xx / network error, linear backoff
+
+Delivery settings are captured when the route is registered (restart to change them). The retrigger
+admin route reads them from the datapoint's first endpoint.
 """
 
 from __future__ import annotations
@@ -33,7 +41,18 @@ from imnot.engine.templating import has_placeholders, render, request_context
 from imnot.engine.validator import validate_request
 from imnot.loader.yaml_loader import DatapointDef, EndpointDef
 
+DEFAULT_SIGNATURE_HEADER = "X-Imnot-Signature"
+
 logger = logging.getLogger(__name__)
+
+
+def delivery_config(response: dict[str, Any]) -> dict[str, Any]:
+    """The callback delivery settings from an endpoint's ``response`` block (see fire_callback)."""
+    return {
+        "headers": response.get("callback_headers"),
+        "signature": response.get("callback_signature"),
+        "retries": response.get("callback_retries"),
+    }
 
 
 def make_push_handler(
@@ -161,7 +180,9 @@ async def fire_callback(
         payload = render(payload, context)
 
     delivery = delivery or {}
-    headers = {str(k): str(v) for k, v in render(delivery.get("headers") or {}, context or {}).items()}
+    rendered_headers = render(delivery.get("headers") or {}, context or {})
+    # A header whose placeholder has no value (e.g. {{body.x}} on a retrigger) is left out, not sent as "None".
+    headers = {str(k): str(v) for k, v in rendered_headers.items() if v not in (None, "")}
     request_kwargs: dict[str, Any] = {"json": payload}
     signature = delivery.get("signature")
     if signature:
@@ -194,15 +215,3 @@ async def fire_callback(
             logger.error("Callback: to %s failed: %s (attempt %d/%d)", callback_url, exc, attempt, attempts)
         if attempt < attempts:
             await asyncio.sleep(backoff * attempt)  # linear backoff: 1×, 2×, 3× backoff_seconds
-
-
-DEFAULT_SIGNATURE_HEADER = "X-Imnot-Signature"
-
-
-def delivery_config(response: dict[str, Any]) -> dict[str, Any]:
-    """The callback delivery settings from an endpoint's ``response`` block (see fire_callback)."""
-    return {
-        "headers": response.get("callback_headers"),
-        "signature": response.get("callback_signature"),
-        "retries": response.get("callback_retries"),
-    }
