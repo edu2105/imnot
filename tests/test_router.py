@@ -1180,6 +1180,31 @@ def test_create_partner_with_unknown_key_returns_422(tmp_path, store):
     assert not (partners_dir / "bookingco").exists()
 
 
+def test_get_partner_returns_the_full_yaml_as_json(tmp_path, store):
+    c, _ = _make_client(tmp_path, store)
+    c.post("/imnot/admin/partners", content=_NEW_PARTNER_YAML)
+    raw = c.get("/imnot/admin/partners/bookingco").json()
+    assert raw["datapoints"][0]["endpoints"][0]["path"] == "/bookingco/v1/reservations/{id}"
+    assert c.get("/imnot/admin/partners/nope").status_code == 404
+    assert c.get("/imnot/admin/partners/..%2Fetc").status_code == 404
+
+
+def test_builder_save_with_merge_from_keeps_unmanaged_fields(tmp_path, store):
+    c, partners_dir = _make_client(tmp_path, store)
+    with_extras = _NEW_PARTNER_YAML.replace(
+        "        response:",
+        "        delay_ms: 50\n        validate:\n          query:\n            v: {required: true}\n        response:",
+    )
+    c.post("/imnot/admin/partners", content=with_extras)
+    form_output = _NEW_PARTNER_YAML.replace("description: BookingCo mock", "description: Edited in the Builder")
+
+    r = c.post("/imnot/admin/partners?force=true&merge_from=bookingco&compare_to=bookingco", content=form_output)
+
+    assert r.status_code == 200, r.json()
+    saved = (partners_dir / "bookingco" / "partner.yaml").read_text()
+    assert "Edited in the Builder" in saved and "validate:" in saved and "delay_ms: 50" in saved
+
+
 def test_delete_partner_not_found_returns_404(tmp_path, store):
     c, _ = _make_client(tmp_path, store)
     r = c.delete("/imnot/admin/partners/nonexistent")

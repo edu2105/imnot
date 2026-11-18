@@ -236,3 +236,12 @@ def test_create_app_from_env_reads_toml_base_url(tmp_path, monkeypatch):
     monkeypatch.setenv("IMNOT_CONFIG_PATH", str(toml))
     app = create_app_from_env()
     assert app.state.base_url == "https://mocks.example.test"
+
+
+def test_healthz_reports_whether_an_admin_key_is_required(tmp_path):
+    open_app = create_app(partners_dir=PARTNERS_DIR, db_path=tmp_path / "a.db")
+    locked_app = create_app(partners_dir=PARTNERS_DIR, db_path=tmp_path / "b.db", admin_key="secret")
+    with TestClient(open_app) as c:
+        assert c.get("/healthz").json()["auth_required"] is False
+    with TestClient(locked_app) as c:
+        assert c.get("/healthz").json()["auth_required"] is True  # healthz itself stays public

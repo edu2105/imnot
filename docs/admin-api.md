@@ -31,9 +31,10 @@ Always available regardless of which partners are loaded:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET`  | `/healthz` | Health check — always returns `{"status":"ok","version":"…"}`, no auth required |
+| `GET`  | `/healthz` | Health check — always returns `{"status":"ok","version":"…","auth_required":bool}`, no auth required. `auth_required` tells the admin UI whether to ask for a key |
 | `GET`  | `/imnot/admin/partners` | List all loaded partners and their datapoints |
-| `POST` | `/imnot/admin/partners` | Validate and register a new partner from a raw YAML body — routes go live immediately. `?force=true` overwrites; adding `&compare_to=<name>` returns `409` with a `dropped` list instead of writing if fields of that partner's current YAML would be lost |
+| `POST` | `/imnot/admin/partners` | Validate and register a new partner from a raw YAML body — routes go live immediately. `?force=true` overwrites; `&merge_from=<name>` first copies over that partner's fields the admin UI Builder never writes (`validate`, `fail`, `delay_ms`, `headers`, `payload_by`, `pending`, `callback_method`, descriptions); `&compare_to=<name>` returns `409` with a `dropped` list instead of writing if anything would still be lost |
+| `GET`  | `/imnot/admin/partners/{partner_name}` | The partner's full `partner.yaml` as JSON (used by the Builder to pre-fill every field) — `404` if not found |
 | `DELETE` | `/imnot/admin/partners/{partner_name}` | Delete the partner's directory and unregister its routes immediately — returns `200 {"status":"ok","partner":"…"}` or `404` |
 | `GET`    | `/imnot/admin/sessions` | List all active sessions with `session_id`, `partner`, `datapoint`, `created_at`, `last_used` |
 | `DELETE` | `/imnot/admin/sessions/{session_id}` | Delete a single session — returns `200 {"status":"ok","session_id":"…"}` or `404` |

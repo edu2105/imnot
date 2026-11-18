@@ -10,9 +10,14 @@ from pathlib import Path
 
 import yaml
 
-from imnot.loader.yaml_loader import PartnerDef, parse_partner_yaml
+from imnot.loader.yaml_loader import _RESPONSE_KEYS, PartnerDef, parse_partner_yaml
 
 _SAFE_NAME = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+
+
+def is_safe_partner_name(name: str) -> bool:
+    """Partner names are letters, digits, '-' and '_', 1-64 chars: safe as a directory name."""
+    return bool(_SAFE_NAME.match(name))
 
 
 @dataclass
@@ -95,9 +100,11 @@ def dropped_fields(old_yaml: str, new_yaml: str) -> list[str]:
             if not isinstance(old_ep, dict):
                 continue
             new_ep = by_key.get(_endpoint_key(old_ep)) or (new_eps[i] if i < len(new_eps) else None)
-            if new_ep is None:
-                continue
             label = f"{str(old_ep.get('method', '')).upper()} {old_ep.get('path', '')}".strip()
+            if new_ep is None:
+                # e.g. a second endpoint the Builder form can't show (it edits one per datapoint)
+                dropped.append(f"{where}.endpoints[{label}]")
+                continue
             _diff_keys(old_ep, new_ep, f"{where}.endpoints[{label}]", dropped)
     return dropped
 
@@ -115,3 +122,54 @@ def _diff_keys(old: dict, new: dict, where: str, out: list[str], skip: set[str] 
             out.append(path)
         elif isinstance(old_val, dict) and isinstance(new[key], dict):
             _diff_keys(old_val, new[key], path, out)
+
+
+# Keys the Builder form never writes. When the Builder saves an existing partner with
+# merge_from, these are carried over from the current file (see merge_unmanaged_fields).
+# Everything else is the form's to decide, so a field the user removed in the form stays removed.
+_UNMANAGED_DATAPOINT_KEYS = {"description"}
+_UNMANAGED_ENDPOINT_KEYS = {"validate", "delay_ms", "fail"}
+_UNMANAGED_RESPONSE_KEYS = {"headers", "payload_by", "pending", "callback_method"}
+_UNMANAGED_RESPONSE_KEYS_BY_PATTERN = {"polling": {"body"}}  # the form only edits a static body
+
+
+def merge_unmanaged_fields(old_yaml: str, new_yaml: str) -> str:
+    """Return *new_yaml* plus the fields of *old_yaml* the Builder form does not manage.
+
+    Datapoints are matched by name and endpoints like ``dropped_fields`` does. Comments are not
+    kept (the file is re-serialised). If either side is not a mapping, *new_yaml* is returned as is.
+    """
+    old = yaml.safe_load(old_yaml)
+    new = yaml.safe_load(new_yaml)
+    if not isinstance(old, dict) or not isinstance(new, dict):
+        return new_yaml
+
+    old_dps = {dp.get("name"): dp for dp in old.get("datapoints") or [] if isinstance(dp, dict)}
+    for new_dp in new.get("datapoints") or []:
+        old_dp = old_dps.get(new_dp.get("name")) if isinstance(new_dp, dict) else None
+        if old_dp is None:
+            continue
+        _carry(old_dp, new_dp, _UNMANAGED_DATAPOINT_KEYS)
+        pattern = new_dp.get("pattern")
+        old_eps = [ep for ep in old_dp.get("endpoints") or [] if isinstance(ep, dict)]
+        by_key = {_endpoint_key(ep): ep for ep in old_eps}
+        for i, new_ep in enumerate(new_dp.get("endpoints") or []):
+            if not isinstance(new_ep, dict):
+                continue
+            old_ep = by_key.get(_endpoint_key(new_ep)) or (old_eps[i] if i < len(old_eps) else None)
+            if old_ep is None:
+                continue
+            _carry(old_ep, new_ep, _UNMANAGED_ENDPOINT_KEYS)
+            old_resp, new_resp = old_ep.get("response"), new_ep.get("response")
+            if isinstance(old_resp, dict) and isinstance(new_resp, dict):
+                keys = _UNMANAGED_RESPONSE_KEYS | _UNMANAGED_RESPONSE_KEYS_BY_PATTERN.get(pattern, set())
+                # Only keys the (possibly changed) pattern accepts, or a pattern switch in the form
+                # would carry e.g. static `headers` into a fetch response and fail strict validation.
+                _carry(old_resp, new_resp, keys & _RESPONSE_KEYS.get(pattern, set()))
+    return yaml.safe_dump(new, sort_keys=False, allow_unicode=True)
+
+
+def _carry(old: dict, new: dict, keys: set[str]) -> None:
+    for key in keys:
+        if key in old and key not in new:
+            new[key] = old[key]
