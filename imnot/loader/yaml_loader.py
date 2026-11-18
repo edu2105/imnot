@@ -188,11 +188,16 @@ def _validate_error_spec(spec: Any, where: str) -> None:
     """The optional partner-shaped ``error:`` block of validate:/rate_limit: (see engine/errors.py)."""
     if not isinstance(spec, dict) or set(spec) - _ERROR_SPEC_KEYS:
         raise ValueError(f"{where}: 'error' must be a mapping with keys {sorted(_ERROR_SPEC_KEYS)}")
-    status = spec.get("status")
+    _validate_status_and_headers(spec, where, "error")
+
+
+def _validate_status_and_headers(block: dict[str, Any], where: str, name: str) -> None:
+    """Shared by fail: and error: blocks: a required HTTP status and optional headers mapping."""
+    status = block.get("status")
     if isinstance(status, bool) or not isinstance(status, int) or not 100 <= status <= 599:
-        raise ValueError(f"{where}: 'error.status' is required and must be an HTTP status code (got {status!r})")
-    if spec.get("headers") is not None and not isinstance(spec["headers"], dict):
-        raise ValueError(f"{where}: 'error.headers' must be a mapping")
+        raise ValueError(f"{where}: '{name}.status' is required and must be an HTTP status code (got {status!r})")
+    if block.get("headers") is not None and not isinstance(block["headers"], dict):
+        raise ValueError(f"{where}: '{name}.headers' must be a mapping")
 
 
 def _validate_validate_block(validate: dict[str, Any], path_hint: str) -> None:
@@ -318,15 +323,10 @@ def _validate_fail_block(fail: Any, where: str) -> None:
     unknown = set(fail) - _FAIL_KEYS
     if unknown:
         raise ValueError(f"{where}: unknown key(s) in 'fail:' {sorted(unknown)}. Allowed: {sorted(_FAIL_KEYS)}")
-    status = fail.get("status")
-    if isinstance(status, bool) or not isinstance(status, int) or not 100 <= status <= 599:
-        raise ValueError(f"{where}: 'fail.status' is required and must be an HTTP status code (got {status!r})")
+    _validate_status_and_headers(fail, where, "fail")
     first_n = fail.get("first_n")
     if first_n is not None and (isinstance(first_n, bool) or not isinstance(first_n, int) or first_n <= 0):
         raise ValueError(f"{where}: 'fail.first_n' must be a positive integer (got {first_n!r})")
-    headers = fail.get("headers")
-    if headers is not None and not isinstance(headers, dict):
-        raise ValueError(f"{where}: 'fail.headers' must be a mapping (got {headers!r})")
 
 
 def _check_unknown_keys(raw: dict[str, Any], known: set[str], where: str, warns: list[str] | None) -> None:

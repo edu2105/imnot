@@ -107,3 +107,11 @@ def test_error_blocks_pass_strict_validation():
         + _RATE.replace("{error}", "          error: {status: 429}")
     )
     parse_partner_yaml(_YAML.replace("{blocks}", blocks), strict=True)
+
+
+def test_error_block_without_body_returns_an_empty_body_and_joins_list_headers(tmp_path):
+    error = '          error: {status: 400, headers: {X-Errors: "{{errors}}"}}'
+    with _client(tmp_path, _VALIDATE.replace("{error}", error)) as c:
+        r = c.get("/errco/orders?limit=abc")
+    assert r.status_code == 400 and r.content == b""
+    assert "; " in r.headers["x-errors"] and "[" not in r.headers["x-errors"]

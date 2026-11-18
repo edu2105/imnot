@@ -993,7 +993,8 @@ rate_limit:
 | `{{retry_after}}` | `rate_limit.error` | Seconds until the next request is allowed (`Retry-After` is always sent too) |
 | `{{limit}}` | `rate_limit.error` | `requests_per_minute` |
 
-`status` is required; `body` and `headers` are optional.
+`status` is required; `body` and `headers` are optional (no `body` → an empty response). A
+placeholder from the other block renders empty; a list in a header is joined with `; `.
 
 ---
 

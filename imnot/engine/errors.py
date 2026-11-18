@@ -15,6 +15,9 @@ Placeholders (in string values of ``body`` and ``headers``):
 - ``{{errors}}``: the list of validation errors (whole string → the JSON list itself)
 - ``{{message}}``: the same errors joined with "; "
 - ``{{retry_after}}`` / ``{{limit}}``: seconds until the next token / requests per minute (rate limit)
+
+A placeholder from the other block (``{{message}}`` in ``rate_limit.error``) renders empty. In a
+header, a list value is joined with "; ".
 """
 
 from __future__ import annotations
@@ -22,7 +25,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 _PLACEHOLDER = re.compile(r"\{\{\s*(errors|message|retry_after|limit)\s*\}\}")
 
@@ -40,20 +43,26 @@ def _render(value: Any, values: dict[str, Any]) -> Any:
     return _PLACEHOLDER.sub(lambda m: str(values.get(m.group(1), "")), value)
 
 
-def _from_spec(spec: dict[str, Any], values: dict[str, Any], base_headers: dict[str, str]) -> JSONResponse:
+def _header_text(value: Any) -> str:
+    return "; ".join(str(v) for v in value) if isinstance(value, list) else str(value)
+
+
+def _from_spec(spec: dict[str, Any], values: dict[str, Any], base_headers: dict[str, str]) -> Response:
     headers = dict(base_headers)
-    headers.update({str(k): str(v) for k, v in _render(spec.get("headers") or {}, values).items()})
-    return JSONResponse(status_code=spec["status"], content=_render(spec.get("body"), values), headers=headers)
+    headers.update({str(k): _header_text(v) for k, v in _render(spec.get("headers") or {}, values).items()})
+    if "body" not in spec:
+        return Response(status_code=spec["status"], headers=headers)  # no body, not a literal `null`
+    return JSONResponse(status_code=spec["status"], content=_render(spec["body"], values), headers=headers)
 
 
-def validation_error_response(validate: dict[str, Any] | None, errors: list[str]) -> JSONResponse:
+def validation_error_response(validate: dict[str, Any] | None, errors: list[str]) -> Response:
     spec = (validate or {}).get("error")
     if not spec:
         return JSONResponse(status_code=422, content={"detail": errors})
     return _from_spec(spec, {"errors": errors, "message": "; ".join(errors)}, {})
 
 
-def rate_limit_response(rate_limit: dict[str, Any], capacity: int, retry_after: int) -> JSONResponse:
+def rate_limit_response(rate_limit: dict[str, Any], capacity: int, retry_after: int) -> Response:
     base_headers = {"Retry-After": str(retry_after)}
     spec = rate_limit.get("error")
     if not spec:
