@@ -4,6 +4,66 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [1.6.0] - 2026-11-18
+
+### Added
+
+- One X-Imnot-Session can cover several datapoints ([43e838d](https://github.com/edu2105/imnot/commit/43e838da3cfddbb5542dfb9f04d301eb702c009f))
+- Partner-shaped error: blocks for validate: and rate_limit: ([02f57e4](https://github.com/edu2105/imnot/commit/02f57e4f8fa4160f2850b59f62685593ef0a326d))
+- Custom headers, HMAC signature and retries ([565e01e](https://github.com/edu2105/imnot/commit/565e01eaacc8afc63a411ec719960b4a4cf65eae))
+- Unregister routes whose endpoint, datapoint or partner was removed ([0a8e0f2](https://github.com/edu2105/imnot/commit/0a8e0f277dfde641332f604c9a4c924406f70269))
+- A third example partner so imnot init covers all six patterns ([a31fc91](https://github.com/edu2105/imnot/commit/a31fc91ef6a98ad98863ae388d15537a64abcd31))
+- Builder edits keep every field; only ask for an admin key when needed ([981b4ea](https://github.com/edu2105/imnot/commit/981b4ea03961c70aa0acdc8178c6145611590596))
+- Startup summary, 404 hints, upload checks and project-root discovery ([44874ac](https://github.com/edu2105/imnot/commit/44874ac93c8a9a85b8a13852a3e55ffbbe00fe95))
+- Response templating with {{path.x}}, {{query.x}}, {{headers.x}}, {{body.x}} and {{request_id}} ([478d959](https://github.com/edu2105/imnot/commit/478d959c2039ffb5f633ba7f38c22f370e181e6b))
+- Payload_by picks a response per path parameter value ([36a06a5](https://github.com/edu2105/imnot/commit/36a06a5d3730582072729c43ddef6137a0fa2795))
+- Pending responses N times per id, and 404 for unknown ids ([b0f0336](https://github.com/edu2105/imnot/commit/b0f033658399cc60a66bae1017f27d577c13e090))
+- Fault injection with endpoint-level delay_ms and fail: blocks ([827c869](https://github.com/edu2105/imnot/commit/827c869037c1f6f91fb3de8c35d5b844b16a85cf))
+- Load partners/<partner>/payloads/<datapoint>.json as global payloads ([1b0fe91](https://github.com/edu2105/imnot/commit/1b0fe914d561dd0d91c3404bbc682fc3330f3cdc))
+- One strict YAML validator for start, reload, generate and imnot validate ([0ddce85](https://github.com/edu2105/imnot/commit/0ddce8554212f6423c45ade4195bb4faedfcf16e))
+- Request journal at GET/DELETE /imnot/admin/requests ([1011499](https://github.com/edu2105/imnot/commit/1011499f39cd8dae970d9c09e8845015d43709d1))
+
+### Changed
+
+- One payload shape rule for uploads and payload files; drop load_partners(quiet) ([287144d](https://github.com/edu2105/imnot/commit/287144dc397e9c104dfd61b50848d94aa13a5ce8))
+- Name the payload_by lookup value param_value ([8015b2e](https://github.com/edu2105/imnot/commit/8015b2e0261f3a1f054dc9605f65be47ff13f9b2))
+- Pass the endpoint to _add instead of looking it up again ([f0fb0c2](https://github.com/edu2105/imnot/commit/f0fb0c26f2e6dd4f4c25c76cccfd6ce54c1ab909))
+- Keep the callback and generates_id rules only in the loader ([df0b83c](https://github.com/edu2105/imnot/commit/df0b83ce9f442bbb03e242043f3781a1b9e79775))
+
+### Documentation
+
+- Fix stale defaults and claims in README, cli.md, load-test.md and the toml template ([4c45c03](https://github.com/edu2105/imnot/commit/4c45c03bf27d025421f69df118c1cc9ca8101d2e))
+
+### Fixed
+
+- Don't say an unknown key is 'ignored' when it is an error ([4692e55](https://github.com/edu2105/imnot/commit/4692e5552a1873104661254d6244c03da55864d6))
+- Migrate inside an explicit transaction; warn before deleting a multi-datapoint session ([2ff9065](https://github.com/edu2105/imnot/commit/2ff9065032a39b751a299247a98325e9bde965ca))
+- Empty body when error: has none, joined list headers, shared status check ([7eb7c2f](https://github.com/edu2105/imnot/commit/7eb7c2fdaff3f565993cd92e8c2c6689099689e9))
+- Omit headers whose placeholder has no value; document delivery settings ([b050524](https://github.com/edu2105/imnot/commit/b0505246559cd2bf19b7245e47d62c7edf53426c))
+- Protect HTTP-registered partners and stop re-registering live routes ([1254606](https://github.com/edu2105/imnot/commit/125460652985b8910091e1dbd78b8854dc05ee20))
+- Carry only keys the new pattern accepts; warn about endpoints the form drops ([e7ea69e](https://github.com/edu2105/imnot/commit/e7ea69e8d681c15a05b2fbd2227d2aa1b481b978))
+- Give header-mode callbacks the submit body and share the render helper ([ee9a14f](https://github.com/edu2105/imnot/commit/ee9a14f565ac33e301d4f49e8546265ea2317f9b))
+- Seed payload files from the app lifespan, after the store is initialised ([dfbe5f6](https://github.com/edu2105/imnot/commit/dfbe5f67aa0582aff535ddcf54c4d02d2a14219d))
+- Record mock routes like /docsign and clarify what is redacted ([596051e](https://github.com/edu2105/imnot/commit/596051e6e128fdc69ff7d3c4011b272c5f8eff42))
+- Copy partners/README.md into the build so the wheel can bundle it ([338c40e](https://github.com/edu2105/imnot/commit/338c40e42a5dcf307a380c373b9d2154247198e7))
+- Write module loggers (loader, callback, store) to the CLI log ([39258fa](https://github.com/edu2105/imnot/commit/39258fa3eed11f7374361447727271de541f5121))
+- Serve imnot's own READMEs from /imnot/docs in pip installs ([2182625](https://github.com/edu2105/imnot/commit/218262509462c80ffcb27d385df0af7dfec922e0))
+- Disable Builder Save until the edit form changes ([8956e6d](https://github.com/edu2105/imnot/commit/8956e6d6448495ced70d4424b09fd54d0cff9b07))
+- Stop the Builder edit mode from silently dropping YAML fields ([fb4c8db](https://github.com/edu2105/imnot/commit/fb4c8db985dc178f6f20a71822cd0c6f986b0baa))
+- Unregister a partner's routes when it is deleted ([eb674ca](https://github.com/edu2105/imnot/commit/eb674ca79d7db2e7b0e24fe47839a14ca2c212bf))
+- Report the package version in the OpenAPI schema ([2712c69](https://github.com/edu2105/imnot/commit/2712c69e07da03a069f108107297668c81235a35))
+- Serve list and falsy bodies verbatim and apply response headers ([9d6ec1e](https://github.com/edu2105/imnot/commit/9d6ec1e2a8f6c748b7444a0ca1e94e8028fff87c))
+- Keep imnot.toml settings under start --reload ([892b96d](https://github.com/edu2105/imnot/commit/892b96d150087d065ec795f02522a45d2987c7d2))
+- Skip empty or non-mapping partner.yaml instead of crashing ([7bf307a](https://github.com/edu2105/imnot/commit/7bf307a3e22dd43d8092834a0e052fc55622692b))
+- Fall back to python3 when there is no .venv ([c997c6b](https://github.com/edu2105/imnot/commit/c997c6bf1fe9728add06a1f008c1c0417f8d77a7))
+
+### Maintenance
+
+- Tidy the PAYLOAD_PATTERNS comment and unused test fixture ([af20897](https://github.com/edu2105/imnot/commit/af20897cc914cc1d97c45424ed7d82f399527b8f))
+- Replace real product names with fictional ones ([a821f08](https://github.com/edu2105/imnot/commit/a821f08a2bc0e4832e0ac2dd5d4e27903837f080))
+- Share the version constant with /healthz and refresh openapi.json ([a5582ca](https://github.com/edu2105/imnot/commit/a5582cae7b399d6f82bc97a512f1bb3835dbddf2))
+- Add tools/verify.sh and use the venv python in Makefile ([473befd](https://github.com/edu2105/imnot/commit/473befd9cf25f07e9a24247b811480a79c1c9c32))
+
 ## [1.5.0] - 2026-08-29
 
 ### Added
