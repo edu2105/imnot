@@ -40,7 +40,14 @@ from imnot.engine.patterns.static import make_static_handler
 from imnot.engine.rate_limiter import RateLimiter
 from imnot.engine.session_store import SessionStore
 from imnot.engine.stress_router import register_stress_routes
-from imnot.loader.yaml_loader import PAYLOAD_PATTERNS, DatapointDef, EndpointDef, PartnerDef, load_partners
+from imnot.loader.yaml_loader import (
+    PAYLOAD_PATTERNS,
+    DatapointDef,
+    EndpointDef,
+    PartnerDef,
+    load_partners,
+    payload_shape_error,
+)
 from imnot.partners import dropped_fields, register_partner
 from imnot.postman import build_postman_collection
 
@@ -333,23 +340,10 @@ def _register_admin_routes(
 
     def _shape_error(payload: Any) -> JSONResponse | None:
         """Reject a payload the routes could never serve, at upload time instead of on every GET."""
-        if datapoint.pattern == "paginated" and not isinstance(payload, list):
-            return JSONResponse(
-                status_code=422,
-                content={
-                    "detail": "A 'paginated' payload must be a JSON array of items; imnot builds the "
-                    "envelope (items_field, totals, next links) itself"
-                },
-            )
-        keyed_by = next(
-            (ep.response["payload_by"] for ep in datapoint.endpoints if ep.response.get("payload_by")), None
-        )
-        if keyed_by is not None and not isinstance(payload, dict):
-            return JSONResponse(
-                status_code=422,
-                content={"detail": f"This datapoint uses payload_by: {keyed_by}; upload a JSON object keyed by it"},
-            )
-        return None
+        problem = payload_shape_error(datapoint, payload)
+        if problem is None:
+            return None
+        return JSONResponse(status_code=422, content={"detail": problem[0].upper() + problem[1:]})
 
     async def upload_global(request: Request) -> JSONResponse:
         try:

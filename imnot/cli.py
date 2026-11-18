@@ -843,7 +843,13 @@ def _print_startup_summary(partners_dir: Path | None, db_path: Path, host: str, 
     if partners_dir is None:
         return
     yaml_files = sorted(partners_dir.glob("*/partner.yaml"))
-    partners = load_partners(partners_dir, quiet=True)
+    # This second load only feeds the summary; silence it so its warnings don't print twice
+    # (the server's own load, right after, logs them).
+    logging.disable(logging.CRITICAL)
+    try:
+        partners = load_partners(partners_dir)
+    finally:
+        logging.disable(logging.NOTSET)
     loaded_paths = {p.source_path.resolve() for p in partners}
     failed = [f.parent.name for f in yaml_files if f.resolve() not in loaded_paths]
     names = ", ".join(p.partner for p in partners) or "none"

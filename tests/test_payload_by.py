@@ -63,10 +63,11 @@ def test_non_object_upload_is_rejected(tmp_path):
     assert session_up.status_code == 422
 
 
-def test_non_object_payload_file_is_422_on_get(tmp_path):
-    with _client(tmp_path, files={"reservation.json": '[{"id": "R1"}]'}) as c:
+def test_non_object_payload_file_is_skipped_at_load(tmp_path, caplog):
+    with caplog.at_level("WARNING"), _client(tmp_path, files={"reservation.json": '[{"id": "R1"}]'}) as c:
         r = c.get("/hotelco/reservations/R1")
-    assert r.status_code == 422 and "payload_by" in r.json()["detail"]
+    assert r.status_code == 404  # never seeded
+    assert "payload_by" in caplog.text
 
 
 @pytest.mark.parametrize("path, by", [("/hotelco/reservations", "id"), ("/hotelco/reservations/{id}", "code")])
