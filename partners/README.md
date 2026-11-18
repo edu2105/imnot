@@ -1057,7 +1057,7 @@ Fixed infra endpoints (always available regardless of partners loaded):
 | `GET`  | `/imnot/admin/partners` | List all loaded partners and their datapoints |
 | `POST` | `/imnot/admin/partners` | Register a new partner from a raw YAML body — routes go live immediately |
 | `GET`  | `/imnot/admin/sessions` | List all active sessions |
-| `POST` | `/imnot/admin/reload`   | Hot-reload partner YAMLs — updates static response bodies in place, registers new partners/datapoints |
+| `POST` | `/imnot/admin/reload`   | Hot-reload partner YAMLs — updates static bodies in place, registers new routes, unregisters removed ones (a partner whose YAML fails to load keeps its routes) |
 
 `POST /imnot/admin/partners` is the HTTP equivalent of `imnot generate` — use it when imnot
 runs in a container and you cannot exec in to run the CLI. See the main README for usage examples.

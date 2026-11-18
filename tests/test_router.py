@@ -1515,3 +1515,136 @@ datapoints:
     r = c.post("/imnot/admin/pageco/items/payload", json={"items": [], "total": 0})
     assert r.status_code == 422 and "JSON array" in r.json()["detail"]
     assert c.post("/imnot/admin/pageco/items/payload", json=[{"id": 1}]).status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Reload removes what the YAML no longer defines
+# ---------------------------------------------------------------------------
+
+_RELOAD_YAML = """\
+partner: relo
+datapoints:
+  - name: a
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /relo/a
+        response: {status: 200}
+      - method: GET
+        path: /relo/a2
+        response: {status: 200}
+  - name: b
+    pattern: static
+    endpoints:
+      - method: GET
+        path: /relo/b
+        response: {status: 200, body: {b: true}}
+"""
+
+
+def _reload_client(tmp_path, store):
+    partners_dir = tmp_path / "partners"
+    (partners_dir / "relo").mkdir(parents=True)
+    (partners_dir / "relo" / "partner.yaml").write_text(_RELOAD_YAML)
+    app = FastAPI()
+    register_routes(app, load_partners(partners_dir), store, partners_dir=partners_dir)
+    return TestClient(app), partners_dir / "relo" / "partner.yaml"
+
+
+def test_reload_unregisters_a_removed_endpoint_and_datapoint(tmp_path, store):
+    c, yaml_path = _reload_client(tmp_path, store)
+    c.post("/imnot/admin/relo/a/payload", json={"ok": True})
+    assert c.get("/relo/a2").status_code == 200 and c.get("/relo/b").status_code == 200
+
+    yaml_path.write_text(
+        _RELOAD_YAML.replace(
+            "      - method: GET\n        path: /relo/a2\n        response: {status: 200}\n", ""
+        ).split("  - name: b")[0]
+    )
+    r = c.post("/imnot/admin/reload").json()
+
+    assert r["status"] == "ok"
+    assert "GET /relo/a2" in r["removed"] and "GET /relo/b" in r["removed"]
+    assert c.get("/relo/a2").status_code == 404 and c.get("/relo/a2/").status_code == 404
+    assert c.get("/relo/b").status_code == 404
+    assert c.get("/relo/a").json() == {"ok": True}  # untouched route keeps working
+    assert "b" not in [d["name"] for d in c.get("/imnot/admin/partners").json()[0]["datapoints"]]
+
+
+def test_reload_unregisters_a_deleted_partner_including_admin_routes(tmp_path, store):
+    c, yaml_path = _reload_client(tmp_path, store)
+    yaml_path.unlink()
+    r = c.post("/imnot/admin/reload").json()
+    assert "admin routes for relo/a" in r["removed"]
+    assert c.get("/relo/b").status_code == 404
+    assert c.post("/imnot/admin/relo/a/payload", json={}).status_code == 404
+    assert c.get("/imnot/admin/partners").json() == []
+
+
+def test_reload_keeps_routes_of_a_partner_whose_yaml_is_temporarily_broken(tmp_path, store):
+    c, yaml_path = _reload_client(tmp_path, store)
+    yaml_path.write_text("partner: relo\ndatapoints: [")  # mid-edit typo
+    r = c.post("/imnot/admin/reload").json()
+    assert r["status"] == "partial" and r["skipped"] == ["relo"] and r["removed"] == []
+    assert c.get("/relo/b").json() == {"b": True}
+
+
+def test_reload_moves_an_endpoint_to_another_datapoint(tmp_path, store):
+    c, yaml_path = _reload_client(tmp_path, store)
+    moved = (
+        _RELOAD_YAML.replace("      - method: GET\n        path: /relo/a2\n        response: {status: 200}\n", "")
+        + "      - method: GET\n        path: /relo/a2\n        response: {status: 200, body: {moved: true}}\n"
+    )
+    yaml_path.write_text(moved)
+    r = c.post("/imnot/admin/reload").json()
+    assert "GET /relo/a2" in r["removed"] and "GET /relo/a2" in r["added"]
+    assert c.get("/relo/a2").json() == {"moved": True}
+
+
+def test_reload_keeps_routes_of_an_http_registered_partner_whose_yaml_breaks(tmp_path, store):
+    c, partners_dir = _make_client(tmp_path, store)
+    c.post("/imnot/admin/partners", content=_STATIC_PARTNER_YAML)  # Builder-style registration
+    (partners_dir / "staticco" / "partner.yaml").write_text("partner: staticco\ndatapoints: [")
+    r = c.post("/imnot/admin/reload").json()
+    assert r["skipped"] == ["staticco"] and r["removed"] == []
+    assert c.get("/staticco/status").json() == {"ok": True}
+
+
+def test_reload_reports_a_broken_new_partner_in_skipped(tmp_path, store):
+    c, partners_dir = _make_client(tmp_path, store)
+    (partners_dir / "newbie").mkdir()
+    (partners_dir / "newbie" / "partner.yaml").write_text("partner: newbie\n")
+    r = c.post("/imnot/admin/reload").json()
+    assert r["status"] == "partial" and r["skipped"] == ["newbie"]
+
+
+def test_adding_an_endpoint_to_a_paginated_datapoint_keeps_one_live_route_per_path(tmp_path, store):
+    yaml_text = """\
+partner: pg
+datapoints:
+  - name: items
+    pattern: paginated
+    pagination: {style: offset_limit, items_field: items, total_field: total}
+    endpoints:
+      - method: GET
+        path: /pg/items
+        response: {status: 200}
+"""
+    partners_dir = tmp_path / "partners"
+    (partners_dir / "pg").mkdir(parents=True)
+    yaml_path = partners_dir / "pg" / "partner.yaml"
+    yaml_path.write_text(yaml_text)
+    app = FastAPI()
+    register_routes(app, load_partners(partners_dir), store, partners_dir=partners_dir)
+    c = TestClient(app)
+    c.post("/imnot/admin/pg/items/payload", json=[{"id": 1}])
+
+    with_second = yaml_text + "      - method: GET\n        path: /pg/items2\n        response: {status: 200}\n"
+    yaml_path.write_text(with_second)
+    c.post("/imnot/admin/reload")
+    yaml_path.write_text(with_second.replace("total_field: total", "total_field: count"))
+    c.post("/imnot/admin/reload")
+
+    assert "count" in c.get("/pg/items").json() and "count" in c.get("/pg/items2").json()
+    live = [r for r in app.router.routes if getattr(r, "path", None) == "/pg/items"]
+    assert len(live) == 1

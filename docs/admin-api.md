@@ -39,7 +39,7 @@ Always available regardless of which partners are loaded:
 | `GET`    | `/imnot/admin/sessions` | List all active sessions with `session_id`, `partner`, `datapoint`, `created_at`, `last_used` |
 | `DELETE` | `/imnot/admin/sessions/{session_id}` | Delete a single session — returns `200 {"status":"ok","session_id":"…"}` or `404` |
 | `DELETE` | `/imnot/admin/faults` | Reset every `fail.first_n` counter, so failing endpoints fail again from the first call — returns `{"status":"ok","cleared":N}` |
-| `POST` | `/imnot/admin/reload` | Hot-reload partner YAMLs without restarting |
+| `POST` | `/imnot/admin/reload` | Hot-reload partner YAMLs without restarting: updates static bodies and pagination in place, registers new routes, and unregisters routes whose endpoint, datapoint or partner was removed. Returns `added`, `updated`, `removed`, `skipped` (partners whose YAML exists but fails to load keep their current routes; status `partial`) and `conflicts` |
 | `GET`  | `/imnot/admin/postman` | Download a Postman collection v2.1 JSON for all loaded partners |
 | `GET`  | `/imnot/admin/ui` | Admin web UI (auth-gated, see [Admin UI](#admin-ui)) |
 
