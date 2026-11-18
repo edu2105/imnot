@@ -24,6 +24,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
 from imnot.engine.session_store import SessionStore
+from imnot.engine.templating import render_response
 from imnot.engine.validator import validate_request
 from imnot.loader.yaml_loader import DatapointDef, EndpointDef
 
@@ -170,7 +171,8 @@ def _make_static_handler(
             if pending is not None:
                 return pending
         if static_body is not None:
-            return JSONResponse(status_code=status_code, content=static_body, headers=extra_headers)
+            content = await render_response(static_body, request)
+            return JSONResponse(status_code=status_code, content=content, headers=extra_headers)
         return Response(status_code=status_code, headers=extra_headers)
 
     handler.__name__ = f"polling_static_{partner}_{datapoint.name}_{endpoint.step}"

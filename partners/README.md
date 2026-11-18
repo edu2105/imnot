@@ -905,6 +905,35 @@ Error message format: `"<section>.<field>: <reason>"` where `section` is `body`,
 
 ---
 
+## Response templating
+
+String values in a `static` body, a polling static step's body, and a callback payload can use
+data from the request:
+
+| Placeholder | Value |
+|-------------|-------|
+| `{{path.id}}` | A path parameter (any name: `{{path.property_id}}`) |
+| `{{query.lang}}` | A query parameter |
+| `{{headers.X-Trace-Id}}` | A request header (case-insensitive) |
+| `{{body.order.id}}` | A field of the JSON request body; dots go into objects, numbers into lists (`{{body.items.0.sku}}`) |
+| `{{request_id}}` | Callback only: the `request_id` returned to the submitter, so the callback can be correlated |
+
+```yaml
+response:
+  status: 200
+  body:
+    bookingId: "{{path.id}}"
+    nights: "{{body.nights}}"          # whole-string placeholder keeps the JSON type: 2, not "2"
+    message: "Confirmed {{path.id}}"   # inside a longer string the value is inserted as text
+```
+
+- A missing value renders as `""` (or `null` when the placeholder is the whole string).
+- Only these roots are recognized; other `{{…}}` text is left as is.
+- For callbacks the context is the submit request. A retrigger (`POST …/callback/{request_id}/retrigger`)
+  only knows `{{request_id}}`; other placeholders render as `""` / `null` (see above).
+
+---
+
 ## Failures and latency
 
 Any endpoint, in any pattern, can simulate a slow or failing partner so you can test timeouts,
