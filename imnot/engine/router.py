@@ -49,11 +49,14 @@ from imnot.loader.yaml_loader import (
     payload_shape_error,
 )
 from imnot.partners import (
+    EXAMPLE_PARTNERS,
     dropped_fields,
     is_safe_partner_name,
+    load_example_partner,
     merge_unmanaged_fields,
     register_partner,
     validate_partner_yaml,
+    write_example_partner,
 )
 from imnot.postman import build_postman_collection
 
@@ -869,6 +872,139 @@ def _register_infra_routes(
             }
         )
 
+    def _hot_load_partner(app_: FastAPI, partner: PartnerDef) -> tuple[list[str], list[str]]:
+        """Register *partner* on the running app and put it in the partners list.
+
+        Returns ``(routes added, route conflicts)``.
+        """
+        configs_: dict = app_.state.configs
+        paginated_config_refs_: dict = app_.state.paginated_config_refs
+        store_: SessionStore = app_.state.store
+        registered_: dict[tuple[str, str], str] = app_.state.registered_routes
+        registered_admin_: set[tuple[str, str]] = app_.state.registered_admin_dps
+
+        added: list[str] = []
+        conflicts: list[str] = []
+
+        for dp in partner.datapoints:
+            # Hot-swap static response configs for already-registered routes
+            if dp.pattern == "static":
+                for ep in dp.endpoints:
+                    key = (partner.partner, dp.name, ep.method.upper(), ep.path)
+                    if key in configs_:
+                        configs_[key] = ep.response
+
+            # Hot-swap paginated pagination config for already-registered routes
+            if dp.pattern == "paginated":
+                for ep in dp.endpoints:
+                    ref_key = (partner.partner, dp.name, ep.method.upper(), ep.path)
+                    if ref_key in paginated_config_refs_:
+                        paginated_config_refs_[ref_key][0] = dp.pagination or {}
+
+            # Register brand-new consumer routes
+            new_eps = [ep for ep in dp.endpoints if (ep.method.upper(), ep.path) not in registered_]
+            if new_eps:
+                try:
+                    _register_consumer_routes(
+                        app_,
+                        partner,
+                        dp,
+                        store_,
+                        configs_,
+                        paginated_config_refs_,
+                        registered_,
+                        app_.state.rate_limiter,
+                        app_.state.default_limit,
+                    )
+                    for ep in new_eps:
+                        added.append(f"{ep.method.upper()} {ep.path}")
+                except ValueError as exc:
+                    conflicts.append(str(exc))
+
+            # Register admin routes for new payload-pattern datapoints
+            if dp.pattern in PAYLOAD_PATTERNS and (partner.partner, dp.name) not in registered_admin_:
+                _register_admin_routes(app_, partner, dp, store_)
+                registered_admin_.add((partner.partner, dp.name))
+                added.append(f"admin routes for {partner.partner}/{dp.name}")
+
+        # Keep partners list in-place so list_partners() closure sees the change.
+        existing_names = {p.partner for p in partners}
+        if partner.partner not in existing_names:
+            partners.append(partner)
+        else:
+            for i, p in enumerate(partners):
+                if p.partner == partner.partner:
+                    partners[i] = partner
+                    break
+        return added, conflicts
+
+    async def load_examples_handler(request: Request) -> JSONResponse:
+        """Load the example partners of `imnot init` (staylink, bookingco, ratesync) with their payloads.
+
+        Classic mode writes them to the partners directory, like `imnot init`. Stateless mode keeps
+        them in memory, so a reload or a restart drops them. All or nothing: 409 if any of them
+        already exists, 403 when the partners directory cannot be written.
+        """
+        stateless: bool = getattr(request.app.state, "stateless", False)
+        partners_dir: Path | None = request.app.state.partners_dir
+        if partners_dir is None and not stateless:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "detail": "This server has no partners directory to write the examples to. "
+                    "Stop it, run `imnot init` (or create a partners/ directory) and start it again.",
+                },
+            )
+
+        names = [name for name, _ in EXAMPLE_PARTNERS]
+        loaded = {p.partner for p in partners}
+        existing = [
+            name
+            for name in names
+            if name in loaded or (not stateless and partners_dir is not None and (partners_dir / name).exists())
+        ]
+        if existing:
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "status": "error",
+                    "detail": f"Already there: {', '.join(existing)}. Nothing was loaded; "
+                    "delete them first to load the examples again.",
+                    "existing": existing,
+                },
+            )
+
+        examples = [load_example_partner(name) for name in names]
+        if not stateless and partners_dir is not None:
+            try:
+                for example, _ in examples:
+                    example.source_path = write_example_partner(example.partner, partners_dir)[0]
+            except OSError as exc:
+                return _partners_read_only_response(exc)
+
+        added: list[str] = []
+        conflicts: list[str] = []
+        for example, yaml_text in examples:
+            if stateless:
+                request.app.state.memory_partners[example.partner] = yaml_text
+            example_added, example_conflicts = _hot_load_partner(request.app, example)
+            added += example_added
+            conflicts += example_conflicts
+        seed_payloads(request.app.state.store, [example for example, _ in examples])
+        _http_logger.info("Loaded example partners %s (%s)", names, "in memory" if stateless else "as files")
+
+        return JSONResponse(
+            status_code=201,
+            content={
+                "status": "ok",
+                "partners": names,
+                "persisted": not stateless,
+                "routes_added": added,
+                "routes_conflicts": conflicts,
+            },
+        )
+
     async def create_partner_handler(request: Request) -> JSONResponse:
         """Validate raw YAML body, write it to disk, and hot-load its routes.
 
@@ -949,65 +1085,7 @@ def _register_infra_routes(
             # below, so the edit applies completely (validate:, fail:, removed endpoints…) with no reload.
             _unregister_partner_routes(request.app, partner.partner)
             request.app.state.memory_partners[partner.partner] = yaml_text
-        configs_: dict = request.app.state.configs
-        paginated_config_refs_: dict = request.app.state.paginated_config_refs
-        store_: SessionStore = request.app.state.store
-        registered_: dict[tuple[str, str], str] = request.app.state.registered_routes
-        registered_admin_: set[tuple[str, str]] = request.app.state.registered_admin_dps
-
-        added: list[str] = []
-        conflicts: list[str] = []
-
-        for dp in partner.datapoints:
-            # Hot-swap static response configs for already-registered routes
-            if dp.pattern == "static":
-                for ep in dp.endpoints:
-                    key = (partner.partner, dp.name, ep.method.upper(), ep.path)
-                    if key in configs_:
-                        configs_[key] = ep.response
-
-            # Hot-swap paginated pagination config for already-registered routes
-            if dp.pattern == "paginated":
-                for ep in dp.endpoints:
-                    ref_key = (partner.partner, dp.name, ep.method.upper(), ep.path)
-                    if ref_key in paginated_config_refs_:
-                        paginated_config_refs_[ref_key][0] = dp.pagination or {}
-
-            # Register brand-new consumer routes
-            new_eps = [ep for ep in dp.endpoints if (ep.method.upper(), ep.path) not in registered_]
-            if new_eps:
-                try:
-                    _register_consumer_routes(
-                        request.app,
-                        partner,
-                        dp,
-                        store_,
-                        configs_,
-                        paginated_config_refs_,
-                        registered_,
-                        request.app.state.rate_limiter,
-                        request.app.state.default_limit,
-                    )
-                    for ep in new_eps:
-                        added.append(f"{ep.method.upper()} {ep.path}")
-                except ValueError as exc:
-                    conflicts.append(str(exc))
-
-            # Register admin routes for new payload-pattern datapoints
-            if dp.pattern in PAYLOAD_PATTERNS and (partner.partner, dp.name) not in registered_admin_:
-                _register_admin_routes(request.app, partner, dp, store_)
-                registered_admin_.add((partner.partner, dp.name))
-                added.append(f"admin routes for {partner.partner}/{dp.name}")
-
-        # Keep partners list in-place so list_partners() closure sees the change.
-        existing_names = {p.partner for p in partners}
-        if partner.partner not in existing_names:
-            partners.append(partner)
-        else:
-            for i, p in enumerate(partners):
-                if p.partner == partner.partner:
-                    partners[i] = partner
-                    break
+        added, conflicts = _hot_load_partner(request.app, partner)
 
         payload_dp_names = {dp.name for dp in partner.datapoints if dp.pattern in PAYLOAD_PATTERNS}
         status_code = 201 if created else 200
@@ -1054,6 +1132,7 @@ def _register_infra_routes(
     app.add_api_route("/imnot/admin/requests", clear_requests, methods=["DELETE"])
     app.add_api_route("/imnot/admin/partners", list_partners, methods=["GET"])
     app.add_api_route("/imnot/admin/partners", create_partner_handler, methods=["POST"])
+    app.add_api_route("/imnot/admin/partners/examples", load_examples_handler, methods=["POST"])
     app.add_api_route("/imnot/admin/partners/{partner_name}", get_partner, methods=["GET"])
     app.add_api_route("/imnot/admin/partners/{partner_name}", delete_partner, methods=["DELETE"])
     app.add_api_route("/imnot/admin/reload", reload_partners, methods=["POST"])

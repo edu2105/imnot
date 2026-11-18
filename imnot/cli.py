@@ -19,7 +19,6 @@ import os
 import signal
 import sys
 import time
-from importlib.resources import files
 from pathlib import Path
 
 import click
@@ -31,7 +30,7 @@ from imnot.config import load_config
 from imnot.engine.session_store import SessionStore
 from imnot.loader.yaml_loader import PAYLOAD_PATTERNS, load_partners, load_payload_files, parse_partner_yaml
 from imnot.logging_setup import configure_logging
-from imnot.partners import register_partner
+from imnot.partners import EXAMPLE_PARTNERS, register_partner, write_example_partner
 from imnot.postman import build_postman_collection, collection_stats
 
 DEFAULT_PARTNERS_DIR = "partners"
@@ -419,12 +418,6 @@ def stop(pid_file: str) -> None:
 # imnot init
 # ---------------------------------------------------------------------------
 
-_EXAMPLES = [
-    ("staylink", "oauth + polling"),
-    ("bookingco", "static + fetch"),
-    ("ratesync", "callback + paginated"),
-]
-
 
 @cli.command()
 @click.option(
@@ -434,8 +427,14 @@ _EXAMPLES = [
     show_default=True,
     help="Directory to initialise. Created if it does not exist.",
 )
-def init(target_dir: str) -> None:
-    """Scaffold a new imnot project with example partner definitions."""
+@click.option(
+    "--empty",
+    is_flag=True,
+    default=False,
+    help="Create the project without the example partners (an empty partners/ directory).",
+)
+def init(target_dir: str, empty: bool) -> None:
+    """Scaffold a new imnot project with example partner definitions (or none, with --empty)."""
     target = Path(target_dir).resolve()
     partners_dir = target / "partners"
 
@@ -450,33 +449,31 @@ def init(target_dir: str) -> None:
     target.mkdir(parents=True, exist_ok=True)
     cli_log = _setup_logging(target)
 
+    partners_dir.mkdir()
     written: list[tuple[Path, str]] = []
-    for partner_name, patterns in _EXAMPLES:
-        source = files("imnot.examples").joinpath(partner_name)
-        dest_dir = partners_dir / partner_name
-        dest_dir.mkdir(parents=True)
-        dest = dest_dir / "partner.yaml"
-        dest.write_text(source.joinpath("partner.yaml").read_text(encoding="utf-8"), encoding="utf-8")
-        written.append((dest.relative_to(target), patterns))
-        payloads = source.joinpath("payloads")
-        if payloads.is_dir():
-            (dest_dir / "payloads").mkdir()
-            for item in sorted(payloads.iterdir(), key=lambda x: x.name):
-                if item.name.endswith(".json"):
-                    (dest_dir / "payloads" / item.name).write_text(item.read_text(encoding="utf-8"), encoding="utf-8")
-                    written.append((dest_dir.relative_to(target) / "payloads" / item.name, "example payload"))
+    for partner_name, patterns in [] if empty else EXAMPLE_PARTNERS:
+        for i, path in enumerate(write_example_partner(partner_name, partners_dir)):
+            written.append((path.relative_to(target), patterns if i == 0 else "example payload"))
 
     toml_path = target / "imnot.toml"
     if not toml_path.exists():
         toml_path.write_text(_IMNOT_TOML_TEMPLATE, encoding="utf-8")
 
-    cli_log.info("Initialized imnot project in %s", target)
+    cli_log.info("Initialized imnot project in %s%s", target, " (no example partners)" if empty else "")
     click.echo(f"Initialized imnot project in {target}\n")
     for path, patterns in written:
         click.echo(f"  {path}   ({patterns})")
+    if empty:
+        click.echo("  partners/   (empty)")
     click.echo("  imnot.toml")
     click.echo()
-    click.echo("Run `imnot start` to launch the mock server.")
+    if empty:
+        click.echo(
+            "Run `imnot start` and open the admin UI to create your first partner,\n"
+            "or add one with `imnot generate --file <yaml>`."
+        )
+    else:
+        click.echo("Run `imnot start` to launch the mock server.")
 
 
 # ---------------------------------------------------------------------------
@@ -517,8 +514,9 @@ def status(db: str) -> None:
 def validate(partners_dir: str) -> None:
     """Check every partner.yaml strictly: schema errors, unknown keys, payload files and route conflicts.
 
-    Exits 1 if anything is wrong, or if there is no partner.yaml at all. `imnot start` is more lenient
-    (it only warns about unknown keys) unless it runs with `--strict`.
+    Exits 1 if anything is wrong, or if the directory has content but no <partner>/partner.yaml
+    (a wrong layout). A completely empty directory passes: zero partners is a valid project.
+    `imnot start` is more lenient (it only warns about unknown keys) unless it runs with `--strict`.
     """
     try:
         resolved = _resolve_partners_dir(partners_dir)
@@ -557,9 +555,18 @@ def _check_partners(partners_dir: Path) -> list[tuple[str, int, list[str]]]:
 
 
 def _report_partner_checks(partners_dir: Path) -> bool:
-    """Print one OK/FAIL line per partner file. False if any has problems or there are none at all."""
+    """Print one OK/FAIL line per partner file. False if any has problems.
+
+    No partner.yaml at all: fine when the directory is completely empty (an instance that starts
+    with no partners and gets them from the UI), a failure when it holds anything else, because
+    then the partners are there but in the wrong layout.
+    """
     results = _check_partners(partners_dir)
     if not results:
+        # Dotfiles (.gitkeep, the ..data of a mounted ConfigMap) are not a layout mistake.
+        if not any(not entry.name.startswith(".") for entry in partners_dir.iterdir()):
+            click.echo(f"No partners: {partners_dir} is empty. Nothing to check.")
+            return True
         click.echo(
             f"No partner.yaml files found in {partners_dir}. Expected {partners_dir.name}/<partner>/partner.yaml.",
             err=True,

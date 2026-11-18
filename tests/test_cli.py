@@ -1327,8 +1327,10 @@ def test_validate_reports_every_file_not_just_the_first(runner, tmp_path):
     assert "2 of 3" in result.output
 
 
-def test_validate_empty_and_missing_dir(runner, tmp_path):
-    # No partner.yaml at all is a failure: a wrongly nested layout must not pass CI as "nothing to check".
+def test_validate_wrong_layout_and_missing_dir(runner, tmp_path):
+    # Content but no <partner>/partner.yaml is a failure: a wrongly nested layout must not pass CI as
+    # "nothing to check". (A completely empty directory passes: see tests/test_first_use.py.)
+    (tmp_path / "partners" / "acme").mkdir(parents=True)
     empty = runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path)])
     assert empty.exit_code == 1
     assert "No partner.yaml files found" in empty.output
