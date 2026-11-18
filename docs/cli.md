@@ -10,7 +10,8 @@
 | `imnot start --reload` | Start with auto-restart on any YAML change (recommended for development) |
 | `imnot stop` | Stop the running server (sends SIGTERM to PID in `imnot.pid`) |
 | `imnot stop --pid-file <path>` | Stop using an explicit PID file path |
-| `imnot generate --file <path>` | Validate and scaffold a partner YAML into `partners/` |
+| `imnot validate` | Check every `partner.yaml` strictly (schema, unknown keys, route conflicts across partners); exits 1 on any problem. Good for CI |
+| `imnot generate --file <path>` | Validate (strictly, like `imnot validate`) and scaffold a partner YAML into `partners/` |
 | `imnot generate --file <path> --dry-run --json` | Validate only — print structured result, write nothing |
 | `imnot export postman` | Generate a Postman collection v2.1 JSON from all loaded partners |
 | `imnot export postman --out <file>` | Write the collection to a specific file (default: `imnot-collection.json`) |

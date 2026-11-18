@@ -403,22 +403,6 @@ async def test_fetch_step_invalid_header_returns_422(store):
 
 
 # ---------------------------------------------------------------------------
-# generates_id missing id delivery config — ValueError at startup (L69)
-# ---------------------------------------------------------------------------
-
-
-def test_submit_generates_id_without_delivery_config_raises(store):
-    ep = EndpointDef(
-        method="POST",
-        path="/jobs",
-        step=1,
-        response={"status": 202, "generates_id": True},
-    )
-    with pytest.raises(ValueError, match="generates_id"):
-        make_async_handlers("partner", _make_datapoint([ep]), store)
-
-
-# ---------------------------------------------------------------------------
 # Malformed JSON body — submit step (L80-81)
 # ---------------------------------------------------------------------------
 

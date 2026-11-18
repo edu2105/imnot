@@ -65,11 +65,7 @@ def _make_submit_handler(
     static_body: dict[str, Any] = endpoint.response.get("body") or {}
     validate_rules = endpoint.validate
 
-    if not (id_header and id_header_value) and not id_body_field:
-        raise ValueError(
-            f"Endpoint step {endpoint.step} has generates_id=true but neither "
-            "'id_header'/'id_header_value' nor 'id_body_field' is set"
-        )
+    # The loader (``_parse_endpoint``) guarantees an id source when generates_id is true.
 
     async def handler(request: Request) -> Response:
         if validate_rules is not None:

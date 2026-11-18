@@ -30,7 +30,7 @@ from imnot.api.server import create_app
 from imnot.config import load_config
 from imnot.engine.router import _PAYLOAD_PATTERNS
 from imnot.engine.session_store import SessionStore
-from imnot.loader.yaml_loader import load_partners
+from imnot.loader.yaml_loader import load_partners, parse_partner_yaml
 from imnot.logging_setup import configure_logging
 from imnot.partners import register_partner
 from imnot.postman import build_postman_collection, collection_stats
@@ -422,6 +422,62 @@ def status(db: str) -> None:
 # ---------------------------------------------------------------------------
 # imnot \1
 # ---------------------------------------------------------------------------
+
+
+@cli.command()
+@click.option(
+    "--partners-dir",
+    default=str(DEFAULT_PARTNERS_DIR),
+    show_default=True,
+    help="Directory containing partner YAML definitions.",
+)
+def validate(partners_dir: str) -> None:
+    """Check every partner.yaml strictly: schema errors, unknown keys and route conflicts.
+
+    Exits 1 if anything is wrong. `imnot start` is more lenient: it only warns about unknown keys.
+    """
+    try:
+        resolved = _resolve_partners_dir(partners_dir)
+    except FileNotFoundError as exc:
+        click.echo(str(exc), err=True)
+        raise SystemExit(1)
+
+    yaml_files = sorted(resolved.glob("*/partner.yaml"))
+    if not yaml_files:
+        click.echo(f"No partner.yaml files found in {resolved}.")
+        return
+
+    failed = 0
+    seen_routes: dict[tuple[str, str], str] = {}
+    for yaml_path in yaml_files:
+        label = yaml_path.relative_to(resolved)
+        try:
+            partner = parse_partner_yaml(yaml_path.read_text(), yaml_path, strict=True)
+        except (yaml.YAMLError, ValueError) as exc:
+            failed += 1
+            click.echo(f"{click.style('FAIL', fg='red')}  {label}")
+            for problem in str(exc).split("; "):
+                click.echo(f"      {problem}")
+            continue
+        conflicts = []
+        for dp in partner.datapoints:
+            for ep in dp.endpoints:
+                key = (ep.method, ep.path)
+                owner = f"{partner.partner}/{dp.name}"
+                if key in seen_routes and seen_routes[key] != owner:
+                    conflicts.append(f"{ep.method} {ep.path} is already defined by '{seen_routes[key]}'")
+                seen_routes.setdefault(key, owner)
+        if conflicts:
+            failed += 1
+            click.echo(f"{click.style('FAIL', fg='red')}  {label}")
+            for problem in conflicts:
+                click.echo(f"      Route conflict: {problem}")
+        else:
+            click.echo(f"{click.style('OK', fg='green')}    {label}  ({len(partner.datapoints)} datapoint(s))")
+
+    if failed:
+        click.echo(f"\n{failed} of {len(yaml_files)} partner file(s) have problems.", err=True)
+        raise SystemExit(1)
 
 
 @cli.command()

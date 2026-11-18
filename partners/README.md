@@ -928,6 +928,8 @@ runs in a container and you cannot exec in to run the CLI. See the main README f
 
 ## Checklist before saving a partner.yaml
 
+Run `imnot validate` to check all of this automatically. Unknown keys (usually typos like `respose:`) are only a warning in the server log at `imnot start` / reload, so a partner that loads today keeps loading; `imnot validate`, `imnot generate` and `POST /imnot/admin/partners` reject them.
+
 - [ ] `partner` value is lowercase with no spaces or special characters
 - [ ] Each datapoint has a unique `name` within the file
 - [ ] `pattern` is one of `oauth`, `polling`, `static`, `fetch`, `callback`, `paginated`
@@ -951,6 +953,7 @@ runs in a container and you cannot exec in to run the CLI. See the main README f
 - [ ] Field rules under `validate:` use only recognized attributes: `required`, `type`, `allowed`, `pattern`, `min`, `max` — unknown attributes raise an error at startup
 - [ ] `rate_limit:` is only declared on `fetch`-pattern endpoints, or on `paginated` endpoints using `pagination.style: page_number_url` — declaring it on any other pattern, or on a `paginated` endpoint using any other pagination style, raises an error at startup
 - [ ] `rate_limit.requests_per_minute` must be a positive integer; unknown keys under `rate_limit:` raise an error at startup
+- [ ] Every `path` starts with `/`, every `method` is a standard HTTP verb and every `status` is an integer between 100 and 599
 - [ ] After saving, call `POST /imnot/admin/reload` or restart the server to pick up changes
 
 ---

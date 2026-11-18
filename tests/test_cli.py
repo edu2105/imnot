@@ -1271,3 +1271,71 @@ def test_start_reload_hands_resolved_toml_to_factory(runner, tmp_path, monkeypat
         )
     assert result.exit_code == 0, result.output
     assert os.environ.get("IMNOT_CONFIG_PATH") == str((data / "imnot.toml").resolve())
+
+
+# ---------------------------------------------------------------------------
+# imnot validate
+# ---------------------------------------------------------------------------
+
+_VALID_PARTNER = """\
+partner: {name}
+datapoints:
+  - name: ping
+    pattern: static
+    endpoints:
+      - method: GET
+        path: {path}
+        response:
+          status: 200
+"""
+
+
+def _write_partner(root, name, text):
+    (root / name).mkdir(parents=True)
+    (root / name / "partner.yaml").write_text(text)
+
+
+def test_validate_ok_on_bundled_partners(runner):
+    result = runner.invoke(cli, ["validate", "--partners-dir", str(PARTNERS_DIR)])
+    assert result.exit_code == 0, result.output
+    assert "OK" in result.output and "FAIL" not in result.output
+
+
+def test_validate_fails_on_unknown_key(runner, tmp_path):
+    _write_partner(tmp_path, "acme", _VALID_PARTNER.format(name="acme", path="/acme").replace("response:", "respose:"))
+    result = runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "FAIL" in result.output and "unknown key 'respose'" in result.output
+
+
+def test_validate_fails_on_route_conflict_between_partners(runner, tmp_path):
+    _write_partner(tmp_path, "aaa", _VALID_PARTNER.format(name="aaa", path="/shared"))
+    _write_partner(tmp_path, "bbb", _VALID_PARTNER.format(name="bbb", path="/shared"))
+    result = runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "Route conflict: GET /shared is already defined by 'aaa/ping'" in result.output
+
+
+def test_validate_reports_every_file_not_just_the_first(runner, tmp_path):
+    _write_partner(tmp_path, "bad1", "")
+    _write_partner(tmp_path, "bad2", _VALID_PARTNER.format(name="bad2", path="no-slash"))
+    _write_partner(tmp_path, "good", _VALID_PARTNER.format(name="good", path="/good"))
+    result = runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path)])
+    assert result.exit_code == 1
+    assert result.output.count("FAIL") == 2 and "OK    good/partner.yaml" in result.output
+    assert "2 of 3" in result.output
+
+
+def test_validate_empty_and_missing_dir(runner, tmp_path):
+    assert runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path)]).exit_code == 0
+    assert runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path / "nope")]).exit_code == 1
+
+
+def test_generate_dry_run_rejects_unknown_key(runner, tmp_path):
+    f = tmp_path / "p.yaml"
+    f.write_text(
+        _VALID_PARTNER.format(name="acme", path="/acme").replace("status: 200", "status: 200\n          bodyy: {}")
+    )
+    result = runner.invoke(cli, ["generate", "--file", str(f), "--partners-dir", str(tmp_path), "--dry-run"])
+    assert result.exit_code != 0
+    assert "bodyy" in result.output

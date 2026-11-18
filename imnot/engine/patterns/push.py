@@ -40,8 +40,7 @@ def make_push_handler(
 ) -> Callable:
     """Return a route handler for a push submit endpoint.
 
-    Validates YAML config at startup — raises ValueError if callback URL source
-    is missing or ambiguous.
+    The loader (``_parse_endpoint``) guarantees exactly one callback URL source is set.
     """
     dp_name = datapoint.name
     status_code: int = endpoint.response.get("status", 202)
@@ -50,17 +49,6 @@ def make_push_handler(
     callback_method: str = endpoint.response.get("callback_method", "POST").upper()
     callback_delay: float = float(endpoint.response.get("callback_delay_seconds", 0))
     validate_rules = endpoint.validate
-
-    if callback_url_field and callback_url_header:
-        raise ValueError(
-            f"Push endpoint {endpoint.method} {endpoint.path}: "
-            "only one of 'callback_url_field' or 'callback_url_header' may be set, not both."
-        )
-    if not callback_url_field and not callback_url_header:
-        raise ValueError(
-            f"Push endpoint {endpoint.method} {endpoint.path}: "
-            "one of 'callback_url_field' or 'callback_url_header' is required."
-        )
 
     async def handler(request: Request, background_tasks: BackgroundTasks) -> Response:
         # Parse body unconditionally for push (always has a body when callback_url_field is set)
