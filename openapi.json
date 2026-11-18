@@ -187,6 +187,23 @@
         }
       }
     },
+    "/imnot/admin/partners/examples": {
+      "post": {
+        "summary": "Load Examples Handler",
+        "description": "Load the example partners of `imnot init` (staylink, bookingco, ratesync) with their payloads.\n\nClassic mode writes them to the partners directory, like `imnot init`. Stateless mode keeps\nthem in memory, so a reload or a restart drops them. All or nothing: 409 if any of them\nalready exists, 403 when the partners directory cannot be written.",
+        "operationId": "load_examples_handler_imnot_admin_partners_examples_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/imnot/admin/partners/{partner_name}": {
       "get": {
         "summary": "Get Partner",
