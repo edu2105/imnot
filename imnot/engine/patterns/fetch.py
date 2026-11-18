@@ -23,6 +23,7 @@ from typing import Any, Callable
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
+from imnot.engine.errors import rate_limit_response, validation_error_response
 from imnot.engine.patterns import no_payload_response
 from imnot.engine.rate_limiter import RateLimiter
 from imnot.engine.session_store import SessionStore
@@ -52,11 +53,7 @@ def make_fetch_handler(
             key = (partner, dp_name, endpoint.method, endpoint.path)
             allowed, retry_after = limiter.check(key, capacity, refill_per_second, time.time())
             if not allowed:
-                return JSONResponse(
-                    status_code=429,
-                    content={"detail": f"Rate limit exceeded: {capacity} requests per minute"},
-                    headers={"Retry-After": str(retry_after)},
-                )
+                return rate_limit_response(rate_limit, capacity, retry_after)
 
         if validate_rules is not None:
             body: Any = None
@@ -67,7 +64,7 @@ def make_fetch_handler(
                     body = None
             errors = validate_request(validate_rules, body, request.query_params, request.headers)
             if errors:
-                return JSONResponse(status_code=422, content={"detail": errors})
+                return validation_error_response(validate_rules, errors)
 
         session_id: str | None = request.headers.get("X-Imnot-Session")
         payload: dict[str, Any] | None = store.resolve_payload(

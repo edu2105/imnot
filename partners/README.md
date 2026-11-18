@@ -965,6 +965,39 @@ endpoints:
 
 ---
 
+### Partner-shaped errors (`error:`)
+
+By default a failed `validate:` answers `422 {"detail": [...]}` and an exceeded `rate_limit:`
+answers `429 {"detail": "Rate limit exceeded: …"}` with `Retry-After`. To answer like the real
+partner instead, add an `error:` block inside `validate:` or `rate_limit:`:
+
+```yaml
+validate:
+  query:
+    id: {required: true}
+  error:
+    status: 400
+    headers: {X-Error-Code: INVALID}
+    body: {code: INVALID_REQUEST, message: "{{message}}", details: "{{errors}}"}
+rate_limit:
+  requests_per_minute: 60
+  error:
+    status: 429
+    body: {error: too_many_requests, retryInSeconds: "{{retry_after}}"}
+```
+
+| Placeholder | In | Value |
+|-------------|----|-------|
+| `{{errors}}` | `validate.error` | The list of validation errors (a whole-string placeholder becomes the JSON list) |
+| `{{message}}` | `validate.error` | The errors joined with `; ` |
+| `{{retry_after}}` | `rate_limit.error` | Seconds until the next request is allowed (`Retry-After` is always sent too) |
+| `{{limit}}` | `rate_limit.error` | `requests_per_minute` |
+
+`status` is required; `body` and `headers` are optional (no `body` → an empty response). A
+placeholder from the other block renders empty; a list in a header is joined with `; `.
+
+---
+
 ## Rate limiting
 
 `fetch`-pattern endpoints can declare a `rate_limit:` block. imnot enforces a requests-per-minute ceiling with a token bucket; once exceeded, it returns `429` with a `Retry-After` header instead of the mock response — checked before `validate:` and before any payload/session work.
