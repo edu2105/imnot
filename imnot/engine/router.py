@@ -288,16 +288,24 @@ def _register_consumer_routes(
 
 
 def _unregister_partner_routes(app: FastAPI, partner_name: str) -> None:
-    """Remove every consumer and admin route that *partner_name* registered, and its bookkeeping.
+    """Remove every consumer and admin route that *partner_name* registered, and its bookkeeping."""
+    registered: dict[tuple[str, str], str] = app.state.registered_routes
+    owned = {key for key, owner in registered.items() if owner.split("/", 1)[0] == partner_name}
+    admin_dps = {k for k in app.state.registered_admin_dps if k[0] == partner_name}
+    _unregister_routes(app, owned, admin_dps)
 
+
+def _unregister_routes(app: FastAPI, route_keys: set[tuple[str, str]], admin_dps: set[tuple[str, str]]) -> None:
+    """Remove the given consumer routes ``(METHOD, path)`` and the admin routes of ``(partner, datapoint)``.
+
+    Also drops their bookkeeping (registered_routes, registered_admin_dps, static/pagination configs).
     Infra routes (``/imnot/admin/partners``, ``/imnot/admin/reload``…) are never touched: admin
     routes are matched by the exact paths ``_register_admin_routes`` builds, not by prefix.
     """
     registered: dict[tuple[str, str], str] = app.state.registered_routes
-    owned = {key for key, owner in registered.items() if owner.split("/", 1)[0] == partner_name}
-    admin_prefixes = {f"/imnot/admin/{p}/{dp}/" for (p, dp) in app.state.registered_admin_dps if p == partner_name}
+    owners = {registered[key] for key in route_keys if key in registered}
     admin_suffixes = ("payload", "payload/session", "payload/session/{session_id}", "callback/{request_id}/retrigger")
-    admin_paths = {prefix + suffix for prefix in admin_prefixes for suffix in admin_suffixes}
+    admin_paths = {f"/imnot/admin/{p}/{dp}/{suffix}" for (p, dp) in admin_dps for suffix in admin_suffixes}
 
     def _belongs(route: Any) -> bool:
         path: str | None = getattr(route, "path", None)
@@ -307,16 +315,14 @@ def _unregister_partner_routes(app: FastAPI, partner_name: str) -> None:
         if path in admin_paths:
             return True
         canonical = path[:-1] if path.endswith("/") and path != "/" else path
-        return any((m, path) in owned or (m, canonical) in owned for m in methods)
+        return any((m, path) in route_keys or (m, canonical) in route_keys for m in methods)
 
     app.router.routes[:] = [r for r in app.router.routes if not _belongs(r)]
-    for key in owned:
-        del registered[key]
-    app.state.registered_admin_dps.difference_update(
-        {k for k in app.state.registered_admin_dps if k[0] == partner_name}
-    )
+    for key in route_keys:
+        registered.pop(key, None)
+    app.state.registered_admin_dps.difference_update(admin_dps)
     for store_dict in (app.state.configs, app.state.paginated_config_refs):
-        for key in [k for k in store_dict if k[0] == partner_name]:
+        for key in [k for k in store_dict if (k[2], k[3]) in route_keys and f"{k[0]}/{k[1]}" in owners]:
             del store_dict[key]
     app.openapi_schema = None  # rebuild /openapi.json without the removed routes
 
@@ -606,9 +612,9 @@ def _register_infra_routes(
           is updated in place so the very next request serves the new YAML body.
         - For entirely new partners or datapoints: consumer routes (and admin routes
           for payload patterns) are registered dynamically on the running app.
-        - Removed partners/datapoints are NOT unregistered (existing routes stay
-          active but serve their last-known config).  Restart the server to
-          fully purge removed definitions.
+        - Routes whose endpoint, datapoint or partner is no longer in the YAML (or moved to
+          another datapoint) are unregistered, with their admin routes; they are listed in
+          ``removed``. Changed validate:/rate_limit:/fail: on an existing route still need a restart.
         """
         partners_dir: Path | None = request.app.state.partners_dir
         if partners_dir is None:
@@ -632,6 +638,36 @@ def _register_infra_routes(
         updated: list[str] = []
         added: list[str] = []
         conflicts: list[str] = []
+        removed: list[str] = []
+
+        # A partner whose partner.yaml still exists but no longer loads (a typo mid-edit) keeps its
+        # current routes; only definitions that are really gone are unregistered.
+        on_disk = {f.resolve() for f in partners_dir.glob("*/partner.yaml")}
+        loaded_files = {p.source_path.resolve() for p in new_partners}
+        kept = [p for p in partners if p.source_path.resolve() in on_disk - loaded_files]
+        kept_names = {p.partner for p in kept}
+        skipped = sorted(kept_names)
+
+        # Unregister what the YAML no longer defines, so a deleted fixture stops answering.
+        wanted = {
+            (ep.method.upper(), ep.path): f"{p.partner}/{dp.name}"
+            for p in new_partners
+            for dp in p.datapoints
+            for ep in dp.endpoints
+        }
+        stale = {
+            key
+            for key, owner in registered.items()
+            if wanted.get(key) != owner and owner.split("/", 1)[0] not in kept_names
+        }
+        wanted_admin = {
+            (p.partner, dp.name) for p in new_partners for dp in p.datapoints if dp.pattern in PAYLOAD_PATTERNS
+        }
+        stale_admin = {k for k in registered_admin if k not in wanted_admin and k[0] not in kept_names}
+        if stale or stale_admin:
+            removed = sorted(f"{method} {path}" for method, path in stale)
+            removed += sorted(f"admin routes for {p}/{dp}" for p, dp in stale_admin)
+            _unregister_routes(request.app, stale, stale_admin)
 
         for partner in new_partners:
             for dp in partner.datapoints:
@@ -690,9 +726,21 @@ def _register_infra_routes(
                         partners[i] = new_partner
                         break
 
-        _http_logger.info("Reload: updated=%s added=%s conflicts=%s", updated, added, conflicts)
-        status = "ok" if not conflicts else "partial"
-        return JSONResponse({"status": status, "updated": updated, "added": added, "conflicts": conflicts})
+        keep_names = {p.partner for p in new_partners} | kept_names
+        partners[:] = [p for p in partners if p.partner in keep_names]
+
+        _http_logger.info("Reload: updated=%s added=%s removed=%s conflicts=%s", updated, added, removed, conflicts)
+        status = "ok" if not conflicts and not skipped else "partial"
+        return JSONResponse(
+            {
+                "status": status,
+                "updated": updated,
+                "added": added,
+                "removed": removed,
+                "skipped": skipped,
+                "conflicts": conflicts,
+            }
+        )
 
     async def create_partner_handler(request: Request) -> JSONResponse:
         """Validate raw YAML body, write it to disk, and hot-load its routes.
