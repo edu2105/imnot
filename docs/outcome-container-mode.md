@@ -108,7 +108,9 @@ imnot isolates them from each other.
    uid; they need `chown -R 10001:10001` once (documented in `docs/deployment.md`). Alternative: keep
    the old uid and only make it numeric.
 2. **`imnot validate` with no partners exits 1**: a fix for CI, but a change for anyone validating an
-   empty directory on purpose.
+   empty directory on purpose. *Revised with the first-use work:* a completely empty directory now
+   passes (`validate` and `--strict`), so a UI-only instance can start; content without any
+   `<partner>/partner.yaml` still exits 1, which is the wrong-layout case the rule was for.
 3. **Require an admin key when binding to `0.0.0.0`**: today it is a warning. With one instance per team
    on a shared cluster it should arguably be an error, but that breaks current docker-compose setups
    that run without a key. Candidate for 2.0, or an opt-in flag now.

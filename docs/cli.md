@@ -6,13 +6,14 @@
 |---------|-------------|
 | `imnot init` | Scaffold a new project with three example partners covering all six patterns (`ratesync` ships example payloads) and `imnot.toml` |
 | `imnot init --dir <path>` | Scaffold into a specific directory (created if it does not exist) |
+| `imnot init --empty` | Scaffold without the example partners: an empty `partners/` and `imnot.toml`. The admin UI then offers to create your first partner or load the examples |
 | `imnot start` | Load partner YAMLs and start the server. Starts with zero partners if no `partners/` exists. Auto-creates `imnot.toml` on first run. |
 | `imnot start --stateless` | Write nothing to disk: in-memory database, logs to stdout only, no `imnot.pid`, no `imnot.toml`. For containers; see [deployment.md](deployment.md#containers-without-storage-stateless-mode) |
-| `imnot start --strict` | Exit 1 unless every partner passes `imnot validate` (and there is at least one) |
+| `imnot start --strict` | Exit 1 unless the partners directory passes `imnot validate` (same rule for an empty one, see below) |
 | `imnot start --reload` | Start with auto-restart on any YAML change (recommended for development) |
 | `imnot stop` | Stop the running server (sends SIGTERM to PID in `imnot.pid`) |
 | `imnot stop --pid-file <path>` | Stop using an explicit PID file path |
-| `imnot validate` | Check every `partner.yaml` strictly (schema, unknown keys, payload files, route conflicts across partners); exits 1 on any problem, or if it finds no `partner.yaml`. Good for CI |
+| `imnot validate` | Check every `partner.yaml` strictly (schema, unknown keys, payload files, route conflicts across partners); exits 1 on any problem. Good for CI. With no `partner.yaml` at all: a completely empty directory passes (zero partners is valid; dotfiles such as `.gitkeep` do not count), a directory with files or subfolders but no `<partner>/partner.yaml` fails (wrong layout), and a missing directory fails |
 | `imnot generate --file <path>` | Validate (strictly, like `imnot validate`) and scaffold a partner YAML into `partners/` |
 | `imnot generate --file <path> --dry-run --json` | Validate only — print structured result, write nothing |
 | `imnot export postman` | Generate a Postman collection v2.1 JSON from all loaded partners |
