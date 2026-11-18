@@ -48,7 +48,7 @@ from imnot.loader.yaml_loader import (
     load_partners,
     payload_shape_error,
 )
-from imnot.partners import dropped_fields, register_partner
+from imnot.partners import dropped_fields, merge_unmanaged_fields, register_partner
 from imnot.postman import build_postman_collection
 
 _cli_logger = logging.getLogger("imnot.cli")
@@ -96,6 +96,7 @@ def register_routes(
     app.state.partners_dir = partners_dir
     app.state.base_url = base_url
     app.state.registered_routes = registered_routes
+    app.state.auth_required = bool(admin_key)  # reported by /healthz so the UI knows whether to ask for a key
     app.state.fault_counters = {}  # fail.first_n call counts, see engine/faults.py
     app.state.registered_admin_dps = registered_admin_dps
     app.state.default_limit = default_limit
@@ -496,8 +497,9 @@ def _register_infra_routes(
     partners: list[PartnerDef],
     store: SessionStore,
 ) -> None:
-    async def healthz() -> JSONResponse:
-        return JSONResponse({"status": "ok", "version": _IMNOT_VERSION})
+    async def healthz(request: Request) -> JSONResponse:
+        auth_required = bool(getattr(request.app.state, "auth_required", False))
+        return JSONResponse({"status": "ok", "version": _IMNOT_VERSION, "auth_required": auth_required})
 
     async def list_sessions() -> JSONResponse:
         return JSONResponse(store.list_sessions())
@@ -544,6 +546,20 @@ def _register_infra_routes(
                 partners.pop(i)
                 break
         return JSONResponse({"status": "ok", "partner": partner_name})
+
+    async def get_partner(partner_name: str, request: Request) -> JSONResponse:
+        """The partner's full partner.yaml as JSON, so the Builder can pre-fill every field it edits."""
+        partners_dir: Path | None = request.app.state.partners_dir
+        if partners_dir is None or not re.match(r"^[a-zA-Z0-9_-]{1,64}$", partner_name):
+            return JSONResponse(status_code=404, content={"detail": f"Partner '{partner_name}' not found."})
+        path = partners_dir / partner_name / "partner.yaml"
+        if not path.is_file():
+            return JSONResponse(status_code=404, content={"detail": f"Partner '{partner_name}' not found."})
+        try:
+            raw = yaml.safe_load(path.read_text())
+        except yaml.YAMLError as exc:
+            return JSONResponse(status_code=422, content={"detail": f"partner.yaml is not valid YAML: {exc}"})
+        return JSONResponse(raw)
 
     async def list_partners() -> JSONResponse:
         def _serialize_dp(dp: DatapointDef) -> dict:
@@ -684,6 +700,8 @@ def _register_infra_routes(
 
         Query params:
             force (bool, default false) — overwrite if partner already exists.
+            merge_from (partner name, optional) — first copy over the fields of that partner's current
+                partner.yaml that the Builder form never writes (validate:, fail:, headers, …).
             compare_to (partner name, optional) — before writing, compare against that partner's
                 current partner.yaml and return 409 with ``dropped`` if fields would be lost. Used by
                 the Builder's edit mode, which does not round-trip every field.
@@ -699,6 +717,17 @@ def _register_infra_routes(
 
         force = request.query_params.get("force", "false").lower() == "true"
         yaml_text = (await request.body()).decode()
+
+        merge_from = request.query_params.get("merge_from")
+        if merge_from:
+            if not re.match(r"^[a-zA-Z0-9_-]{1,64}$", merge_from):
+                return JSONResponse(status_code=400, content={"detail": "Invalid merge_from partner name."})
+            merge_file = partners_dir / merge_from / "partner.yaml"
+            if merge_file.is_file():
+                try:
+                    yaml_text = merge_unmanaged_fields(merge_file.read_text(), yaml_text)
+                except yaml.YAMLError:
+                    pass  # invalid new YAML: register_partner below returns the 422
 
         compare_to = request.query_params.get("compare_to")
         if compare_to:
@@ -830,6 +859,7 @@ def _register_infra_routes(
     app.add_api_route("/imnot/admin/faults", reset_faults, methods=["DELETE"])
     app.add_api_route("/imnot/admin/partners", list_partners, methods=["GET"])
     app.add_api_route("/imnot/admin/partners", create_partner_handler, methods=["POST"])
+    app.add_api_route("/imnot/admin/partners/{partner_name}", get_partner, methods=["GET"])
     app.add_api_route("/imnot/admin/partners/{partner_name}", delete_partner, methods=["DELETE"])
     app.add_api_route("/imnot/admin/reload", reload_partners, methods=["POST"])
     app.add_api_route("/imnot/admin/postman", postman_collection, methods=["GET"])
