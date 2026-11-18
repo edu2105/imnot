@@ -38,7 +38,7 @@ imnot start
 
 > `pipx` installs CLI tools into isolated environments. Alternatively: `pip install imnot` inside an existing virtual environment.
 
-`imnot init` creates a `partners/` directory with two working example partners (`staylink` and `bookingco`) that cover all six patterns. Edit or replace them whenever you're ready.
+`imnot init` creates a `partners/` directory with three working example partners that cover all six patterns: `staylink` (oauth + polling), `bookingco` (static + fetch) and `ratesync` (callback + paginated, with example payloads in `payloads/`, so it answers right away). Edit or replace them whenever you're ready.
 
 ---
 

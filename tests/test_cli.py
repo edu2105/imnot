@@ -1391,3 +1391,30 @@ def test_db_discovery_still_walks_up_inside_a_project(tmp_path, monkeypatch):
     sub.mkdir(parents=True)
     monkeypatch.chdir(sub)
     assert _resolve_db("imnot.db") == tmp_path / "imnot.db"
+
+
+def test_init_examples_cover_all_six_patterns_and_ship_payloads(runner, tmp_path):
+    from imnot.loader.yaml_loader import load_partners
+
+    result = runner.invoke(cli, ["init", "--dir", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    assert "partners/ratesync/payloads/properties.json" in result.output
+
+    partners = load_partners(tmp_path / "partners")
+    patterns = {dp.pattern for p in partners for dp in p.datapoints}
+    assert patterns == {"oauth", "polling", "static", "fetch", "callback", "paginated"}
+    ratesync = next(p for p in partners if p.partner == "ratesync")
+    assert set(ratesync.seed_payloads) == {"rate_update", "properties"}
+    assert runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path / "partners")]).exit_code == 0
+
+
+def test_init_paginated_example_answers_without_any_upload(runner, tmp_path):
+    from fastapi.testclient import TestClient
+
+    from imnot.api.server import create_app
+
+    runner.invoke(cli, ["init", "--dir", str(tmp_path)])
+    with TestClient(create_app(partners_dir=tmp_path / "partners", db_path=tmp_path / "imnot.db")) as c:
+        page = c.get("/ratesync/v1/properties?limit=2").json()
+    assert [p["id"] for p in page["properties"]] == ["P-001", "P-002"]
+    assert page["total"] == 3 and page["hasMore"] is True

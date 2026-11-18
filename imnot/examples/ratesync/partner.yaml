@@ -1,0 +1,31 @@
+# RateSync — fictional channel manager. Covers the two patterns the other examples don't:
+# callback (it calls your webhook back) and paginated (a paged list). Both have example payloads
+# in payloads/, so they answer right after `imnot init` + `imnot start`.
+partner: ratesync
+description: RateSync fictional partner — demonstrates callback and paginated patterns
+datapoints:
+
+  - name: rate_update
+    description: Submit a rate update; RateSync confirms it later on your callbackUrl
+    pattern: callback
+    endpoints:
+      - method: POST
+        path: /ratesync/v1/rate-updates
+        response:
+          status: 202
+          callback_url_field: callbackUrl
+          callback_delay_seconds: 1
+
+  - name: properties
+    description: Paged list of properties (offset/limit)
+    pattern: paginated
+    pagination:
+      style: offset_limit
+      items_field: properties
+      total_field: total
+      has_more_field: hasMore
+    endpoints:
+      - method: GET
+        path: /ratesync/v1/properties
+        response:
+          status: 200
