@@ -4097,13 +4097,13 @@ img, svg {
       }
       tbody.innerHTML = data.map(function (s, i) {
         var rowClass = i % 2 !== 0 ? 'stripe' : '';
-        return '<tr class="' + rowClass + '">'
+        return '<tr class="' + rowClass + '" data-session-id="' + escHtml(s.session_id) + '">'
           + '<td class="td-session-id"><div class="session-id-cell"><span>' + escHtml(s.session_id) + '</span><button class="btn-copy" onclick="copyToClipboard(\'' + escHtml(s.session_id) + '\',this)" title="Copy session ID"><svg xmlns=\'http://www.w3.org/2000/svg\' fill=\'none\' viewBox=\'0 0 24 24\' stroke=\'currentColor\' stroke-width=\'2\' width=\'12\' height=\'12\' aria-hidden=\'true\'><rect x=\'9\' y=\'9\' width=\'13\' height=\'13\' rx=\'2\'/><path stroke-linecap=\'round\' stroke-linejoin=\'round\' d=\'M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\'/></svg></button></div></td>'
           + '<td class="td-partner">'    + escHtml(s.partner) + '</td>'
           + '<td class="td-datapoint">'  + escHtml(s.datapoint) + '</td>'
           + '<td class="td-created">'    + escHtml(s.created_at || '—') + '</td>'
           + '<td class="td-last-used">'  + escHtml(s.last_used || '—') + '</td>'
-          + '<td><button class="btn-danger-sm" onclick="deleteSession(\'' + escHtml(s.session_id) + '\')">Delete</button></td>'
+          + '<td><button class="btn-danger-sm" onclick="deleteSession(\'' + escHtml(s.session_id) + '\')" title="Deletes the session with all its datapoints">Delete</button></td>'
           + '</tr>';
       }).join('');
     }
@@ -4117,6 +4117,9 @@ img, svg {
     }
 
     function deleteSession(sessionId) {
+      // A session can hold several datapoints (one row each); deleting it removes all of them.
+      var rows = document.querySelectorAll('[data-session-id="' + sessionId + '"]').length;
+      if (rows > 1 && !confirm('Session ' + sessionId + ' has ' + rows + ' datapoints. Delete the whole session?')) return;
       fetch('/imnot/admin/sessions/' + encodeURIComponent(sessionId), {
         method: 'DELETE', headers: authHeaders(),
       })

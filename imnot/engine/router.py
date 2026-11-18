@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hmac
 import logging
+import re
 import shutil
 from importlib.metadata import version as _pkg_version
 from importlib.resources import files as _res_files
@@ -51,6 +52,7 @@ from imnot.partners import dropped_fields, is_safe_partner_name, merge_unmanaged
 from imnot.postman import build_postman_collection
 
 _cli_logger = logging.getLogger("imnot.cli")
+_SESSION_ID = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 _http_logger = logging.getLogger("imnot.http")
 logger = _cli_logger  # startup / registration events go to the CLI stream
 
@@ -391,7 +393,14 @@ def _register_admin_routes(
             return JSONResponse(status_code=400, content={"detail": "Invalid JSON body"})
         if (error := _shape_error(payload)) is not None:
             return error
-        session_id = store.store_session_payload(partner_name, dp_name, payload)
+        # Reuse a session (header or ?session=) to put several datapoints under one X-Imnot-Session.
+        wanted = request.headers.get("X-Imnot-Session") or request.query_params.get("session")
+        if wanted is not None and not _SESSION_ID.match(wanted):
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Session id must be 1-128 letters, digits, '.', '_', ':' or '-'"},
+            )
+        session_id = store.store_session_payload(partner_name, dp_name, payload, session_id=wanted)
         return JSONResponse({"session_id": session_id})
 
     async def get_global(request: Request) -> JSONResponse:
@@ -404,7 +413,7 @@ def _register_admin_routes(
         return JSONResponse(result)
 
     async def get_session(session_id: str) -> JSONResponse:
-        result = store.get_session_payload(session_id)
+        result = store.get_session_payload(session_id, partner_name, dp_name)
         if result is None:
             return JSONResponse(
                 status_code=404,
