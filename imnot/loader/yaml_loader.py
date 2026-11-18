@@ -50,7 +50,9 @@ _RATE_LIMIT_VALID_KEYS = {"requests_per_minute"}
 # warning when the server loads partners and an error in ``imnot validate`` / ``generate``.
 _PARTNER_KEYS = {"partner", "description", "datapoints"}
 _DATAPOINT_KEYS = {"name", "description", "pattern", "endpoints", "pagination"}
-_ENDPOINT_KEYS = {"method", "path", "step", "response", "validate", "rate_limit"}
+_ENDPOINT_KEYS = {"method", "path", "step", "response", "validate", "rate_limit", "delay_ms", "fail"}
+_FAIL_KEYS = {"status", "body", "headers", "first_n"}
+MAX_DELAY_MS = 60_000
 _RESPONSE_KEYS: dict[str, set[str]] = {
     "static": {"status", "body", "headers"},
     "oauth": {"status", "token_type", "expires_in"},
@@ -84,6 +86,8 @@ class EndpointDef:
     response: dict[str, Any]  # raw response config from YAML
     validate: dict[str, Any] | None = None  # raw validate block; None when absent
     rate_limit: dict[str, Any] | None = None  # raw rate_limit block; None when absent
+    delay_ms: int | None = None  # added latency before every response (see engine/faults.py)
+    fail: dict[str, Any] | None = None  # simulated failure block; None when absent
 
 
 @dataclass
@@ -211,6 +215,23 @@ def _validate_rate_limit_block(
         )
 
 
+def _validate_fail_block(fail: Any, where: str) -> None:
+    if not isinstance(fail, dict):
+        raise ValueError(f"{where}: 'fail' must be a mapping (got {fail!r})")
+    unknown = set(fail) - _FAIL_KEYS
+    if unknown:
+        raise ValueError(f"{where}: unknown key(s) in 'fail:' {sorted(unknown)}. Allowed: {sorted(_FAIL_KEYS)}")
+    status = fail.get("status")
+    if isinstance(status, bool) or not isinstance(status, int) or not 100 <= status <= 599:
+        raise ValueError(f"{where}: 'fail.status' is required and must be an HTTP status code (got {status!r})")
+    first_n = fail.get("first_n")
+    if first_n is not None and (isinstance(first_n, bool) or not isinstance(first_n, int) or first_n <= 0):
+        raise ValueError(f"{where}: 'fail.first_n' must be a positive integer (got {first_n!r})")
+    headers = fail.get("headers")
+    if headers is not None and not isinstance(headers, dict):
+        raise ValueError(f"{where}: 'fail.headers' must be a mapping (got {headers!r})")
+
+
 def _check_unknown_keys(raw: dict[str, Any], known: set[str], where: str, warns: list[str] | None) -> None:
     if warns is None:
         return
@@ -262,6 +283,15 @@ def _parse_endpoint(
     if raw_validate is not None:
         _validate_validate_block(raw_validate, f"{method.upper()} {path}")
 
+    delay_ms = raw.get("delay_ms")
+    if delay_ms is not None and (
+        isinstance(delay_ms, bool) or not isinstance(delay_ms, int) or not 0 <= delay_ms <= MAX_DELAY_MS
+    ):
+        raise ValueError(f"{where}: 'delay_ms' must be an integer between 0 and {MAX_DELAY_MS} (got {delay_ms!r})")
+    fail = raw.get("fail")
+    if fail is not None:
+        _validate_fail_block(fail, where)
+
     raw_rate_limit = raw.get("rate_limit")
     if raw_rate_limit is not None:
         _validate_rate_limit_block(raw_rate_limit, f"{method.upper()} {path}", pattern, pagination)
@@ -273,6 +303,8 @@ def _parse_endpoint(
         response=response,
         validate=raw_validate,
         rate_limit=raw_rate_limit,
+        delay_ms=delay_ms,
+        fail=fail,
     )
 
 

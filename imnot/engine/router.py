@@ -30,6 +30,7 @@ from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 
 from imnot.config import UIConfig
+from imnot.engine.faults import with_faults
 from imnot.engine.patterns.async_ import make_async_handlers
 from imnot.engine.patterns.fetch import make_fetch_handler
 from imnot.engine.patterns.oauth import make_oauth_handler
@@ -88,6 +89,7 @@ def register_routes(
     app.state.partners_dir = partners_dir
     app.state.base_url = base_url
     app.state.registered_routes = registered_routes
+    app.state.fault_counters = {}  # fail.first_n call counts, see engine/faults.py
     app.state.registered_admin_dps = registered_admin_dps
     app.state.default_limit = default_limit
     app.state.rate_limiter = RateLimiter()
@@ -205,8 +207,10 @@ def _register_consumer_routes(
 ) -> None:
     owner = f"{partner.partner}/{datapoint.name}"
 
-    def _add(path: str, handler: Any, method: str) -> None:
-        """Register canonical path + trailing-slash alias (hidden from schema)."""
+    def _add(endpoint: EndpointDef, handler: Any) -> None:
+        """Register canonical path + trailing-slash alias (hidden from schema), with delay_ms/fail applied."""
+        path, method = endpoint.path, endpoint.method
+        handler = with_faults(handler, endpoint, app.state.fault_counters)
         app.add_api_route(path, handler, methods=[method])
         if path != "/":
             app.add_api_route(path + "/", handler, methods=[method], include_in_schema=False)
@@ -215,7 +219,7 @@ def _register_consumer_routes(
         for endpoint in datapoint.endpoints:
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             handler = make_oauth_handler(endpoint)
-            _add(endpoint.path, handler, endpoint.method)
+            _add(endpoint, handler)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered oauth route %s %s", endpoint.method, endpoint.path)
 
@@ -223,7 +227,7 @@ def _register_consumer_routes(
         for endpoint in datapoint.endpoints:
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             handler = make_static_handler(partner.partner, datapoint.name, endpoint, configs)
-            _add(endpoint.path, handler, endpoint.method)
+            _add(endpoint, handler)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered static route %s %s", endpoint.method, endpoint.path)
 
@@ -231,7 +235,7 @@ def _register_consumer_routes(
         for endpoint in datapoint.endpoints:
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             handler = make_fetch_handler(partner.partner, datapoint, endpoint, store, limiter)
-            _add(endpoint.path, handler, endpoint.method)
+            _add(endpoint, handler)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered fetch route %s %s", endpoint.method, endpoint.path)
 
@@ -245,7 +249,7 @@ def _register_consumer_routes(
         for step_num, handler in handlers.items():
             endpoint = step_map[step_num]
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
-            _add(endpoint.path, handler, endpoint.method)
+            _add(endpoint, handler)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug(
                 "Registered polling step %d route %s %s",
@@ -258,7 +262,7 @@ def _register_consumer_routes(
         for endpoint in datapoint.endpoints:
             _check_route_collision(endpoint.method, endpoint.path, partner.partner, datapoint.name, registered_routes)
             handler = make_push_handler(partner.partner, datapoint, endpoint, store)
-            _add(endpoint.path, handler, endpoint.method)
+            _add(endpoint, handler)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered callback route %s %s", endpoint.method, endpoint.path)
 
@@ -271,7 +275,7 @@ def _register_consumer_routes(
             handler = make_paginated_handler(
                 partner.partner, datapoint, endpoint, store, default_limit, pagination_ref, limiter
             )
-            _add(endpoint.path, handler, endpoint.method)
+            _add(endpoint, handler)
             registered_routes[(endpoint.method.upper(), endpoint.path)] = owner
             logger.debug("Registered paginated route %s %s", endpoint.method, endpoint.path)
 
@@ -478,6 +482,13 @@ def _register_infra_routes(
 
     async def list_sessions() -> JSONResponse:
         return JSONResponse(store.list_sessions())
+
+    async def reset_faults(request: Request) -> JSONResponse:
+        """Reset fail.first_n counters, so failing endpoints fail again from the first call."""
+        counters: dict = request.app.state.fault_counters
+        cleared = len(counters)
+        counters.clear()
+        return JSONResponse({"status": "ok", "cleared": cleared})
 
     async def delete_session(session_id: str) -> JSONResponse:
         deleted = store.delete_session(session_id)
@@ -797,6 +808,7 @@ def _register_infra_routes(
     app.add_api_route("/healthz", healthz, methods=["GET"])
     app.add_api_route("/imnot/admin/sessions", list_sessions, methods=["GET"])
     app.add_api_route("/imnot/admin/sessions/{session_id}", delete_session, methods=["DELETE"])
+    app.add_api_route("/imnot/admin/faults", reset_faults, methods=["DELETE"])
     app.add_api_route("/imnot/admin/partners", list_partners, methods=["GET"])
     app.add_api_route("/imnot/admin/partners", create_partner_handler, methods=["POST"])
     app.add_api_route("/imnot/admin/partners/{partner_name}", delete_partner, methods=["DELETE"])
