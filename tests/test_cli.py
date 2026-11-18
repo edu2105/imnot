@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import signal
 from pathlib import Path
 from unittest.mock import patch
@@ -1348,3 +1349,45 @@ def test_validate_reports_bad_payload_files(runner, tmp_path):
     result = runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path)])
     assert result.exit_code == 1
     assert "payloads/ping.json" in result.output and "takes no payload" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Stage 4 UX: startup summary, project-root discovery
+# ---------------------------------------------------------------------------
+
+
+def test_start_prints_a_summary_with_ui_partners_skipped_and_missing_payloads(runner, tmp_path):
+    shutil.copytree(PARTNERS_DIR, tmp_path / "partners", ignore=shutil.ignore_patterns("README.md"))
+    (tmp_path / "partners" / "broken").mkdir()
+    (tmp_path / "partners" / "broken" / "partner.yaml").write_text("partner: broken\n")
+    with patch("imnot.cli.uvicorn.run"):
+        result = runner.invoke(
+            cli, ["start", "--partners-dir", str(tmp_path / "partners"), "--db", str(tmp_path / "imnot.db")]
+        )
+    assert result.exit_code == 0, result.output
+    assert "Admin UI:  http://localhost:8000/imnot/admin/ui" in result.output
+    assert "Partners:  2 loaded (bookingco, staylink)" in result.output
+    assert "Skipped:   broken" in result.output
+    assert "No payload yet: bookingco/charges" in result.output
+
+
+def test_db_discovery_stops_at_the_project_root(runner, tmp_path, monkeypatch):
+    (tmp_path / "imnot.db").touch()  # an outer project's DB
+    inner = tmp_path / "inner"
+    inner.mkdir()
+    (inner / "imnot.toml").write_text("")
+    monkeypatch.chdir(inner)
+    result = runner.invoke(cli, ["status"])
+    assert result.exit_code == 1
+    assert "project root" in result.output
+
+
+def test_db_discovery_still_walks_up_inside_a_project(tmp_path, monkeypatch):
+    from imnot.cli import _resolve_db
+
+    (tmp_path / "imnot.toml").write_text("")
+    (tmp_path / "imnot.db").touch()
+    sub = tmp_path / "tests" / "deep"
+    sub.mkdir(parents=True)
+    monkeypatch.chdir(sub)
+    assert _resolve_db("imnot.db") == tmp_path / "imnot.db"

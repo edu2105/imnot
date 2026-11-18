@@ -117,6 +117,22 @@ class PartnerDef:
 PAYLOAD_PATTERNS = {"fetch", "polling", "callback", "paginated"}
 
 
+def payload_shape_error(dp: DatapointDef, payload: Any) -> str | None:
+    """Why *payload* can never be served by *dp*'s routes, or None if its shape is fine.
+
+    Shared by payload files (load time) and the admin upload endpoints (upload time).
+    """
+    if dp.pattern == "paginated" and not isinstance(payload, list):
+        return (
+            "a 'paginated' payload must be a JSON array of items; imnot builds the envelope "
+            "(items_field, totals, next links) itself"
+        )
+    keyed_by = next((ep.response["payload_by"] for ep in dp.endpoints if ep.response.get("payload_by")), None)
+    if keyed_by is not None and not isinstance(payload, dict):
+        return f"this datapoint uses payload_by: {keyed_by}; the payload must be a JSON object keyed by it"
+    return None
+
+
 def load_payload_files(partner: PartnerDef, payloads_dir: Path) -> tuple[dict[str, Any], list[str]]:
     """Read ``<payloads_dir>/<datapoint>.json`` files for *partner*.
 
@@ -143,8 +159,9 @@ def load_payload_files(partner: PartnerDef, payloads_dir: Path) -> tuple[dict[st
         except (ValueError, UnicodeDecodeError) as exc:
             problems.append(f"{label}: invalid JSON ({exc})")
             continue
-        if dp.pattern == "paginated" and not isinstance(payload, list):
-            problems.append(f"{label}: a 'paginated' payload must be a JSON array of items")
+        shape_error = payload_shape_error(dp, payload)
+        if shape_error is not None:
+            problems.append(f"{label}: {shape_error}")
             continue
         payloads[dp.name] = payload
     return payloads, problems

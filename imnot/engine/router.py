@@ -40,7 +40,14 @@ from imnot.engine.patterns.static import make_static_handler
 from imnot.engine.rate_limiter import RateLimiter
 from imnot.engine.session_store import SessionStore
 from imnot.engine.stress_router import register_stress_routes
-from imnot.loader.yaml_loader import PAYLOAD_PATTERNS, DatapointDef, EndpointDef, PartnerDef, load_partners
+from imnot.loader.yaml_loader import (
+    PAYLOAD_PATTERNS,
+    DatapointDef,
+    EndpointDef,
+    PartnerDef,
+    load_partners,
+    payload_shape_error,
+)
 from imnot.partners import dropped_fields, register_partner
 from imnot.postman import build_postman_collection
 
@@ -331,11 +338,20 @@ def _register_admin_routes(
     global_path = f"/imnot/admin/{partner_name}/{dp_name}/payload"
     session_path = f"/imnot/admin/{partner_name}/{dp_name}/payload/session"
 
+    def _shape_error(payload: Any) -> JSONResponse | None:
+        """Reject a payload the routes could never serve, at upload time instead of on every GET."""
+        problem = payload_shape_error(datapoint, payload)
+        if problem is None:
+            return None
+        return JSONResponse(status_code=422, content={"detail": problem[0].upper() + problem[1:]})
+
     async def upload_global(request: Request) -> JSONResponse:
         try:
             payload: dict[str, Any] = await request.json()
         except Exception:
             return JSONResponse(status_code=400, content={"detail": "Invalid JSON body"})
+        if (error := _shape_error(payload)) is not None:
+            return error
         store.store_global_payload(partner_name, dp_name, payload)
         return JSONResponse({"status": "ok", "partner": partner_name, "datapoint": dp_name})
 
@@ -344,6 +360,8 @@ def _register_admin_routes(
             payload: dict[str, Any] = await request.json()
         except Exception:
             return JSONResponse(status_code=400, content={"detail": "Invalid JSON body"})
+        if (error := _shape_error(payload)) is not None:
+            return error
         session_id = store.store_session_payload(partner_name, dp_name, payload)
         return JSONResponse({"session_id": session_id})
 

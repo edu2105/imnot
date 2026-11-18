@@ -212,7 +212,8 @@ def start(
         resolved_partners_dir = None
         click.echo(
             "Warning: No partners directory found — server starting with zero partners.\n"
-            "Use `imnot generate` or POST /imnot/admin/partners to add partners.",
+            "Run `imnot init` to create example partners, or use `imnot generate` / "
+            "POST /imnot/admin/partners to add your own.",
             err=True,
         )
         cli_log.warning("No partners directory found — starting with zero partners")
@@ -230,6 +231,7 @@ def start(
         cli_log.warning("Binding to 0.0.0.0 with no IMNOT_ADMIN_KEY — admin endpoints are unauthenticated")
 
     click.echo(f"Starting imnot on http://{effective_host}:{effective_port}")
+    _print_startup_summary(resolved_partners_dir, db_path, effective_host, effective_port, config.ui.enabled)
     cli_log.info(
         "Starting imnot host=%s port=%d db=%s partners_dir=%s admin_key=%s",
         effective_host,
@@ -823,18 +825,73 @@ def _resolve_db(given: str) -> Path:
     if data_candidate.exists():
         return data_candidate.resolve()
     # Walk up from CWD looking for the filename
-    current = Path.cwd()
-    while True:
-        candidate = current / name
+    for directory in _project_dirs():
+        candidate = directory / name
         if candidate.exists():
             return candidate
-        parent = current.parent
-        if parent == current:
-            break
-        current = parent
     raise FileNotFoundError(
-        f"Database '{given}' not found in {Path.cwd()} or any parent directory. Has the server been started yet?"
+        f"Database '{given}' not found in {Path.cwd()} or its parents up to the project root (imnot.toml). "
+        "Has the server been started yet?"
     )
+
+
+def _print_startup_summary(partners_dir: Path | None, db_path: Path, host: str, port: int, ui_enabled: bool) -> None:
+    """What a user needs right after `imnot start`: where the UI is, what loaded, what is missing."""
+    shown_host = "localhost" if host in ("127.0.0.1", "0.0.0.0") else host  # nosec B104 — display only
+    if ui_enabled:
+        click.echo(f"  Admin UI:  http://{shown_host}:{port}/imnot/admin/ui")
+    if partners_dir is None:
+        return
+    yaml_files = sorted(partners_dir.glob("*/partner.yaml"))
+    # This second load only feeds the summary; silence it so its warnings don't print twice
+    # (the server's own load, right after, logs them).
+    logging.disable(logging.CRITICAL)
+    try:
+        partners = load_partners(partners_dir)
+    finally:
+        logging.disable(logging.NOTSET)
+    loaded_paths = {p.source_path.resolve() for p in partners}
+    failed = [f.parent.name for f in yaml_files if f.resolve() not in loaded_paths]
+    names = ", ".join(p.partner for p in partners) or "none"
+    click.echo(f"  Partners:  {len(partners)} loaded ({names})")
+    if failed:
+        click.echo(click.style(f"  Skipped:   {', '.join(failed)} — run `imnot validate` for details", fg="yellow"))
+    missing = _datapoints_without_payload(partners, db_path)
+    if missing:
+        click.echo(f"  No payload yet: {', '.join(missing)} — upload one or add payloads/<datapoint>.json")
+
+
+def _datapoints_without_payload(partners: list, db_path: Path) -> list[str]:
+    stored: set[tuple[str, str]] = set()
+    if db_path.exists():
+        import sqlite3
+
+        try:
+            with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
+                stored = {(r[0], r[1]) for r in conn.execute("SELECT partner, datapoint FROM global_payloads")}
+        except sqlite3.Error:
+            return []
+    return [
+        f"{p.partner}/{dp.name}"
+        for p in partners
+        for dp in p.datapoints
+        if dp.pattern in PAYLOAD_PATTERNS and dp.name not in p.seed_payloads and (p.partner, dp.name) not in stored
+    ]
+
+
+def _project_dirs() -> list[Path]:
+    """CWD and its parents, stopping at the first one that holds imnot.toml (the project root).
+
+    Without the stop, a new project inside another one silently used the outer project's
+    imnot.db. With no imnot.toml anywhere, every parent up to / is searched, as before.
+    """
+    dirs: list[Path] = []
+    current = Path.cwd()
+    while True:
+        dirs.append(current)
+        if (current / "imnot.toml").exists() or current.parent == current:
+            return dirs
+        current = current.parent
 
 
 def _resolve_pid(given: str) -> Path:
@@ -847,17 +904,13 @@ def _resolve_pid(given: str) -> Path:
     if given_path.exists():
         return given_path.resolve()
     name = given_path.name
-    current = Path.cwd()
-    while True:
-        candidate = current / name
+    for directory in _project_dirs():
+        candidate = directory / name
         if candidate.exists():
             return candidate
-        parent = current.parent
-        if parent == current:
-            break
-        current = parent
     raise FileNotFoundError(
-        f"PID file '{given}' not found in {Path.cwd()} or any parent directory. Is the server running?"
+        f"PID file '{given}' not found in {Path.cwd()} or its parents up to the project root (imnot.toml). "
+        "Is the server running?"
     )
 
 
