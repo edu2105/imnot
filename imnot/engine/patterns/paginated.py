@@ -43,7 +43,13 @@ def make_paginated_handler(
                 return rate_limit_response(rate_limit, capacity, retry_after)
 
         if validate_rules is not None:
-            errors = validate_request(validate_rules, None, request.query_params, request.headers)
+            body: Any = None
+            if validate_rules.get("body"):
+                try:
+                    body = await request.json()
+                except Exception:
+                    body = None
+            errors = validate_request(validate_rules, body, request.query_params, request.headers)
             if errors:
                 return validation_error_response(validate_rules, errors)
 
@@ -156,7 +162,7 @@ def _cursor(
 
     raw_cursor = request.query_params.get("cursor", "").strip()
     if raw_cursor:
-        offset = store.resolve_cursor(raw_cursor)
+        offset = store.resolve_cursor(raw_cursor, partner, dp_name)
         if offset is None:
             return JSONResponse(status_code=400, content={"detail": "Cursor expired or not found"})
     else:

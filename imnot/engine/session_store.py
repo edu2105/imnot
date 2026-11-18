@@ -502,14 +502,19 @@ class SessionStore:
             )
         return cursor_id
 
-    def resolve_cursor(self, cursor_id: str) -> int | None:
-        """Return *offset_val* for a cursor, or None if expired or unknown."""
+    def resolve_cursor(self, cursor_id: str, partner: str | None = None, datapoint: str | None = None) -> int | None:
+        """Return *offset_val* for a cursor, or None if expired or unknown.
+
+        With *partner* and *datapoint*, a cursor issued by another datapoint is unknown too.
+        """
         now = _now()
+        sql = "SELECT offset_val, expires_at FROM paginated_cursors WHERE cursor_id = ?"
+        params: tuple = (cursor_id,)
+        if partner is not None and datapoint is not None:
+            sql += " AND partner = ? AND datapoint = ?"
+            params += (partner, datapoint)
         with self._cursor() as cur:
-            cur.execute(
-                "SELECT offset_val, expires_at FROM paginated_cursors WHERE cursor_id = ?",
-                (cursor_id,),
-            )
+            cur.execute(sql, params)
             row = cur.fetchone()
         if row is None:
             return None

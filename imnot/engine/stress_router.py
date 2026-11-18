@@ -82,12 +82,14 @@ def register_stress_routes(app: FastAPI, store: SessionStore, stress_store: Stre
                     content={"detail": f"No global payload uploaded for {partner}/{datapoint}"},
                 )
             target_desc = f"{partner}/{datapoint}"
-        else:
-            target_url = config.get("target_url")
-            if not target_url:
-                return JSONResponse(status_code=422, content={"detail": "target_url is required in standalone mode"})
-            if urlparse(target_url).scheme not in ("http", "https"):
-                return JSONResponse(status_code=422, content={"detail": "target_url must use the http or https scheme"})
+        # Both modes fire at target_url (partner mode only takes the body from the datapoint's payload).
+        # Without this check a partner-mode run with no target_url ended "done" with 0 requests fired.
+        target_url = config.get("target_url")
+        if not target_url or not isinstance(target_url, str):
+            return JSONResponse(status_code=422, content={"detail": f"target_url is required in {mode} mode"})
+        if urlparse(target_url).scheme not in ("http", "https"):
+            return JSONResponse(status_code=422, content={"detail": "target_url must use the http or https scheme"})
+        if mode != "partner":
             target_desc = target_url
 
         run_id = _new_id()
