@@ -75,3 +75,30 @@ def test_old_databases_are_migrated_without_losing_sessions(tmp_path):
     again.init()
     assert again.resolve_payload("bookingco", "charges", "s-old") == {"kept": True}
     again.close()
+
+
+def test_a_failed_migration_leaves_the_old_table_intact(tmp_path):
+    """The INSERT fails mid-migration (a NULL the new schema rejects): nothing may be half-done."""
+    import pytest
+
+    db = tmp_path / "old.db"
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "CREATE TABLE sessions (session_id TEXT PRIMARY KEY, partner TEXT NOT NULL, datapoint TEXT NOT NULL, "
+        "payload TEXT NOT NULL, created_at TEXT, last_used TEXT)"  # created_at nullable in this old copy
+    )
+    conn.execute("INSERT INTO sessions VALUES ('s-1', 'bookingco', 'charges', '{}', NULL, NULL)")
+    conn.commit()
+    conn.close()
+
+    store = SessionStore(db_path=db)
+    with pytest.raises(RuntimeError, match="left unchanged"):
+        store.init()
+    store.close()
+
+    check = sqlite3.connect(db)
+    tables = {r[0] for r in check.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    pk = [r[1] for r in check.execute("PRAGMA table_info(sessions)") if r[5]]
+    rows = check.execute("SELECT session_id FROM sessions").fetchall()
+    check.close()
+    assert "sessions_v1" not in tables and pk == ["session_id"] and rows == [("s-1",)]

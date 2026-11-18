@@ -129,15 +129,19 @@ class SessionStore:
         """Older DBs keyed sessions by session_id alone; re-key them by (session_id, partner, datapoint).
 
         SQLite cannot change a primary key in place, so the rows are copied to a new table inside one
-        transaction. Runs only when the old single-column key is detected.
+        explicit transaction (Python's sqlite3 would otherwise auto-commit the RENAME and CREATE, and a
+        crash mid-way would orphan the old rows). Runs only when the old single-column key is detected.
+        On failure everything is rolled back and init() raises, rather than starting with lost sessions.
         """
         assert self._conn is not None  # nosec B101
         pk_columns = [row["name"] for row in self._conn.execute("PRAGMA table_info(sessions)") if row["pk"]]
         if pk_columns != ["session_id"]:
             return  # new DB (table not created yet) or already migrated
-        with self._conn:
-            self._conn.execute("ALTER TABLE sessions RENAME TO sessions_v1")
-            self._conn.execute(
+        conn = self._conn
+        conn.execute("BEGIN")
+        try:
+            conn.execute("ALTER TABLE sessions RENAME TO sessions_v1")
+            conn.execute(
                 """
                 CREATE TABLE sessions (
                     session_id  TEXT NOT NULL,
@@ -150,11 +154,15 @@ class SessionStore:
                 )
                 """
             )
-            self._conn.execute(
+            conn.execute(
                 "INSERT INTO sessions (session_id, partner, datapoint, payload, created_at, last_used) "
                 "SELECT session_id, partner, datapoint, payload, created_at, last_used FROM sessions_v1"
             )
-            self._conn.execute("DROP TABLE sessions_v1")
+            conn.execute("DROP TABLE sessions_v1")
+            conn.commit()
+        except sqlite3.Error as exc:
+            conn.rollback()
+            raise RuntimeError(f"Could not migrate the sessions table in {self.db_path}; it was left unchanged: {exc}")
         logger.info("Migrated sessions table: key is now (session_id, partner, datapoint)")
 
     def close(self) -> None:
