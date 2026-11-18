@@ -189,3 +189,18 @@
   .header-brand .brand-sub        { display: inline; }
   .header-actions #server-status  { display: inline-block; }
 }
+
+
+/* Stateless-mode notice: a fixed strip under the header, shown when /healthz reports stateless. */
+.mode-banner {
+  background: var(--color-brand-subtle);
+  border-bottom: 1px solid var(--color-rule);
+  color: var(--color-ink);
+  font-size: 0.8125rem;
+  padding: var(--space-2) 0;
+}
+
+.mode-banner strong {
+  color: var(--color-brand);
+  font-weight: 600;
+}
