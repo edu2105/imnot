@@ -27,6 +27,17 @@ class RegisterResult:
     dest_file: Path
 
 
+def validate_partner_yaml(yaml_text: str) -> PartnerDef:
+    """Parse *yaml_text* strictly and check the partner name. Raises yaml.YAMLError / ValueError."""
+    partner = parse_partner_yaml(yaml_text, strict=True)
+    if not _SAFE_NAME.match(partner.partner):
+        raise ValueError(
+            f"Partner name '{partner.partner}' is invalid. "
+            "Use only letters, digits, hyphens, and underscores (max 64 chars)."
+        )
+    return partner
+
+
 def register_partner(
     yaml_text: str,
     partners_dir: Path,
@@ -39,13 +50,7 @@ def register_partner(
         yaml.YAMLError / ValueError  — invalid YAML or schema validation error.
         FileExistsError              — partner already exists and *force* is False.
     """
-    partner = parse_partner_yaml(yaml_text, strict=True)
-
-    if not _SAFE_NAME.match(partner.partner):
-        raise ValueError(
-            f"Partner name '{partner.partner}' is invalid. "
-            "Use only letters, digits, hyphens, and underscores (max 64 chars)."
-        )
+    partner = validate_partner_yaml(yaml_text)
 
     dest_dir = partners_dir / partner.partner
     # Guard against path traversal — pathlib does not resolve '..' in '/' joins.

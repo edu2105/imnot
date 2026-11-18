@@ -76,6 +76,8 @@ def create_app(
     base_url: str = "http://localhost:8000",
     default_limit: int = 50,
     ui_config: UIConfig | None = None,
+    stateless: bool = False,
+    instance_name: str | None = None,
 ) -> FastAPI:
     """Build and return a fully configured FastAPI application.
 
@@ -84,6 +86,12 @@ def create_app(
 
     If *admin_key* is provided, all ``/imnot/admin/*`` endpoints require
     ``Authorization: Bearer <admin_key>``.
+
+    With *stateless*, partners created, edited or deleted through the admin API live in memory only
+    (nothing is written to *partners_dir*), and a reload goes back to what *partners_dir* holds.
+
+    *instance_name* is a free-text label (a team, an environment) reported by ``/healthz`` and shown
+    in the admin UI, so users can tell several imnot servers apart.
     """
     store = SessionStore(db_path=db_path)
     stress_store = StressStore(db_path=db_path)
@@ -110,6 +118,8 @@ def create_app(
     )
 
     app.state.stress_store = stress_store
+    app.state.stateless = stateless
+    app.state.instance_name = instance_name
     app.add_middleware(LoggingMiddleware)
     app.add_middleware(JournalMiddleware)
     register_routes(
@@ -134,10 +144,12 @@ def create_app_from_env() -> FastAPI:
     - ``IMNOT_PARTNERS_DIR``  (default: ``partners``)
     - ``IMNOT_DB_PATH``       (default: ``imnot.db``)
     - ``IMNOT_ADMIN_KEY``     (default: none)
+    - ``IMNOT_BASE_URL``      (default: ``base_url`` from ``imnot.toml``)
+    - ``IMNOT_INSTANCE_NAME`` (default: none)
 
     - ``IMNOT_CONFIG_PATH``   (default: ``imnot.toml`` in the CWD)
 
-    ``base_url``, ``default_limit`` and the UI config are read from ``imnot.toml`` via ``load_config()``.
+    ``default_limit`` and the UI config are read from ``imnot.toml`` via ``load_config()``.
     """
     partners_dir_env = os.environ.get("IMNOT_PARTNERS_DIR", str(DEFAULT_PARTNERS_DIR))
     partners_dir = Path(partners_dir_env) if partners_dir_env else None
@@ -155,7 +167,8 @@ def create_app_from_env() -> FastAPI:
         partners_dir=partners_dir,
         db_path=db_path,
         admin_key=admin_key,
-        base_url=config.server.base_url,
+        base_url=os.environ.get("IMNOT_BASE_URL") or config.server.base_url,
+        instance_name=os.environ.get("IMNOT_INSTANCE_NAME") or None,
         default_limit=default_limit,
         ui_config=config.ui,
     )

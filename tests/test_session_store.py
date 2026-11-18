@@ -318,3 +318,11 @@ def test_expire_cursors_deletes_old_rows(store):
     assert store.resolve_cursor("old-cursor") is None
     assert store.resolve_cursor("new-cursor") == 10
     assert store.resolve_cursor("no-ttl-cursor") == 20
+
+
+def test_resolve_cursor_scoped_to_partner_and_datapoint(store):
+    cursor_id = store.store_cursor("staylink", "listing", None, 5)
+    assert store.resolve_cursor(cursor_id, "staylink", "listing") == 5
+    assert store.resolve_cursor(cursor_id, "staylink", "rates") is None
+    assert store.resolve_cursor(cursor_id, "bookingco", "listing") is None
+    assert store.resolve_cursor(cursor_id) == 5  # unscoped lookup unchanged

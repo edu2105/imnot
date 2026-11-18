@@ -27,7 +27,7 @@ from typing import Any
 
 import yaml
 from fastapi import BackgroundTasks, FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 
 from imnot.config import UIConfig
 from imnot.engine.faults import with_faults
@@ -48,7 +48,13 @@ from imnot.loader.yaml_loader import (
     load_partners,
     payload_shape_error,
 )
-from imnot.partners import dropped_fields, is_safe_partner_name, merge_unmanaged_fields, register_partner
+from imnot.partners import (
+    dropped_fields,
+    is_safe_partner_name,
+    merge_unmanaged_fields,
+    register_partner,
+    validate_partner_yaml,
+)
 from imnot.postman import build_postman_collection
 
 _cli_logger = logging.getLogger("imnot.cli")
@@ -97,6 +103,9 @@ def register_routes(
     app.state.partners_dir = partners_dir
     app.state.base_url = base_url
     app.state.registered_routes = registered_routes
+    # Stateless mode only: partner.yaml texts created or edited through the admin API, by partner name
+    # (None = deleted). They win over the files in partners_dir until a reload or a restart.
+    app.state.memory_partners = {}
     app.state.auth_required = bool(admin_key)  # reported by /healthz so the UI knows whether to ask for a key
     app.state.fault_counters = {}  # fail.first_n call counts, see engine/faults.py
     app.state.registered_admin_dps = registered_admin_dps
@@ -157,7 +166,6 @@ def _register_admin_auth_middleware(app: FastAPI, admin_key: str) -> None:
     """Add middleware that enforces Bearer token auth on all /imnot/admin/* paths."""
 
     from starlette.middleware.base import BaseHTTPMiddleware
-    from starlette.responses import Response
 
     class AdminAuthMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request: Request, call_next):  # type: ignore[override]
@@ -537,6 +545,31 @@ def _register_ui_routes(app: FastAPI, ui_config: UIConfig) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _partners_read_only_response(exc: OSError) -> JSONResponse:
+    """403 for POST/DELETE /imnot/admin/partners when the partners directory cannot be written."""
+    return JSONResponse(
+        status_code=403,
+        content={
+            "status": "error",
+            "detail": "Partners cannot be changed through the admin API: the partners directory is not writable "
+            f"({exc.strerror or exc}). Change partner.yaml where the partners come from and restart, "
+            "or start with --stateless to keep changes in memory.",
+        },
+    )
+
+
+def _partner_yaml_text(app: FastAPI, partner_name: str) -> str | None:
+    """The current partner.yaml text of *partner_name*: the in-memory one (stateless mode) or the file."""
+    memory: dict[str, str | None] = app.state.memory_partners
+    if partner_name in memory:
+        return memory[partner_name]
+    partners_dir: Path | None = app.state.partners_dir
+    if partners_dir is None:
+        return None
+    path = partners_dir / partner_name / "partner.yaml"
+    return path.read_text() if path.is_file() else None
+
+
 def _register_infra_routes(
     app: FastAPI,
     partners: list[PartnerDef],
@@ -544,7 +577,16 @@ def _register_infra_routes(
 ) -> None:
     async def healthz(request: Request) -> JSONResponse:
         auth_required = bool(getattr(request.app.state, "auth_required", False))
-        return JSONResponse({"status": "ok", "version": _IMNOT_VERSION, "auth_required": auth_required})
+        stateless = bool(getattr(request.app.state, "stateless", False))
+        return JSONResponse(
+            {
+                "status": "ok",
+                "version": _IMNOT_VERSION,
+                "auth_required": auth_required,
+                "stateless": stateless,
+                "instance": getattr(request.app.state, "instance_name", None),  # --instance-name, or null
+            }
+        )
 
     async def list_sessions() -> JSONResponse:
         return JSONResponse(store.list_sessions())
@@ -586,6 +628,14 @@ def _register_infra_routes(
         return JSONResponse({"status": "ok", "session_id": session_id})
 
     async def delete_partner(partner_name: str, request: Request) -> JSONResponse:
+        if getattr(request.app.state, "stateless", False):
+            # In memory only: the file (if any) stays, and a reload or restart brings the partner back.
+            if not any(p.partner == partner_name for p in partners):
+                return JSONResponse(status_code=404, content={"detail": f"Partner '{partner_name}' not found."})
+            _unregister_partner_routes(request.app, partner_name)
+            partners[:] = [p for p in partners if p.partner != partner_name]
+            request.app.state.memory_partners[partner_name] = None
+            return JSONResponse({"status": "ok", "partner": partner_name})
         partners_dir: Path | None = request.app.state.partners_dir
         if partners_dir is None:
             return JSONResponse(
@@ -607,7 +657,10 @@ def _register_infra_routes(
                 status_code=400,
                 content={"detail": "Partner directory contains symlinks; refusing to delete.", "symlinks": symlinks},
             )
-        shutil.rmtree(partner_dir)
+        try:
+            shutil.rmtree(partner_dir)
+        except OSError as exc:
+            return _partners_read_only_response(exc)
         _unregister_partner_routes(request.app, partner_name)
         for i, p in enumerate(partners):
             if p.partner == partner_name:
@@ -615,16 +668,19 @@ def _register_infra_routes(
                 break
         return JSONResponse({"status": "ok", "partner": partner_name})
 
-    async def get_partner(partner_name: str, request: Request) -> JSONResponse:
-        """The partner's full partner.yaml as JSON, so the Builder can pre-fill every field it edits."""
-        partners_dir: Path | None = request.app.state.partners_dir
-        if partners_dir is None or not is_safe_partner_name(partner_name):
+    async def get_partner(partner_name: str, request: Request) -> Response:
+        """The partner's full partner.yaml as JSON, so the Builder can pre-fill every field it edits.
+
+        With ``?format=yaml`` the text itself, as a download (to commit it to the partners repo).
+        """
+        text = _partner_yaml_text(request.app, partner_name) if is_safe_partner_name(partner_name) else None
+        if text is None:
             return JSONResponse(status_code=404, content={"detail": f"Partner '{partner_name}' not found."})
-        path = partners_dir / partner_name / "partner.yaml"
-        if not path.is_file():
-            return JSONResponse(status_code=404, content={"detail": f"Partner '{partner_name}' not found."})
+        if request.query_params.get("format") == "yaml":
+            headers = {"Content-Disposition": f'attachment; filename="{partner_name}.partner.yaml"'}
+            return Response(text, media_type="application/yaml", headers=headers)
         try:
-            raw = yaml.safe_load(path.read_text())
+            raw = yaml.safe_load(text)
         except yaml.YAMLError as exc:
             return JSONResponse(status_code=422, content={"detail": f"partner.yaml is not valid YAML: {exc}"})
         return JSONResponse(raw)
@@ -685,6 +741,14 @@ def _register_infra_routes(
                 status_code=400,
                 content={"detail": "No partners_dir configured — server was not started via `imnot start`."},
             )
+
+        # Stateless mode: a reload goes back to what partners_dir holds. Drop every partner changed
+        # through the admin API first, so the files register again from scratch below.
+        memory: dict[str, str | None] = request.app.state.memory_partners
+        for name in memory:
+            _unregister_partner_routes(request.app, name)
+        partners[:] = [p for p in partners if p.partner not in memory]
+        memory.clear()
 
         try:
             new_partners = load_partners(partners_dir)
@@ -816,10 +880,15 @@ def _register_infra_routes(
                 current partner.yaml and return 409 with ``dropped`` if fields would be lost. Used by
                 the Builder's edit mode, which does not round-trip every field.
 
-        Returns 201 on create, 200 on overwrite, 409 on conflict or dropped fields, 422 on bad YAML.
+        Returns 201 on create, 200 on overwrite, 409 on conflict or dropped fields, 422 on bad YAML,
+        403 when the partners directory cannot be written.
+
+        In stateless mode nothing is written: the partner lives in memory (and replaces any partner of
+        the same name loaded from disk) until a reload or a restart.
         """
+        stateless: bool = getattr(request.app.state, "stateless", False)
         partners_dir: Path | None = request.app.state.partners_dir
-        if partners_dir is None:
+        if partners_dir is None and not stateless:
             return JSONResponse(
                 status_code=400,
                 content={"detail": "No partners_dir configured — server was not started via `imnot start`."},
@@ -832,10 +901,10 @@ def _register_infra_routes(
         if merge_from:
             if not is_safe_partner_name(merge_from):
                 return JSONResponse(status_code=400, content={"detail": "Invalid merge_from partner name."})
-            merge_file = partners_dir / merge_from / "partner.yaml"
-            if merge_file.is_file():
+            merge_text = _partner_yaml_text(request.app, merge_from)
+            if merge_text is not None:
                 try:
-                    yaml_text = merge_unmanaged_fields(merge_file.read_text(), yaml_text)
+                    yaml_text = merge_unmanaged_fields(merge_text, yaml_text)
                 except yaml.YAMLError:
                     pass  # invalid new YAML: register_partner below returns the 422
 
@@ -843,10 +912,10 @@ def _register_infra_routes(
         if compare_to:
             if not is_safe_partner_name(compare_to):
                 return JSONResponse(status_code=400, content={"detail": "Invalid compare_to partner name."})
-            current_file = partners_dir / compare_to / "partner.yaml"
-            if current_file.is_file():
+            current_text = _partner_yaml_text(request.app, compare_to)
+            if current_text is not None:
                 try:
-                    dropped = dropped_fields(current_file.read_text(), yaml_text)
+                    dropped = dropped_fields(current_text, yaml_text)
                 except yaml.YAMLError:
                     dropped = []  # invalid new YAML: register_partner below returns the 422
                 if dropped:
@@ -860,13 +929,26 @@ def _register_infra_routes(
                     )
 
         try:
-            result = register_partner(yaml_text, partners_dir, force=force)
+            if stateless:
+                partner = validate_partner_yaml(yaml_text)
+                created = not any(p.partner == partner.partner for p in partners)
+                if not created and not force:
+                    raise FileExistsError(f"Partner '{partner.partner}' already exists. Use ?force=true to replace it.")
+            else:
+                result = register_partner(yaml_text, partners_dir, force=force)
+                partner, created = result.partner, result.created
         except (yaml.YAMLError, ValueError) as exc:
             return JSONResponse(status_code=422, content={"status": "error", "detail": str(exc)})
         except FileExistsError as exc:
             return JSONResponse(status_code=409, content={"status": "error", "detail": str(exc)})
+        except OSError as exc:
+            return _partners_read_only_response(exc)
 
-        partner = result.partner
+        if stateless:
+            # Replace the partner whole: its old routes go away and every endpoint registers again
+            # below, so the edit applies completely (validate:, fail:, removed endpoints…) with no reload.
+            _unregister_partner_routes(request.app, partner.partner)
+            request.app.state.memory_partners[partner.partner] = yaml_text
         configs_: dict = request.app.state.configs
         paginated_config_refs_: dict = request.app.state.paginated_config_refs
         store_: SessionStore = request.app.state.store
@@ -928,16 +1010,17 @@ def _register_infra_routes(
                     break
 
         payload_dp_names = {dp.name for dp in partner.datapoints if dp.pattern in PAYLOAD_PATTERNS}
-        status_code = 201 if result.created else 200
+        status_code = 201 if created else 200
         return JSONResponse(
             status_code=status_code,
             content={
                 "status": "ok",
                 "partner": partner.partner,
                 "description": partner.description,
-                "directory": f"partners/{partner.partner}",
-                "file": f"partners/{partner.partner}/partner.yaml",
-                "created": result.created,
+                # Stateless mode writes no file: both are null there.
+                "directory": None if stateless else f"partners/{partner.partner}",
+                "file": None if stateless else f"partners/{partner.partner}/partner.yaml",
+                "created": created,
                 "datapoints": [
                     {
                         "name": dp.name,

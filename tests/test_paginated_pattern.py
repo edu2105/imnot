@@ -1040,3 +1040,48 @@ def test_paginated_invalid_query_returns_422(store):
     r = c.get("/ratesync/listings")
     assert r.status_code == 422
     assert any("query.format" in e for e in r.json()["detail"])
+
+
+# ---------------------------------------------------------------------------
+# Body rules in validate:, and cursors tied to their datapoint
+# ---------------------------------------------------------------------------
+
+
+def test_paginated_validate_body_rule_sees_the_request_body(store):
+    """A `body.x: required` rule used to answer 422 always: the handler never read the body."""
+    app = FastAPI()
+    endpoint = EndpointDef(
+        method="POST",
+        path="/ratesync/listings/search",
+        step=None,
+        response={"status": 200},
+        validate={"body": {"hotelId": {"required": True}}},
+    )
+    handler = make_paginated_handler("ratesync", _make_datapoint(), endpoint, store, default_limit=10)
+    app.add_api_route("/ratesync/listings/search", handler, methods=["POST"])
+    c = TestClient(app, raise_server_exceptions=True)
+    store.store_global_payload("ratesync", "listing", _ten_items())
+
+    ok = c.post("/ratesync/listings/search", json={"hotelId": "H1"})
+    assert ok.status_code == 200
+    assert len(ok.json()["items"]) == 10
+
+    for bad in ({"json": {}}, {"content": b"not json"}, {}):
+        r = c.post("/ratesync/listings/search", **bad)
+        assert r.status_code == 422
+        assert any("body.hotelId" in e for e in r.json()["detail"])
+
+
+def test_cursor_from_another_datapoint_is_rejected(store):
+    app = FastAPI()
+    for name in ("listing", "rates"):
+        handler = make_paginated_handler("bookingco", _make_cursor_datapoint(name=name), _make_endpoint(), store, 3)
+        app.add_api_route(f"/bookingco/{name}", handler, methods=["GET"])
+        store.store_global_payload("bookingco", name, _ten_items())
+    c = TestClient(app)
+
+    cursor = c.get("/bookingco/listing").json()["nextCursor"]
+    assert c.get(f"/bookingco/listing?cursor={cursor}").json()["items"][0]["id"] == 3  # still valid where issued
+    other = c.get(f"/bookingco/rates?cursor={cursor}")
+    assert other.status_code == 400
+    assert other.json() == {"detail": "Cursor expired or not found"}

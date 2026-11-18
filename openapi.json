@@ -173,7 +173,7 @@
       },
       "post": {
         "summary": "Admin Create Partner",
-        "description": "Validate raw YAML body, write it to disk, and hot-load its routes.\n\nQuery params:\n    force (bool, default false) \u2014 overwrite if partner already exists.\n    merge_from (partner name, optional) \u2014 first copy over the fields of that partner's current\n        partner.yaml that the Builder form never writes (validate:, fail:, headers, \u2026).\n    compare_to (partner name, optional) \u2014 before writing, compare against that partner's\n        current partner.yaml and return 409 with ``dropped`` if fields would be lost. Used by\n        the Builder's edit mode, which does not round-trip every field.\n\nReturns 201 on create, 200 on overwrite, 409 on conflict or dropped fields, 422 on bad YAML.",
+        "description": "Validate raw YAML body, write it to disk, and hot-load its routes.\n\nQuery params:\n    force (bool, default false) \u2014 overwrite if partner already exists.\n    merge_from (partner name, optional) \u2014 first copy over the fields of that partner's current\n        partner.yaml that the Builder form never writes (validate:, fail:, headers, \u2026).\n    compare_to (partner name, optional) \u2014 before writing, compare against that partner's\n        current partner.yaml and return 409 with ``dropped`` if fields would be lost. Used by\n        the Builder's edit mode, which does not round-trip every field.\n\nReturns 201 on create, 200 on overwrite, 409 on conflict or dropped fields, 422 on bad YAML,\n403 when the partners directory cannot be written.\n\nIn stateless mode nothing is written: the partner lives in memory (and replaces any partner of\nthe same name loaded from disk) until a reload or a restart.",
         "operationId": "admin_create_partner_imnot_admin_partners_post",
         "responses": {
           "200": {
@@ -190,7 +190,7 @@
     "/imnot/admin/partners/{partner_name}": {
       "get": {
         "summary": "Get Partner",
-        "description": "The partner's full partner.yaml as JSON, so the Builder can pre-fill every field it edits.",
+        "description": "The partner's full partner.yaml as JSON, so the Builder can pre-fill every field it edits.\n\nWith ``?format=yaml`` the text itself, as a download (to commit it to the partners repo).",
         "operationId": "get_partner_imnot_admin_partners__partner_name__get",
         "parameters": [
           {

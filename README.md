@@ -24,6 +24,7 @@
 - **Fails on demand.** `delay_ms` and `fail: {status, first_n}` on any endpoint simulate a slow or flaky partner, to test timeouts and retries.
 - **Records what your integration sent.** Every request to a mock route lands in a journal (`GET /imnot/admin/requests`, secrets redacted), so a test can assert the exact body and headers your code produced.
 - **Ships with your tests.** Partner definitions — and, optionally, their payloads as `payloads/<datapoint>.json` — are version-controlled alongside the integration they test and run anywhere Docker runs.
+- **Runs in a container with no storage.** `--stateless --strict`: read-only filesystem, logs on stdout, and a broken partner stops the rollout. See [docs/deployment.md](docs/deployment.md).
 
 ---
 
@@ -118,6 +119,6 @@ Output only the YAML — no code, no explanation.
 ## Limitations
 
 - **JSON only** — response bodies are always JSON, no XML support.
-- **Single-node** — SQLite session store is not shared across instances.
+- **One replica per instance** — state lives in each process; scale with one instance per team, not replicas.
 - **Admin UI** — desktop layout only; no mobile breakpoints.
 - **No native TLS** — use a reverse proxy (Nginx, Caddy) to terminate HTTPS.

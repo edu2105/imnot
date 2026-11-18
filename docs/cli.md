@@ -7,10 +7,12 @@
 | `imnot init` | Scaffold a new project with three example partners covering all six patterns (`ratesync` ships example payloads) and `imnot.toml` |
 | `imnot init --dir <path>` | Scaffold into a specific directory (created if it does not exist) |
 | `imnot start` | Load partner YAMLs and start the server. Starts with zero partners if no `partners/` exists. Auto-creates `imnot.toml` on first run. |
+| `imnot start --stateless` | Write nothing to disk: in-memory database, logs to stdout only, no `imnot.pid`, no `imnot.toml`. For containers; see [deployment.md](deployment.md#containers-without-storage-stateless-mode) |
+| `imnot start --strict` | Exit 1 unless every partner passes `imnot validate` (and there is at least one) |
 | `imnot start --reload` | Start with auto-restart on any YAML change (recommended for development) |
 | `imnot stop` | Stop the running server (sends SIGTERM to PID in `imnot.pid`) |
 | `imnot stop --pid-file <path>` | Stop using an explicit PID file path |
-| `imnot validate` | Check every `partner.yaml` strictly (schema, unknown keys, route conflicts across partners); exits 1 on any problem. Good for CI |
+| `imnot validate` | Check every `partner.yaml` strictly (schema, unknown keys, payload files, route conflicts across partners); exits 1 on any problem, or if it finds no `partner.yaml`. Good for CI |
 | `imnot generate --file <path>` | Validate (strictly, like `imnot validate`) and scaffold a partner YAML into `partners/` |
 | `imnot generate --file <path> --dry-run --json` | Validate only — print structured result, write nothing |
 | `imnot export postman` | Generate a Postman collection v2.1 JSON from all loaded partners |
@@ -24,11 +26,29 @@
 
 `imnot start` accepts `--admin-key` / `IMNOT_ADMIN_KEY` to protect all `/imnot/admin/*` endpoints with a Bearer token. CLI flags always override `imnot.toml` values.
 
+### Environment variables
+
+Every `imnot start` option can also come from the environment. Precedence: flag, then variable, then `imnot.toml`, then the default.
+
+| Variable | Flag | Notes |
+|----------|------|-------|
+| `IMNOT_PARTNERS_DIR` | `--partners-dir` | |
+| `IMNOT_DB_PATH` | `--db` | Ignored in stateless mode |
+| `IMNOT_BIND_HOST` | `--host` | |
+| `IMNOT_BIND_PORT` | `--port` | Not `IMNOT_PORT`: Kubernetes sets that one itself for a Service named `imnot` |
+| `IMNOT_BASE_URL` | `--base-url` | Public URL used in `page_number_url` links and Postman collections |
+| `IMNOT_INSTANCE_NAME` | `--instance-name` | Optional label (a team, an environment), up to 64 characters. Shown in the admin UI header and tab title, in `/healthz` (`instance`) and in the startup summary |
+| `IMNOT_STATELESS` | `--stateless` | `1`, `true`, `yes` or `on` |
+| `IMNOT_STRICT` | `--strict` | `1`, `true`, `yes` or `on` |
+| `IMNOT_ADMIN_KEY` | `--admin-key` | |
+
+The other settings (log level, UI, page size) live in `imnot.toml`.
+
 ---
 
 ## Configuration — `imnot.toml`
 
-`imnot.toml` is created automatically by `imnot start` on first run. All settings are optional.
+`imnot.toml` is created automatically by `imnot start` on first run (never with `--stateless`, which still reads one if it finds it). All settings are optional.
 
 ```toml
 [server]
@@ -66,7 +86,7 @@ imnot writes two log files to `logs/` next to `imnot.db` (`[logging] log_dir`):
 - `imnot.cli.log` — CLI operations (start, stop, generate, etc.) and server events: partners loaded or skipped, unknown YAML keys, callback deliveries
 - `imnot.http.log` — all HTTP traffic except `/healthz`
 
-Warnings are also printed to the console. When a log file reaches `max_bytes`, it is moved to `logs/archived/` (`archived_logs_dir`) with a timestamp in the filename and a new file starts. `IMNOT_ADMIN_KEY` is never written to logs.
+Warnings are also printed to the console. With `--stateless` no log file is written: both streams go to stdout. When a log file reaches `max_bytes`, it is moved to `logs/archived/` (`archived_logs_dir`) with a timestamp in the filename and a new file starts. `IMNOT_ADMIN_KEY` is never written to logs.
 
 ---
 

@@ -1328,7 +1328,10 @@ def test_validate_reports_every_file_not_just_the_first(runner, tmp_path):
 
 
 def test_validate_empty_and_missing_dir(runner, tmp_path):
-    assert runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path)]).exit_code == 0
+    # No partner.yaml at all is a failure: a wrongly nested layout must not pass CI as "nothing to check".
+    empty = runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path)])
+    assert empty.exit_code == 1
+    assert "No partner.yaml files found" in empty.output
     assert runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path / "nope")]).exit_code == 1
 
 

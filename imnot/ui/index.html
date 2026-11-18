@@ -387,6 +387,36 @@ img, svg {
   .header-actions #server-status  { display: inline-block; }
 }
 
+
+/* Stateless-mode notice: a fixed strip under the header, shown when /healthz reports stateless. */
+.mode-banner {
+  background: var(--color-brand-subtle);
+  border-bottom: 1px solid var(--color-rule);
+  color: var(--color-ink);
+  font-size: 0.8125rem;
+  padding: var(--space-2) 0;
+}
+
+.mode-banner strong {
+  color: var(--color-brand);
+  font-weight: 600;
+}
+
+/* Instance name (--instance-name): which team's or environment's imnot this is. */
+.brand-instance {
+  margin-left: var(--space-2);
+  padding: 0.125rem 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ============================================================
    main.css
    Everything inside <main>: sections, partner cards, buttons,
@@ -1591,6 +1621,7 @@ img, svg {
         <span class="brand-name">imnot</span>
         <span class="brand-sep">/</span>
         <span class="brand-sub">admin</span>
+        <span class="brand-instance" id="instance-name" title="This server's instance name" hidden></span>
       </div>
 
       <div class="header-actions">
@@ -1630,6 +1661,12 @@ img, svg {
 
     </div>
   </header>
+
+  <div class="mode-banner" id="stateless-banner" role="status" hidden>
+    <div class="page-container">
+      <strong>Stateless mode:</strong> changes are lost on restart. To keep a partner, download its YAML and add it to your partners repo.
+    </div>
+  </div>
 
 
   <!-- ======= KEY PANEL ======= -->
@@ -2005,7 +2042,7 @@ img, svg {
   <!-- ======= FOOTER ======= -->
   <footer class="footer">
     <div class="page-container">
-      <p class="footer-info">imnot &mdash; stateful API mock server</p>
+      <p class="footer-info" id="footer-info">imnot &mdash; stateful API mock server</p>
       <div class="footer-links">
         <a href="https://github.com/edu2105/imnot" target="_blank" rel="noopener">docs</a>
         <a href="/healthz">healthz</a>
@@ -2149,6 +2186,9 @@ img, svg {
           + '<span class="card-name">' + pName + '</span>'
           + '<button class="btn-icon-sm card-header-edit" onclick="showBuilder(\'edit\',\'' + pName + '\')" title="Edit partner" aria-label="Edit partner">'
           + '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2a2 2 0 01.586-1.414z"/></svg>'
+          + '</button>'
+          + '<button class="btn-icon-sm" onclick="downloadPartnerYaml(\'' + pName + '\')" title="Download partner.yaml" aria-label="Download partner.yaml">'
+          + '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>'
           + '</button>'
           + '<button class="btn-icon-sm" onclick="deletePartner(\'' + pName + '\')" title="Delete partner" aria-label="Delete partner">'
           + '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>'
@@ -3997,6 +4037,15 @@ img, svg {
                 method: 'DELETE', headers: authHeaders(),
               })
                 .then(function () {
+                  if (_stateless) {
+                    // A reload would go back to the files and drop this edit. Post the partner again
+                    // instead: with the old name gone, its routes register without colliding.
+                    var h = authHeaders();
+                    h['Content-Type'] = 'text/plain';
+                    return fetch('/imnot/admin/partners?force=true&merge_from=' + encodeURIComponent(submittedPartnerName), {
+                      method: 'POST', headers: h, body: yamlText,
+                    });
+                  }
                   return fetch('/imnot/admin/reload', { method: 'POST', headers: authHeaders() });
                 })
                 .finally(function () { builderHighlightCard(submittedPartnerName); });
@@ -4043,7 +4092,10 @@ img, svg {
     }
 
     function deletePartner(partnerName) {
-      if (!confirm('Delete partner "' + partnerName + '"?\nThis removes the YAML file from disk and cannot be undone.')) return;
+      var consequence = _stateless
+        ? 'It stops answering now. If it came with the server, it is back after a reload or a restart.'
+        : 'This removes the YAML file from disk and cannot be undone.';
+      if (!confirm('Delete partner "' + partnerName + '"?\n' + consequence)) return;
       fetch('/imnot/admin/partners/' + encodeURIComponent(partnerName), {
         method: 'DELETE', headers: authHeaders(),
       })
@@ -4055,6 +4107,24 @@ img, svg {
           notify('Partner "' + partnerName + '" deleted.', 'ok');
         })
         .catch(function (e) { notify('Delete failed: ' + e.message, 'error'); });
+    }
+
+    // The partner's current partner.yaml as a file: in stateless mode it is the only way to keep
+    // what was built here (commit it to the partners repo).
+    function downloadPartnerYaml(partnerName) {
+      fetch('/imnot/admin/partners/' + encodeURIComponent(partnerName) + '?format=yaml', { headers: authHeaders() })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+        .then(function (blob) {
+          var link = document.createElement('a');
+          link.href = URL.createObjectURL(blob);
+          link.download = partnerName + '.partner.yaml';  // same name the server sends; save it as partners/<name>/partner.yaml
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          URL.revokeObjectURL(link.href);
+          notify('Downloaded partner.yaml — it goes in partners/' + partnerName + '/', 'ok');
+        })
+        .catch(function (e) { notify('Download failed: ' + e.message, 'error'); });
     }
 
     // Seed initial two polling steps when pattern-fields are rendered
@@ -4137,6 +4207,8 @@ img, svg {
 
     // ---- Reload ----
     function reloadAll() {
+      if (_stateless && !confirm('Reload goes back to the partners this server started with.\n'
+        + 'Partners created, edited or deleted from this UI will be lost.\n\nReload?')) return;
       fetch('/imnot/admin/reload', { method: 'POST', headers: authHeaders() })
         .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
         .then(function (d) {
@@ -4152,11 +4224,25 @@ img, svg {
     }
 
     // ---- Health ----
+    var _stateless = false;  // from /healthz: nothing persists, partners made here live in memory
+
     function checkHealth() {
       fetch('/healthz')
         .then(function (r) { return r.json(); })
         .then(function (d) {
           document.getElementById('server-status').textContent = 'v' + (d.version || '?');
+          _stateless = !!d.stateless;
+          if (d.instance) {
+            // Which imnot is this? Set with --instance-name when several teams run their own.
+            var instanceEl = document.getElementById('instance-name');
+            instanceEl.textContent = d.instance;
+            instanceEl.removeAttribute('hidden');
+            document.title = d.instance + ' \u00b7 imnot \u2014 admin';
+          }
+          if (_stateless) {
+            document.getElementById('stateless-banner').removeAttribute('hidden');
+            document.getElementById('footer-info').textContent = 'imnot \u2014 API mock server \u00b7 stateless mode';
+          }
           // Only ask for an admin key when this server actually has one configured.
           var keyBtn = document.getElementById('key-btn');
           if (d.auth_required) {

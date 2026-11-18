@@ -873,3 +873,44 @@ def test_post_run_partner_missing_fields(app_client: TestClient):
     )
     assert resp.status_code == 422
     assert "partner" in resp.json()["detail"].lower() or "datapoint" in resp.json()["detail"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Partner mode needs target_url too (it used to end "done" with 0 requests fired)
+# ---------------------------------------------------------------------------
+
+
+def test_partner_mode_without_target_url_returns_422(app_client: TestClient):
+    app_client.app.state.store.store_global_payload("staylink", "reservation", {"id": 1})
+    base = {
+        "mode": "partner",
+        "partner": "staylink",
+        "datapoint": "reservation",
+        "rate_per_second": 10,
+        "total_count": 5,
+    }
+
+    missing = app_client.post("/imnot/admin/stress/run", json=base)
+    assert missing.status_code == 422
+    assert missing.json()["detail"] == "target_url is required in partner mode"
+
+    bad_scheme = app_client.post("/imnot/admin/stress/run", json={**base, "target_url": "ftp://x/y"})
+    assert bad_scheme.status_code == 422
+    assert app_client.get("/imnot/admin/stress/runs").json() == []  # nothing was started
+
+
+def test_partner_mode_with_target_url_still_starts(app_client: TestClient):
+    app_client.app.state.store.store_global_payload("staylink", "reservation", {"id": 1})
+    with patch("imnot.engine.stress_router.run_stress", new=MagicMock()), patch("asyncio.create_task"):
+        resp = app_client.post(
+            "/imnot/admin/stress/run",
+            json={
+                "mode": "partner",
+                "partner": "staylink",
+                "datapoint": "reservation",
+                "target_url": "http://ingest.example.test/webhook",
+                "rate_per_second": 10,
+                "total_count": 5,
+            },
+        )
+    assert resp.status_code == 201, resp.text
