@@ -150,16 +150,46 @@ def cli() -> None:
 @click.option(
     "--partners-dir",
     default=None,
-    help=f"Directory containing partner YAML definitions. [default: {DEFAULT_PARTNERS_DIR}]",
+    envvar="IMNOT_PARTNERS_DIR",
+    help=f"Directory containing partner YAML definitions. [env: IMNOT_PARTNERS_DIR] [default: {DEFAULT_PARTNERS_DIR}]",
 )
 @click.option(
     "--db",
     default=None,
-    help=f"Path to the SQLite database file. [default: {DEFAULT_DB}]",
+    envvar="IMNOT_DB_PATH",
+    help=f"Path to the SQLite database file. [env: IMNOT_DB_PATH] [default: {DEFAULT_DB}]",
 )
-@click.option("--host", default=None, help="Bind host. [default: 127.0.0.1]")
-@click.option("--port", default=None, type=int, help="Bind port. [default: 8000]")
+# Not IMNOT_HOST / IMNOT_PORT: Kubernetes injects IMNOT_PORT=tcp://… into every pod when a Service is named "imnot".
+@click.option(
+    "--host", default=None, envvar="IMNOT_BIND_HOST", help="Bind host. [env: IMNOT_BIND_HOST] [default: 127.0.0.1]"
+)
+@click.option(
+    "--port", default=None, type=int, envvar="IMNOT_BIND_PORT", help="Bind port. [env: IMNOT_BIND_PORT] [default: 8000]"
+)
+@click.option(
+    "--base-url",
+    default=None,
+    envvar="IMNOT_BASE_URL",
+    help="Public URL of this server, used in pagination links and Postman collections. "
+    "[env: IMNOT_BASE_URL] [default: http://localhost:8000]",
+)
 @click.option("--reload", is_flag=True, default=False, help="Enable auto-reload (development only).")
+@click.option(
+    "--stateless",
+    is_flag=True,
+    default=False,
+    envvar="IMNOT_STATELESS",
+    help="Write nothing to disk: in-memory database (ignores --db), logs to stdout only, no pid file, "
+    "no imnot.toml, partners cannot be changed through the admin API. A restart starts clean. [env: IMNOT_STATELESS]",
+)
+@click.option(
+    "--strict",
+    is_flag=True,
+    default=False,
+    envvar="IMNOT_STRICT",
+    help="Exit with an error unless every partner passes `imnot validate` (and there is at least one). "
+    "[env: IMNOT_STRICT]",
+)
 @click.option(
     "--admin-key",
     default=None,
@@ -172,34 +202,52 @@ def start(
     db: str | None,
     host: str | None,
     port: int | None,
+    base_url: str | None,
     reload: bool,
+    stateless: bool,
+    strict: bool,
     admin_key: str | None,
 ) -> None:
     """Start the mock server and load partner definitions."""
+    if stateless and reload:
+        raise click.UsageError("--stateless cannot be combined with --reload (a development mode that writes files).")
+
     # Resolve db_path early so _resolve_config can find imnot.toml co-located with the
     # DB (e.g. /app/data/imnot.toml) before we know the full config.
     early_db_path = Path(db) if db else Path(DEFAULT_DB)
-    config_path = _resolve_config(db_path=early_db_path)
+    config_path = _resolve_config(db_path=None if stateless else early_db_path)
     config = load_config(config_path)
 
     effective_db = db or config.server.db
     effective_host = host or config.server.host
     effective_port = port if port is not None else config.server.port
     effective_partners_dir = partners_dir or config.server.partners_dir
+    effective_base_url = base_url or config.server.base_url
 
-    db_path = Path(effective_db)
+    # Stateless: one in-memory database for the life of the process; --db is ignored.
+    db_path = Path(":memory:") if stateless else Path(effective_db)
 
     # Configure logging before anything else so all subsequent events are captured.
     # Resolve relative log_dir against db_path.parent (guaranteed writable in any
     # deployment) rather than CWD, which is read-only in the official Docker image.
-    log_dir = Path(config.logging.log_dir)
-    if not log_dir.is_absolute():
-        log_dir = (db_path.parent / log_dir).resolve()
-    configure_logging(config.logging, log_dir)
+    log_dir: Path | None = None
+    if not stateless:
+        log_dir = Path(config.logging.log_dir)
+        if not log_dir.is_absolute():
+            log_dir = (db_path.parent / log_dir).resolve()
+    try:
+        configure_logging(config.logging, log_dir)
+    except OSError as exc:
+        click.echo(
+            f"Cannot write logs to {log_dir}: {exc}\n"
+            f"Make the data directory writable for uid {os.getuid()}, or start with --stateless to write no files.",
+            err=True,
+        )
+        raise SystemExit(1)
     cli_log = logging.getLogger("imnot.cli")
 
     # Auto-write imnot.toml co-located with the DB (guaranteed writable directory).
-    if config_path is None:
+    if config_path is None and not stateless:
         toml_path = db_path.parent / "imnot.toml"
         if not toml_path.exists():
             toml_path.write_text(_IMNOT_TOML_TEMPLATE, encoding="utf-8")
@@ -218,8 +266,12 @@ def start(
         )
         cli_log.warning("No partners directory found — starting with zero partners")
 
+    if strict:
+        _exit_unless_partners_are_valid(resolved_partners_dir)
+
     effective_admin_key = admin_key or None
-    pid_path = db_path.with_suffix(".pid")
+    # No pid file in stateless mode: nothing is written, and `imnot stop` is not how a container stops.
+    pid_path = None if stateless else db_path.with_suffix(".pid")
 
     if effective_host == "0.0.0.0" and not effective_admin_key:  # nosec B104
         _warn = (
@@ -241,7 +293,8 @@ def start(
         "set" if effective_admin_key else "unset",
     )
 
-    pid_path.write_text(str(os.getpid()))
+    if pid_path is not None:
+        pid_path.write_text(str(os.getpid()))
     try:
         if reload:
             os.environ["IMNOT_PARTNERS_DIR"] = str(resolved_partners_dir) if resolved_partners_dir else ""
@@ -252,6 +305,8 @@ def start(
                 os.environ["IMNOT_CONFIG_PATH"] = str(resolved_config.resolve())
             if effective_admin_key:
                 os.environ["IMNOT_ADMIN_KEY"] = effective_admin_key
+            if base_url:
+                os.environ["IMNOT_BASE_URL"] = base_url
             uvicorn.run(
                 "imnot.api.server:create_app_from_env",
                 host=effective_host,
@@ -265,13 +320,14 @@ def start(
                 partners_dir=resolved_partners_dir,
                 db_path=db_path,
                 admin_key=effective_admin_key,
-                base_url=config.server.base_url,
+                base_url=effective_base_url,
                 default_limit=config.pagination.default_limit,
                 ui_config=config.ui,
+                partners_read_only=stateless,
             )
             uvicorn.run(app, host=effective_host, port=effective_port)
     finally:
-        if pid_path.exists():
+        if pid_path is not None and pid_path.exists():
             pid_path.unlink()
         cli_log.info("imnot stopped")
 
@@ -443,7 +499,8 @@ def status(db: str) -> None:
 def validate(partners_dir: str) -> None:
     """Check every partner.yaml strictly: schema errors, unknown keys, payload files and route conflicts.
 
-    Exits 1 if anything is wrong. `imnot start` is more lenient: it only warns about unknown keys.
+    Exits 1 if anything is wrong, or if there is no partner.yaml at all. `imnot start` is more lenient
+    (it only warns about unknown keys) unless it runs with `--strict`.
     """
     try:
         resolved = _resolve_partners_dir(partners_dir)
@@ -451,22 +508,20 @@ def validate(partners_dir: str) -> None:
         click.echo(str(exc), err=True)
         raise SystemExit(1)
 
-    yaml_files = sorted(resolved.glob("*/partner.yaml"))
-    if not yaml_files:
-        click.echo(f"No partner.yaml files found in {resolved}.")
-        return
+    if not _report_partner_checks(resolved):
+        raise SystemExit(1)
 
-    failed = 0
+
+def _check_partners(partners_dir: Path) -> list[tuple[str, int, list[str]]]:
+    """Check every partner.yaml strictly. Returns ``(label, datapoint count, problems)`` per file."""
+    results: list[tuple[str, int, list[str]]] = []
     seen_routes: dict[tuple[str, str], str] = {}
-    for yaml_path in yaml_files:
-        label = yaml_path.relative_to(resolved)
+    for yaml_path in sorted(partners_dir.glob("*/partner.yaml")):
+        label = str(yaml_path.relative_to(partners_dir))
         try:
             partner = parse_partner_yaml(yaml_path.read_text(), yaml_path, strict=True)
         except (yaml.YAMLError, ValueError) as exc:
-            failed += 1
-            click.echo(f"{click.style('FAIL', fg='red')}  {label}")
-            for problem in str(exc).split("; "):
-                click.echo(f"      {problem}")
+            results.append((label, 0, str(exc).split("; ")))
             continue
         problems = []
         _, payload_problems = load_payload_files(partner, yaml_path.parent / "payloads")
@@ -479,16 +534,39 @@ def validate(partners_dir: str) -> None:
                     other = seen_routes[key]
                     problems.append(f"Route conflict: {ep.method} {ep.path} is already defined by '{other}'")
                 seen_routes.setdefault(key, owner)
+        results.append((label, len(partner.datapoints), problems))
+    return results
+
+
+def _report_partner_checks(partners_dir: Path) -> bool:
+    """Print one OK/FAIL line per partner file. False if any has problems or there are none at all."""
+    results = _check_partners(partners_dir)
+    if not results:
+        click.echo(
+            f"No partner.yaml files found in {partners_dir}. Expected {partners_dir.name}/<partner>/partner.yaml.",
+            err=True,
+        )
+        return False
+    for label, datapoints, problems in results:
         if problems:
-            failed += 1
             click.echo(f"{click.style('FAIL', fg='red')}  {label}")
             for problem in problems:
                 click.echo(f"      {problem}")
         else:
-            click.echo(f"{click.style('OK', fg='green')}    {label}  ({len(partner.datapoints)} datapoint(s))")
-
+            click.echo(f"{click.style('OK', fg='green')}    {label}  ({datapoints} datapoint(s))")
+    failed = sum(1 for _, _, problems in results if problems)
     if failed:
-        click.echo(f"\n{failed} of {len(yaml_files)} partner file(s) have problems.", err=True)
+        click.echo(f"\n{failed} of {len(results)} partner file(s) have problems.", err=True)
+    return not failed
+
+
+def _exit_unless_partners_are_valid(partners_dir: Path | None) -> None:
+    """`imnot start --strict`: the same bar as `imnot validate`, so a broken partner stops the rollout."""
+    if partners_dir is None:
+        click.echo("--strict: no partners directory found, refusing to start.", err=True)
+        raise SystemExit(1)
+    if not _report_partner_checks(partners_dir):
+        click.echo("--strict: refusing to start. Fix the problems above (`imnot validate` shows them too).", err=True)
         raise SystemExit(1)
 
 

@@ -105,13 +105,31 @@ jobs:
           done
           curl -sf http://localhost:18080/healthz
 
+      - name: Run stateless with a read-only filesystem and no volume at all
+        run: |
+          docker run -d --name imnot-stateless \
+            --read-only \
+            --user 10001 \
+            -e IMNOT_STATELESS=1 \
+            -e IMNOT_ADMIN_KEY=smoke-test \
+            -p 18081:8000 \
+            imnot-smoke
+          for i in $(seq 1 15); do
+            curl -sf http://localhost:18081/healthz && break
+            sleep 1
+          done
+          curl -sf http://localhost:18081/healthz
+          # Logs must be on the container's output, and nothing may have been written.
+          docker logs imnot-stateless 2>&1 | grep -q "imnot.cli"
+          test -z "$(docker diff imnot-stateless)"
+
       - name: Show logs on failure
         if: failure()
-        run: docker logs imnot-smoke
+        run: docker logs imnot-smoke; docker logs imnot-stateless
 
       - name: Cleanup
         if: always()
-        run: docker rm -f imnot-smoke || true
+        run: docker rm -f imnot-smoke imnot-stateless || true
 
   qa:
     name: E2E QA suite

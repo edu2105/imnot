@@ -537,6 +537,19 @@ def _register_ui_routes(app: FastAPI, ui_config: UIConfig) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _partners_read_only_response(exc: OSError | None = None) -> JSONResponse:
+    """403 for POST/DELETE /imnot/admin/partners when partner files cannot be changed from here."""
+    reason = f"the partners directory is not writable ({exc.strerror or exc})" if exc else "this server is stateless"
+    return JSONResponse(
+        status_code=403,
+        content={
+            "status": "error",
+            "detail": f"Partners cannot be changed through the admin API: {reason}. "
+            "Change partner.yaml where the partners come from and redeploy or restart.",
+        },
+    )
+
+
 def _register_infra_routes(
     app: FastAPI,
     partners: list[PartnerDef],
@@ -586,6 +599,8 @@ def _register_infra_routes(
         return JSONResponse({"status": "ok", "session_id": session_id})
 
     async def delete_partner(partner_name: str, request: Request) -> JSONResponse:
+        if getattr(request.app.state, "partners_read_only", False):
+            return _partners_read_only_response()
         partners_dir: Path | None = request.app.state.partners_dir
         if partners_dir is None:
             return JSONResponse(
@@ -607,7 +622,10 @@ def _register_infra_routes(
                 status_code=400,
                 content={"detail": "Partner directory contains symlinks; refusing to delete.", "symlinks": symlinks},
             )
-        shutil.rmtree(partner_dir)
+        try:
+            shutil.rmtree(partner_dir)
+        except OSError as exc:
+            return _partners_read_only_response(exc)
         _unregister_partner_routes(request.app, partner_name)
         for i, p in enumerate(partners):
             if p.partner == partner_name:
@@ -816,8 +834,11 @@ def _register_infra_routes(
                 current partner.yaml and return 409 with ``dropped`` if fields would be lost. Used by
                 the Builder's edit mode, which does not round-trip every field.
 
-        Returns 201 on create, 200 on overwrite, 409 on conflict or dropped fields, 422 on bad YAML.
+        Returns 201 on create, 200 on overwrite, 409 on conflict or dropped fields, 422 on bad YAML,
+        403 when the partners directory cannot be written (stateless mode or a read-only filesystem).
         """
+        if getattr(request.app.state, "partners_read_only", False):
+            return _partners_read_only_response()
         partners_dir: Path | None = request.app.state.partners_dir
         if partners_dir is None:
             return JSONResponse(
@@ -865,6 +886,8 @@ def _register_infra_routes(
             return JSONResponse(status_code=422, content={"status": "error", "detail": str(exc)})
         except FileExistsError as exc:
             return JSONResponse(status_code=409, content={"status": "error", "detail": str(exc)})
+        except OSError as exc:
+            return _partners_read_only_response(exc)
 
         partner = result.partner
         configs_: dict = request.app.state.configs

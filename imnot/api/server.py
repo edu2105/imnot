@@ -76,6 +76,7 @@ def create_app(
     base_url: str = "http://localhost:8000",
     default_limit: int = 50,
     ui_config: UIConfig | None = None,
+    partners_read_only: bool = False,
 ) -> FastAPI:
     """Build and return a fully configured FastAPI application.
 
@@ -84,6 +85,9 @@ def create_app(
 
     If *admin_key* is provided, all ``/imnot/admin/*`` endpoints require
     ``Authorization: Bearer <admin_key>``.
+
+    With *partners_read_only* (stateless mode), ``POST`` and ``DELETE /imnot/admin/partners`` answer 403
+    instead of writing to *partners_dir*.
     """
     store = SessionStore(db_path=db_path)
     stress_store = StressStore(db_path=db_path)
@@ -110,6 +114,7 @@ def create_app(
     )
 
     app.state.stress_store = stress_store
+    app.state.partners_read_only = partners_read_only
     app.add_middleware(LoggingMiddleware)
     app.add_middleware(JournalMiddleware)
     register_routes(
@@ -134,10 +139,11 @@ def create_app_from_env() -> FastAPI:
     - ``IMNOT_PARTNERS_DIR``  (default: ``partners``)
     - ``IMNOT_DB_PATH``       (default: ``imnot.db``)
     - ``IMNOT_ADMIN_KEY``     (default: none)
+    - ``IMNOT_BASE_URL``      (default: ``base_url`` from ``imnot.toml``)
 
     - ``IMNOT_CONFIG_PATH``   (default: ``imnot.toml`` in the CWD)
 
-    ``base_url``, ``default_limit`` and the UI config are read from ``imnot.toml`` via ``load_config()``.
+    ``default_limit`` and the UI config are read from ``imnot.toml`` via ``load_config()``.
     """
     partners_dir_env = os.environ.get("IMNOT_PARTNERS_DIR", str(DEFAULT_PARTNERS_DIR))
     partners_dir = Path(partners_dir_env) if partners_dir_env else None
@@ -155,7 +161,7 @@ def create_app_from_env() -> FastAPI:
         partners_dir=partners_dir,
         db_path=db_path,
         admin_key=admin_key,
-        base_url=config.server.base_url,
+        base_url=os.environ.get("IMNOT_BASE_URL") or config.server.base_url,
         default_limit=default_limit,
         ui_config=config.ui,
     )
