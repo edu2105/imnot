@@ -23,6 +23,7 @@ from typing import Any, Callable
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
+from imnot.engine.errors import validation_error_response
 from imnot.engine.patterns import no_payload_response
 from imnot.engine.session_store import SessionStore
 from imnot.engine.templating import render_response
@@ -79,7 +80,7 @@ def _make_submit_handler(
                     body = None
             errors = validate_request(validate_rules, body, request.query_params, request.headers)
             if errors:
-                return JSONResponse(status_code=422, content={"detail": errors})
+                return validation_error_response(validate_rules, errors)
 
         session_id: str | None = request.headers.get("X-Imnot-Session")
         async_uuid = store.register_async_request(
@@ -162,7 +163,7 @@ def _make_static_handler(
                     body = None
             errors = validate_request(validate_rules, body, request.query_params, request.headers)
             if errors:
-                return JSONResponse(status_code=422, content={"detail": errors})
+                return validation_error_response(validate_rules, errors)
         if has_id:
             # A status step for an id that was never submitted must not report it as done.
             async_uuid: str = request.path_params["id"]
@@ -206,7 +207,7 @@ def _make_fetch_handler(
                     body = None
             errors = validate_request(validate_rules, body, request.query_params, request.headers)
             if errors:
-                return JSONResponse(status_code=422, content={"detail": errors})
+                return validation_error_response(validate_rules, errors)
 
         async_uuid: str | None = request.path_params.get("id")
         row = store.get_async_request(async_uuid)

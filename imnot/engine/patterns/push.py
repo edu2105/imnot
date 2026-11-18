@@ -36,6 +36,7 @@ import httpx
 from fastapi import BackgroundTasks, Request
 from fastapi.responses import JSONResponse, Response
 
+from imnot.engine.errors import validation_error_response
 from imnot.engine.session_store import SessionStore
 from imnot.engine.templating import has_placeholders, render, request_context
 from imnot.engine.validator import validate_request
@@ -92,7 +93,7 @@ def make_push_handler(
                 request.headers,
             )
             if errors:
-                return JSONResponse(status_code=422, content={"detail": errors})
+                return validation_error_response(validate_rules, errors)
 
         # Extract callback URL from body or header
         if callback_url_field:

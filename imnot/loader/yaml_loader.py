@@ -181,7 +181,24 @@ def load_payload_files(partner: PartnerDef, payloads_dir: Path) -> tuple[dict[st
 # ---------------------------------------------------------------------------
 
 
+_ERROR_SPEC_KEYS = {"status", "body", "headers"}
+
+
+def _validate_error_spec(spec: Any, where: str) -> None:
+    """The optional partner-shaped ``error:`` block of validate:/rate_limit: (see engine/errors.py)."""
+    if not isinstance(spec, dict) or set(spec) - _ERROR_SPEC_KEYS:
+        raise ValueError(f"{where}: 'error' must be a mapping with keys {sorted(_ERROR_SPEC_KEYS)}")
+    status = spec.get("status")
+    if isinstance(status, bool) or not isinstance(status, int) or not 100 <= status <= 599:
+        raise ValueError(f"{where}: 'error.status' is required and must be an HTTP status code (got {status!r})")
+    if spec.get("headers") is not None and not isinstance(spec["headers"], dict):
+        raise ValueError(f"{where}: 'error.headers' must be a mapping")
+
+
 def _validate_validate_block(validate: dict[str, Any], path_hint: str) -> None:
+    if "error" in validate:
+        _validate_error_spec(validate["error"], f"Endpoint {path_hint} validate")
+        validate = {k: v for k, v in validate.items() if k != "error"}
     unknown_top = set(validate.keys()) - _VALIDATE_VALID_KEYS
     if unknown_top:
         raise ValueError(
@@ -226,6 +243,9 @@ def _validate_rate_limit_block(
             f"using pagination.style 'page_number_url', in the current version"
         )
 
+    if isinstance(rate_limit, dict) and "error" in rate_limit:
+        _validate_error_spec(rate_limit["error"], f"Endpoint {path_hint} rate_limit")
+        rate_limit = {k: v for k, v in rate_limit.items() if k != "error"}
     unknown_top = set(rate_limit.keys()) - _RATE_LIMIT_VALID_KEYS
     if unknown_top:
         raise ValueError(
