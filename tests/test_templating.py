@@ -118,7 +118,7 @@ async def test_callback_payload_is_rendered_with_the_submit_request(monkeypatch)
         async def __aexit__(self, *a):
             return False
 
-        async def request(self, method, url, json=None):
+        async def request(self, method, url, json=None, **kwargs):
             sent.update(method=method, url=url, json=json)
             return FakeResponse()
 
@@ -210,7 +210,7 @@ def test_retrigger_renders_request_id(tmp_path, monkeypatch):
         async def __aexit__(self, *a):
             return False
 
-        async def request(self, method, url, json=None):
+        async def request(self, method, url, json=None, **kwargs):
             sent.append(json)
             return FakeResponse()
 

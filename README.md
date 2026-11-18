@@ -116,7 +116,6 @@ Output only the YAML — no code, no explanation.
 
 ## Limitations
 
-- **Callback retries** — no built-in retry logic; use the retrigger endpoint to re-fire.
 - **JSON only** — response bodies are always JSON, no XML support.
 - **Single-node** — SQLite session store is not shared across instances.
 - **Admin UI** — desktop layout only; no mobile breakpoints.

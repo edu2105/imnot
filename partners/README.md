@@ -448,6 +448,9 @@ body field or header), stores the request, returns the configured status code wi
 | `callback_url_header` | One of these two | — | Request header that contains the callback URL |
 | `callback_method` | No | `POST` | HTTP method used for the outbound callback |
 | `callback_delay_seconds` | No | `0` | Seconds to wait before firing the callback |
+| `callback_headers` | No | — | Extra headers on the callback request, e.g. `{X-Source: imnot}`. Values support [templating](#response-templating) (`{{request_id}}`) |
+| `callback_signature` | No | — | `{secret, header, algorithm}`: HMAC of the exact JSON body sent, as `<algorithm>=<hex>` in `header` (default `X-Imnot-Signature`, algorithm `sha256`; also `sha512`, `sha1`) |
+| `callback_retries` | No | 1 attempt | `{attempts: 1–10, backoff_seconds: 0–60}`: retry on a non-2xx answer or a network error, waiting `backoff_seconds × attempt` between tries |
 
 Exactly one of `callback_url_field` or `callback_url_header` must be present — specifying
 both or neither is a validation error caught at startup.

@@ -132,7 +132,15 @@ def _diff_keys(old: dict, new: dict, where: str, out: list[str], skip: set[str] 
 # Everything else is the form's to decide, so a field the user removed in the form stays removed.
 _UNMANAGED_DATAPOINT_KEYS = {"description"}
 _UNMANAGED_ENDPOINT_KEYS = {"validate", "delay_ms", "fail"}
-_UNMANAGED_RESPONSE_KEYS = {"headers", "payload_by", "pending", "callback_method"}
+_UNMANAGED_RESPONSE_KEYS = {
+    "headers",
+    "payload_by",
+    "pending",
+    "callback_method",
+    "callback_headers",
+    "callback_signature",
+    "callback_retries",
+}
 _UNMANAGED_RESPONSE_KEYS_BY_PATTERN = {"polling": {"body"}}  # the form only edits a static body
 
 
