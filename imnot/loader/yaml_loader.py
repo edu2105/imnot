@@ -68,8 +68,10 @@ _RESPONSE_KEYS: dict[str, set[str]] = {
         "id_header_value",
         "id_body_field",
         "returns_payload",
+        "pending",
     },
 }
+_PENDING_KEYS = {"times", "status", "body", "headers"}
 _HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
 
 
@@ -215,6 +217,26 @@ def _validate_rate_limit_block(
         )
 
 
+def _validate_pending_block(pending: Any, response: dict[str, Any], path: str, where: str) -> None:
+    if not isinstance(pending, dict):
+        raise ValueError(f"{where}: 'response.pending' must be a mapping (got {pending!r})")
+    unknown = set(pending) - _PENDING_KEYS
+    if unknown:
+        raise ValueError(f"{where}: unknown key(s) in 'pending:' {sorted(unknown)}. Allowed: {sorted(_PENDING_KEYS)}")
+    times = pending.get("times")
+    if isinstance(times, bool) or not isinstance(times, int) or times <= 0:
+        raise ValueError(f"{where}: 'pending.times' is required and must be a positive integer (got {times!r})")
+    status = pending.get("status", 202)
+    if isinstance(status, bool) or not isinstance(status, int) or not 100 <= status <= 599:
+        raise ValueError(f"{where}: 'pending.status' must be an HTTP status code (got {status!r})")
+    if pending.get("headers") is not None and not isinstance(pending["headers"], dict):
+        raise ValueError(f"{where}: 'pending.headers' must be a mapping")
+    if response.get("generates_id"):
+        raise ValueError(f"{where}: 'pending' cannot be used on the step that generates the id")
+    if "{id}" not in path:
+        raise ValueError(f"{where}: 'pending' needs '{{id}}' in the path, so each request is counted separately")
+
+
 def _validate_fail_block(fail: Any, where: str) -> None:
     if not isinstance(fail, dict):
         raise ValueError(f"{where}: 'fail' must be a mapping (got {fail!r})")
@@ -275,6 +297,8 @@ def _parse_endpoint(
                 f"{where}: callback needs exactly one of "
                 "'response.callback_url_field' or 'response.callback_url_header'"
             )
+    if pattern == "polling" and response.get("pending") is not None:
+        _validate_pending_block(response["pending"], response, path, where)
     if pattern == "polling" and response.get("generates_id"):
         if not (response.get("id_header") and response.get("id_header_value")) and not response.get("id_body_field"):
             raise ValueError(f"{where}: 'generates_id: true' needs 'id_header' + 'id_header_value' or 'id_body_field'")
