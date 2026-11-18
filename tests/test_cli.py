@@ -1418,3 +1418,9 @@ def test_init_paginated_example_answers_without_any_upload(runner, tmp_path):
         page = c.get("/ratesync/v1/properties?limit=2").json()
     assert [p["id"] for p in page["properties"]] == ["P-001", "P-002"]
     assert page["total"] == 3 and page["hasMore"] is True
+
+
+def test_validate_reports_unknown_keys_as_errors_not_as_ignored(runner, tmp_path):
+    _write_partner(tmp_path, "acme", _VALID_PARTNER.format(name="acme", path="/acme").replace("response:", "respose:"))
+    result = runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path)])
+    assert "unknown key 'respose'" in result.output and "(ignored)" not in result.output
