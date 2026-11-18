@@ -4,7 +4,7 @@
 
 | Command | Description |
 |---------|-------------|
-| `imnot init` | Scaffold a new project with example partners and `imnot.toml` |
+| `imnot init` | Scaffold a new project with three example partners covering all six patterns (`ratesync` ships example payloads) and `imnot.toml` |
 | `imnot init --dir <path>` | Scaffold into a specific directory (created if it does not exist) |
 | `imnot start` | Load partner YAMLs and start the server. Starts with zero partners if no `partners/` exists. Auto-creates `imnot.toml` on first run. |
 | `imnot start --reload` | Start with auto-restart on any YAML change (recommended for development) |

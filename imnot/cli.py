@@ -348,6 +348,7 @@ def stop(pid_file: str) -> None:
 _EXAMPLES = [
     ("staylink", "oauth + polling"),
     ("bookingco", "static + fetch"),
+    ("ratesync", "callback + paginated"),
 ]
 
 
@@ -377,12 +378,19 @@ def init(target_dir: str) -> None:
 
     written: list[tuple[Path, str]] = []
     for partner_name, patterns in _EXAMPLES:
+        source = files("imnot.examples").joinpath(partner_name)
         dest_dir = partners_dir / partner_name
         dest_dir.mkdir(parents=True)
-        yaml_text = files("imnot.examples").joinpath(partner_name).joinpath("partner.yaml").read_text(encoding="utf-8")
         dest = dest_dir / "partner.yaml"
-        dest.write_text(yaml_text, encoding="utf-8")
+        dest.write_text(source.joinpath("partner.yaml").read_text(encoding="utf-8"), encoding="utf-8")
         written.append((dest.relative_to(target), patterns))
+        payloads = source.joinpath("payloads")
+        if payloads.is_dir():
+            (dest_dir / "payloads").mkdir()
+            for item in sorted(payloads.iterdir(), key=lambda x: x.name):
+                if item.name.endswith(".json"):
+                    (dest_dir / "payloads" / item.name).write_text(item.read_text(encoding="utf-8"), encoding="utf-8")
+                    written.append((dest_dir.relative_to(target) / "payloads" / item.name, "example payload"))
 
     toml_path = target / "imnot.toml"
     if not toml_path.exists():
@@ -398,7 +406,7 @@ def init(target_dir: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# imnot \1
+# imnot status
 # ---------------------------------------------------------------------------
 
 
@@ -421,7 +429,7 @@ def status(db: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# imnot \1
+# imnot validate / routes
 # ---------------------------------------------------------------------------
 
 
@@ -537,7 +545,7 @@ def routes(partners_dir: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# imnot \1
+# imnot generate
 # ---------------------------------------------------------------------------
 
 
@@ -657,7 +665,7 @@ def generate(file_path: str, partners_dir: str, dry_run: bool, json_output: bool
 
 
 # ---------------------------------------------------------------------------
-# imnot \1
+# imnot export
 # ---------------------------------------------------------------------------
 
 
@@ -727,7 +735,7 @@ def export_postman(out: str, partners_dir: str, selected_partners: tuple[str, ..
 
 
 # ---------------------------------------------------------------------------
-# imnot \1
+# imnot payload
 # ---------------------------------------------------------------------------
 
 
@@ -778,7 +786,7 @@ def payload_set(partner: str, datapoint: str, file: str, db: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# imnot \1
+# imnot sessions
 # ---------------------------------------------------------------------------
 
 
