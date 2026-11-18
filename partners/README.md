@@ -213,7 +213,14 @@ The response body and headers can be updated without restarting the server: edit
 **How it works:** consumer uploads a payload via the admin API, then GET returns it.
 Supports session isolation via `X-Imnot-Session`.
 
-**Required endpoints:** exactly one `GET` endpoint.
+**Required endpoints:** one or more, usually a single `GET` (any method works).
+
+**Response config fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `status` | No | HTTP status code (default `200`) |
+| `payload_by` | No | Name of a path parameter. The payload becomes a map and each value of that parameter gets its own entry (see below) |
 
 **Example:**
 
@@ -226,6 +233,30 @@ Supports session isolation via `X-Imnot-Session`.
       response:
         status: 200
 ```
+
+**Example — a different response per id (`payload_by`):**
+
+```yaml
+- name: reservation
+  pattern: fetch
+  endpoints:
+    - method: GET
+      path: /bookingco/v1/reservations/{id}
+      response:
+        status: 200
+        payload_by: id
+```
+
+Upload one map instead of one route per reservation:
+
+```bash
+curl -X POST http://localhost:8000/imnot/admin/bookingco/reservation/payload \
+  -H "Content-Type: application/json" \
+  -d '{"RES-1": {"guest": "Ana", "nights": 2}, "RES-2": {"guest": "Leo", "nights": 5}}'
+```
+
+`GET /bookingco/v1/reservations/RES-2` returns `{"guest": "Leo", "nights": 5}`; an id with no entry
+returns `404`. Works the same with session payloads and with `payloads/reservation.json`.
 
 ---
 
