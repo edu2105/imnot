@@ -73,3 +73,7 @@ When a log file reaches `max_bytes`, it is moved to `archived-logs/` with a time
 ## Partner auto-discovery
 
 `imnot start`, `imnot routes`, and other commands all walk up from the current working directory to find `partners/`, `imnot.db`, and `imnot.pid`. You can run any command from any subdirectory of your project.
+
+The search for `imnot.db` and `imnot.pid` stops at the project root — the first directory with an `imnot.toml` (created by `imnot init` and `imnot start`) — so a project nested inside another one never uses the outer project's database.
+
+`imnot start` prints a short summary: the admin UI URL, the partners loaded, the ones skipped (run `imnot validate` for why), and the payload-backed datapoints that have no payload yet.

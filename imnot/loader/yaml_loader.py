@@ -462,19 +462,23 @@ def parse_partner_yaml(text: str, source_path: Path = Path("<input>"), strict: b
     return _parse_partner(raw, source_path, strict=strict)
 
 
-def load_partners(partners_dir: Path) -> list[PartnerDef]:
+def load_partners(partners_dir: Path, quiet: bool = False) -> list[PartnerDef]:
     """Scan *partners_dir* for partner.yaml files and return parsed definitions.
 
     Each subdirectory of *partners_dir* may contain a ``partner.yaml`` file.
     Files that fail to parse are logged and skipped so a single bad definition
-    does not prevent the rest from loading.
+    does not prevent the rest from loading. ``quiet=True`` skips the logging (used by the CLI's
+    startup summary, which loads a second time just to count; the server logs the real load).
     """
+    log = logging.getLogger("imnot.quiet") if quiet else logger
+    if quiet:
+        log.disabled = True
     if not partners_dir.is_dir():
         raise FileNotFoundError(f"Partners directory not found: {partners_dir}")
 
     yaml_files = sorted(partners_dir.glob("*/partner.yaml"))
     if not yaml_files:
-        logger.warning("No partner.yaml files found in %s", partners_dir)
+        log.warning("No partner.yaml files found in %s", partners_dir)
         return []
 
     partners: list[PartnerDef] = []
@@ -483,18 +487,18 @@ def load_partners(partners_dir: Path) -> list[PartnerDef]:
             raw = yaml.safe_load(yaml_path.read_text())
             partner = _parse_partner(raw, yaml_path)
             for warning in partner.warnings:
-                logger.warning("%s: %s", yaml_path, warning)
+                log.warning("%s: %s", yaml_path, warning)
             partner.seed_payloads, problems = load_payload_files(partner, yaml_path.parent / "payloads")
             for problem in problems:
-                logger.warning("%s: %s (skipped)", yaml_path.parent, problem)
+                log.warning("%s: %s (skipped)", yaml_path.parent, problem)
             partners.append(partner)
-            logger.info(
+            log.info(
                 "Loaded partner '%s' with %d datapoint(s) from %s",
                 partner.partner,
                 len(partner.datapoints),
                 yaml_path,
             )
         except (yaml.YAMLError, ValueError) as exc:
-            logger.error("Failed to load partner from %s: %s", yaml_path, exc)
+            log.error("Failed to load partner from %s: %s", yaml_path, exc)
 
     return partners

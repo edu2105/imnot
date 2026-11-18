@@ -23,6 +23,7 @@ from typing import Any, Callable
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
+from imnot.engine.patterns import no_payload_response
 from imnot.engine.rate_limiter import RateLimiter
 from imnot.engine.session_store import SessionStore
 from imnot.engine.validator import validate_request
@@ -76,12 +77,7 @@ def make_fetch_handler(
         )
 
         if payload is None:
-            detail = (
-                f"No session payload found for session '{session_id}'"
-                if session_id
-                else f"No global payload found for {partner}/{dp_name}"
-            )
-            return JSONResponse(status_code=404, content={"detail": detail})
+            return no_payload_response(partner, dp_name, session_id)
 
         if payload_by is not None:
             # The payload is a map {<path param value>: <response>}; pick this request's entry.

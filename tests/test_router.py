@@ -1452,3 +1452,41 @@ def test_payload_file_wins_over_an_earlier_upload_on_reload_but_sessions_are_kep
         assert c.get("/seedco/charges").json() == {"v": 2}
         headers = {"X-Imnot-Session": session["session_id"]}
         assert c.get("/seedco/charges", headers=headers).json() == {"v": "session"}
+
+
+# ---------------------------------------------------------------------------
+# Stage 4 UX: no-payload hint, upload-time shape checks
+# ---------------------------------------------------------------------------
+
+
+def test_missing_payload_404_explains_how_to_fix_it(client):
+    r = client.get("/bookingco/v1/charges")
+    assert r.status_code == 404
+    body = r.json()
+    assert body["detail"] == "No global payload found for bookingco/charges"  # wording kept for scripts
+    assert "POST /imnot/admin/bookingco/charges/payload" in body["hint"]
+    assert r.headers["x-imnot-hint"] == body["hint"]
+
+
+def test_missing_session_payload_404_hints_at_the_session_endpoint(client):
+    r = client.get("/bookingco/v1/charges", headers={"X-Imnot-Session": "nope"})
+    assert "payload/session" in r.json()["hint"]
+
+
+def test_paginated_upload_rejects_an_envelope(tmp_path, store):
+    yaml_text = """\
+partner: pageco
+datapoints:
+  - name: items
+    pattern: paginated
+    pagination: {style: offset_limit, items_field: items}
+    endpoints:
+      - method: GET
+        path: /pageco/items
+        response: {status: 200}
+"""
+    c, _ = _make_client(tmp_path, store)
+    c.post("/imnot/admin/partners", content=yaml_text)
+    r = c.post("/imnot/admin/pageco/items/payload", json={"items": [], "total": 0})
+    assert r.status_code == 422 and "JSON array" in r.json()["detail"]
+    assert c.post("/imnot/admin/pageco/items/payload", json=[{"id": 1}]).status_code == 200

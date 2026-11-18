@@ -6,6 +6,11 @@ All admin endpoints are available at `/imnot/admin/`. They are auth-gated when `
 
 ## Payload endpoints
 
+A payload-backed route with nothing uploaded returns `404` with `detail` plus a `hint` field (and an
+`X-Imnot-Hint` header) saying exactly which admin call or `payloads/` file fixes it. Uploads are
+checked against the datapoint: a `paginated` payload must be a JSON array, and a `fetch` datapoint
+with `payload_by` needs a JSON object; anything else is rejected with `422` at upload time.
+
 For every `fetch`, `polling`, `callback`, or `paginated` datapoint, imnot auto-generates payload endpoints:
 
 | Method | Path | Description |

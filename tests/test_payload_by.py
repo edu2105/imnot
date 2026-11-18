@@ -55,9 +55,16 @@ def test_works_with_payload_files_and_other_param_names(tmp_path):
         assert c.get("/hotelco/properties/P-9/reservation").json() == {"rooms": 3}
 
 
-def test_non_object_payload_is_422(tmp_path):
+def test_non_object_upload_is_rejected(tmp_path):
     with _client(tmp_path) as c:
-        c.post("/imnot/admin/hotelco/reservation/payload", json=[{"id": "R1"}])
+        up = c.post("/imnot/admin/hotelco/reservation/payload", json=[{"id": "R1"}])
+        session_up = c.post("/imnot/admin/hotelco/reservation/payload/session", json=["x"])
+    assert up.status_code == 422 and "payload_by" in up.json()["detail"]
+    assert session_up.status_code == 422
+
+
+def test_non_object_payload_file_is_422_on_get(tmp_path):
+    with _client(tmp_path, files={"reservation.json": '[{"id": "R1"}]'}) as c:
         r = c.get("/hotelco/reservations/R1")
     assert r.status_code == 422 and "payload_by" in r.json()["detail"]
 

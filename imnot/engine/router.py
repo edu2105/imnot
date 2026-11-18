@@ -331,11 +331,33 @@ def _register_admin_routes(
     global_path = f"/imnot/admin/{partner_name}/{dp_name}/payload"
     session_path = f"/imnot/admin/{partner_name}/{dp_name}/payload/session"
 
+    def _shape_error(payload: Any) -> JSONResponse | None:
+        """Reject a payload the routes could never serve, at upload time instead of on every GET."""
+        if datapoint.pattern == "paginated" and not isinstance(payload, list):
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "detail": "A 'paginated' payload must be a JSON array of items; imnot builds the "
+                    "envelope (items_field, totals, next links) itself"
+                },
+            )
+        keyed_by = next(
+            (ep.response["payload_by"] for ep in datapoint.endpoints if ep.response.get("payload_by")), None
+        )
+        if keyed_by is not None and not isinstance(payload, dict):
+            return JSONResponse(
+                status_code=422,
+                content={"detail": f"This datapoint uses payload_by: {keyed_by}; upload a JSON object keyed by it"},
+            )
+        return None
+
     async def upload_global(request: Request) -> JSONResponse:
         try:
             payload: dict[str, Any] = await request.json()
         except Exception:
             return JSONResponse(status_code=400, content={"detail": "Invalid JSON body"})
+        if (error := _shape_error(payload)) is not None:
+            return error
         store.store_global_payload(partner_name, dp_name, payload)
         return JSONResponse({"status": "ok", "partner": partner_name, "datapoint": dp_name})
 
@@ -344,6 +366,8 @@ def _register_admin_routes(
             payload: dict[str, Any] = await request.json()
         except Exception:
             return JSONResponse(status_code=400, content={"detail": "Invalid JSON body"})
+        if (error := _shape_error(payload)) is not None:
+            return error
         session_id = store.store_session_payload(partner_name, dp_name, payload)
         return JSONResponse({"session_id": session_id})
 
