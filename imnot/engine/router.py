@@ -34,7 +34,7 @@ from imnot.engine.patterns.async_ import make_async_handlers
 from imnot.engine.patterns.fetch import make_fetch_handler
 from imnot.engine.patterns.oauth import make_oauth_handler
 from imnot.engine.patterns.paginated import make_paginated_handler
-from imnot.engine.patterns.push import fire_callback, make_push_handler
+from imnot.engine.patterns.push import delivery_config, fire_callback, make_push_handler
 from imnot.engine.patterns.static import make_static_handler
 from imnot.engine.rate_limiter import RateLimiter
 from imnot.engine.session_store import SessionStore
@@ -443,6 +443,7 @@ def _register_admin_routes(
                 callback_url=row["callback_url"],
                 callback_method=row["callback_method"],
                 context={"request_id": request_id},  # the submit request itself is not stored
+                delivery=delivery_config(datapoint.endpoints[0].response),
             )
             return JSONResponse({"status": "dispatched", "request_id": request_id})
 

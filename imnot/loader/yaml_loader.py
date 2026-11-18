@@ -58,7 +58,16 @@ _RESPONSE_KEYS: dict[str, set[str]] = {
     "oauth": {"status", "token_type", "expires_in"},
     "fetch": {"status", "payload_by"},
     "paginated": {"status"},
-    "callback": {"status", "callback_url_field", "callback_url_header", "callback_method", "callback_delay_seconds"},
+    "callback": {
+        "status",
+        "callback_url_field",
+        "callback_url_header",
+        "callback_method",
+        "callback_delay_seconds",
+        "callback_headers",
+        "callback_signature",
+        "callback_retries",
+    },
     "polling": {
         "status",
         "body",
@@ -254,6 +263,35 @@ def _validate_pending_block(pending: Any, response: dict[str, Any], path: str, w
         raise ValueError(f"{where}: 'pending' needs '{{id}}' in the path, so each request is counted separately")
 
 
+_SIGNATURE_KEYS = {"secret", "header", "algorithm"}
+_SIGNATURE_ALGORITHMS = {"sha256", "sha512", "sha1"}
+_RETRY_KEYS = {"attempts", "backoff_seconds"}
+
+
+def _validate_callback_delivery(response: dict[str, Any], where: str) -> None:
+    headers = response.get("callback_headers")
+    if headers is not None and not isinstance(headers, dict):
+        raise ValueError(f"{where}: 'callback_headers' must be a mapping of header name to value")
+    signature = response.get("callback_signature")
+    if signature is not None:
+        if not isinstance(signature, dict) or set(signature) - _SIGNATURE_KEYS:
+            raise ValueError(f"{where}: 'callback_signature' must be a mapping with keys {sorted(_SIGNATURE_KEYS)}")
+        if not signature.get("secret") or not isinstance(signature["secret"], str):
+            raise ValueError(f"{where}: 'callback_signature.secret' is required (a string)")
+        if signature.get("algorithm", "sha256") not in _SIGNATURE_ALGORITHMS:
+            raise ValueError(f"{where}: 'callback_signature.algorithm' must be one of {sorted(_SIGNATURE_ALGORITHMS)}")
+    retries = response.get("callback_retries")
+    if retries is not None:
+        if not isinstance(retries, dict) or set(retries) - _RETRY_KEYS:
+            raise ValueError(f"{where}: 'callback_retries' must be a mapping with keys {sorted(_RETRY_KEYS)}")
+        attempts = retries.get("attempts", 1)
+        if isinstance(attempts, bool) or not isinstance(attempts, int) or not 1 <= attempts <= 10:
+            raise ValueError(f"{where}: 'callback_retries.attempts' must be an integer from 1 to 10")
+        backoff = retries.get("backoff_seconds", 1)
+        if isinstance(backoff, bool) or not isinstance(backoff, (int, float)) or not 0 <= backoff <= 60:
+            raise ValueError(f"{where}: 'callback_retries.backoff_seconds' must be a number from 0 to 60")
+
+
 def _validate_fail_block(fail: Any, where: str) -> None:
     if not isinstance(fail, dict):
         raise ValueError(f"{where}: 'fail' must be a mapping (got {fail!r})")
@@ -308,6 +346,7 @@ def _parse_endpoint(
         raise ValueError(f"{where}: 'response.status' must be an HTTP status code between 100 and 599 (got {status!r})")
     _check_unknown_keys(response, _RESPONSE_KEYS[pattern], f"{where} response", warns)
     if pattern == "callback":
+        _validate_callback_delivery(response, where)
         has_field, has_header = bool(response.get("callback_url_field")), bool(response.get("callback_url_header"))
         if has_field == has_header:
             raise ValueError(
