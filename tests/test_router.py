@@ -7,6 +7,7 @@ from click.testing import CliRunner
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from imnot.api.server import create_app
 from imnot.cli import cli
 from imnot.engine.router import register_routes
 from imnot.engine.session_store import SessionStore
@@ -1404,3 +1405,50 @@ def test_e2e_paginated_url_rate_limit_drains_then_429(paginated_url_rate_limit_e
     assert r2.status_code == 429
     assert "Retry-After" in r2.headers
     assert "detail" in r2.json()
+
+
+# ---------------------------------------------------------------------------
+# Payload files seeded as global payloads
+# ---------------------------------------------------------------------------
+
+_SEED_YAML = """\
+partner: seedco
+datapoints:
+  - name: charges
+    pattern: fetch
+    endpoints:
+      - method: GET
+        path: /seedco/charges
+        response:
+          status: 200
+"""
+
+
+def _seed_client(tmp_path, payload_text):
+    partners_dir = tmp_path / "partners"
+    (partners_dir / "seedco" / "payloads").mkdir(parents=True)
+    (partners_dir / "seedco" / "partner.yaml").write_text(_SEED_YAML)
+    (partners_dir / "seedco" / "payloads" / "charges.json").write_text(payload_text)
+    app = create_app(partners_dir=partners_dir, db_path=tmp_path / "seed.db")
+    return TestClient(app), partners_dir
+
+
+def test_payload_file_is_served_without_any_upload(tmp_path):
+    """Through create_app, so the lifespan (store.init → seed) runs exactly like `imnot start`."""
+    c, _ = _seed_client(tmp_path, '{"total": 3}')
+    with c:
+        assert c.get("/seedco/charges").json() == {"total": 3}
+
+
+def test_payload_file_wins_over_an_earlier_upload_on_reload_but_sessions_are_kept(tmp_path):
+    c, partners_dir = _seed_client(tmp_path, '{"v": 1}')
+    with c:
+        c.post("/imnot/admin/seedco/charges/payload", json={"v": "uploaded"})
+        session = c.post("/imnot/admin/seedco/charges/payload/session", json={"v": "session"}).json()
+        (partners_dir / "seedco" / "payloads" / "charges.json").write_text('{"v": 2}')
+
+        assert c.post("/imnot/admin/reload").status_code == 200
+
+        assert c.get("/seedco/charges").json() == {"v": 2}
+        headers = {"X-Imnot-Session": session["session_id"]}
+        assert c.get("/seedco/charges", headers=headers).json() == {"v": "session"}

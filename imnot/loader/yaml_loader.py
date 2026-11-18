@@ -10,6 +10,7 @@ Responsibilities:
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -101,6 +102,46 @@ class PartnerDef:
     datapoints: list[DatapointDef]
     source_path: Path  # absolute path to the partner.yaml file
     warnings: list[str] = field(default_factory=list)  # unknown keys found while parsing (see _PARTNER_KEYS)
+    # Global payloads seeded from partners/<partner>/payloads/<datapoint>.json, keyed by datapoint name.
+    seed_payloads: dict[str, Any] = field(default_factory=dict)
+
+
+# Patterns whose responses come from an uploaded payload, so they get admin payload routes; oauth and
+# static are fully defined by the YAML. Single source: router, cli and postman import it.
+PAYLOAD_PATTERNS = {"fetch", "polling", "callback", "paginated"}
+
+
+def load_payload_files(partner: PartnerDef, payloads_dir: Path) -> tuple[dict[str, Any], list[str]]:
+    """Read ``<payloads_dir>/<datapoint>.json`` files for *partner*.
+
+    Returns ``(payloads, problems)``. A file is skipped (and reported) when its JSON is invalid,
+    its name matches no datapoint, the datapoint does not use a payload, or a ``paginated``
+    payload is not a JSON array.
+    """
+    payloads: dict[str, Any] = {}
+    problems: list[str] = []
+    if not payloads_dir.is_dir():
+        return payloads, problems
+    by_name = {dp.name: dp for dp in partner.datapoints}
+    for path in sorted(payloads_dir.glob("*.json")):
+        label = f"payloads/{path.name}"
+        dp = by_name.get(path.stem)
+        if dp is None:
+            problems.append(f"{label}: no datapoint named '{path.stem}' in partner '{partner.partner}'")
+            continue
+        if dp.pattern not in PAYLOAD_PATTERNS:
+            problems.append(f"{label}: datapoint '{dp.name}' uses pattern '{dp.pattern}', which takes no payload")
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (ValueError, UnicodeDecodeError) as exc:
+            problems.append(f"{label}: invalid JSON ({exc})")
+            continue
+        if dp.pattern == "paginated" and not isinstance(payload, list):
+            problems.append(f"{label}: a 'paginated' payload must be a JSON array of items")
+            continue
+        payloads[dp.name] = payload
+    return payloads, problems
 
 
 # ---------------------------------------------------------------------------
@@ -380,6 +421,9 @@ def load_partners(partners_dir: Path) -> list[PartnerDef]:
             partner = _parse_partner(raw, yaml_path)
             for warning in partner.warnings:
                 logger.warning("%s: %s", yaml_path, warning)
+            partner.seed_payloads, problems = load_payload_files(partner, yaml_path.parent / "payloads")
+            for problem in problems:
+                logger.warning("%s: %s (skipped)", yaml_path.parent, problem)
             partners.append(partner)
             logger.info(
                 "Loaded partner '%s' with %d datapoint(s) from %s",
