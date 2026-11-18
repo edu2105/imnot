@@ -32,15 +32,85 @@ environment:
 
 ---
 
-## Cloud / Kubernetes
+### Upgrading from 1.6.0 or earlier: the image's user
 
-The published Docker image runs on any container platform. What imnot requires, regardless of provider:
+The image now runs as the fixed numeric user `10001:10001` (before: a named system user with whatever uid the build assigned). A `data/` directory or volume written by an older image belongs to the old uid, and the container stops at start-up with `Cannot write logs to /app/data/logs`. Fix it once:
 
-- **Persistent storage** — mount a volume at `/app/data` so the SQLite database survives container restarts. Without it, all session state is lost on redeploy.
-- **Admin key** — set `IMNOT_ADMIN_KEY` via environment variable. Required for any deployment reachable outside localhost.
-- **Host binding** — pass `--host 0.0.0.0` as the start command so the container port is reachable from outside. The default `127.0.0.1` binding blocks external traffic.
-- **Partner YAMLs** — either commit them to the repo (included in the image build) or mount a volume at `/app/partners` to manage them independently.
-- **Health checks** — use `GET /healthz` for liveness and readiness probes. It always returns `200 {"status":"ok","version":"…"}` with no auth and no I/O.
+```bash
+sudo chown -R 10001:10001 ./data          # bind mount
+docker run --rm -u 0 -v <volume>:/app/data --entrypoint chown ghcr.io/edu2105/imnot:latest -R 10001:10001 /app/data   # named volume
+```
+
+The image's defaults are now environment variables instead of `ENTRYPOINT` flags (`IMNOT_BIND_HOST=0.0.0.0`, `IMNOT_DB_PATH=/app/data/imnot.db`, `IMNOT_PARTNERS_DIR=/app/partners`). The values are the same, and flags appended to `docker run <image> …` still win.
+
+---
+
+## Containers without storage: stateless mode
+
+For Kubernetes and similar platforms, run imnot **stateless**: partners baked into the image, nothing written to disk, logs on stdout. Restarting the container rebuilds everything from the image.
+
+```dockerfile
+# Dockerfile in your contracts repo (partners/<partner>/partner.yaml, partners/<partner>/payloads/*.json)
+FROM ghcr.io/edu2105/imnot:<version>
+COPY partners /app/partners
+ENV IMNOT_STATELESS=1 IMNOT_STRICT=1
+```
+
+```bash
+docker run --read-only -e IMNOT_ADMIN_KEY=<secret> -p 8000:8000 <your-image>
+```
+
+- **`IMNOT_STATELESS=1`** (`--stateless`) — in-memory database, logs to stdout only, no `imnot.pid`, no `imnot.toml`, no volume and no writable directory needed. Payloads and sessions uploaded through the admin API work as usual and are gone after a restart; `payloads/<datapoint>.json` files are loaded again at every start. `POST` and `DELETE /imnot/admin/partners` answer `403`: partners change in the contracts repo, not over HTTP. `imnot stop`, `imnot status`, `imnot payload` and `imnot sessions` cannot reach an in-memory server: stop it with `SIGTERM` and use the admin API.
+- **`IMNOT_STRICT=1`** (`--strict`) — start-up exits 1 unless every partner passes `imnot validate` (and there is at least one). Without it a broken `partner.yaml` is skipped and the container still reports healthy. Run `imnot validate --partners-dir partners` in the contracts repo's CI as well.
+- **Configuration** — every `imnot start` option has an environment variable (see [cli.md](cli.md#environment-variables)). Set `IMNOT_BASE_URL` to the public URL if you use `page_number_url` pagination or the Postman export. Other settings go in an `imnot.toml` copied to `/app/imnot.toml`.
+- **Admin key** — set `IMNOT_ADMIN_KEY` from a secret. Required for any deployment reachable outside localhost.
+- **Health checks** — `GET /healthz` for liveness and readiness. It answers `200 {"status":"ok","version":"…"}` with no auth and no I/O, and only once partners are loaded and payload files seeded.
+
+### One replica per instance, one instance per team
+
+imnot keeps its state in one process (uploaded payloads, sessions, `polling` and `callback` request ids, cursors, `fail.first_n` and `pending` counters, rate-limit buckets, the request journal). Two replicas behind one Service do not share any of it: a `polling` submit answered by one replica gets a 404 from the other. Run **one replica** and do not autoscale it. To serve more teams, run more instances — each team with its own contracts image, admin key and journal — rather than a bigger shared one: on a shared instance a route collision or a broken partner under `--strict` stops every team's rollout.
+
+A minimal Kubernetes Deployment:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: imnot-team-a
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate            # never two processes with different state
+  selector:
+    matchLabels: {app: imnot-team-a}
+  template:
+    metadata:
+      labels: {app: imnot-team-a}
+    spec:
+      securityContext:
+        runAsNonRoot: true    # the image's user is 10001:10001
+      containers:
+        - name: imnot
+          image: registry.example.test/team-a/imnot-contracts:<git sha>
+          ports: [{containerPort: 8000}]
+          env:
+            - name: IMNOT_ADMIN_KEY
+              valueFrom: {secretKeyRef: {name: imnot-team-a, key: admin-key}}
+            - name: IMNOT_BASE_URL
+              value: https://imnot-team-a.example.test
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+          readinessProbe: {httpGet: {path: /healthz, port: 8000}}
+          livenessProbe: {httpGet: {path: /healthz, port: 8000}}
+```
+
+Kubernetes injects `IMNOT_PORT=tcp://…` into pods when a Service is called `imnot`. imnot does not read that variable (the port is `IMNOT_BIND_PORT`), so any Service name is safe.
+
+### With a volume instead
+
+If state must survive restarts, skip `IMNOT_STATELESS` and mount a volume at `/app/data` (writable by uid `10001`; in Kubernetes, `fsGroup: 10001`). The database, `imnot.toml` and `logs/` live there; set `[logging] stdout = true` in `/app/data/imnot.toml` to also get logs on the console. Still one replica: SQLite on a shared volume does not make replicas share counters or rate limits. Partner YAMLs can be baked into the image as above or mounted at `/app/partners`.
 
 ---
 
@@ -78,6 +148,8 @@ curl -X POST "http://localhost:8000/imnot/admin/partners?force=true" \
      -H "Authorization: Bearer $IMNOT_ADMIN_KEY" \
      --data-binary @/path/to/partner.yaml
 ```
+
+In stateless mode, or when `/app/partners` is read-only, this answers `403` with the reason: change the partner in its repo and redeploy.
 
 `imnot generate` and `POST /imnot/admin/partners` use identical validation — both write the same `partners/<name>/partner.yaml` and produce the same result shape.
 

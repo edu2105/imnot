@@ -24,6 +24,7 @@
 - **Fails on demand.** `delay_ms` and `fail: {status, first_n}` on any endpoint simulate a slow or flaky partner, to test timeouts and retries.
 - **Records what your integration sent.** Every request to a mock route lands in a journal (`GET /imnot/admin/requests`, secrets redacted), so a test can assert the exact body and headers your code produced.
 - **Ships with your tests.** Partner definitions — and, optionally, their payloads as `payloads/<datapoint>.json` — are version-controlled alongside the integration they test and run anywhere Docker runs.
+- **Runs in a container with no storage.** `--stateless --strict` (or `IMNOT_STATELESS=1 IMNOT_STRICT=1`): read-only filesystem, logs on stdout, partners baked into your image, and a broken definition stops the rollout. One small instance per team; see [docs/deployment.md](docs/deployment.md).
 
 ---
 
