@@ -16,10 +16,13 @@ Responsibilities:
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import logging
+import math
 import re
 import shutil
+import time
 from importlib.metadata import version as _pkg_version
 from importlib.resources import files as _res_files
 from pathlib import Path
@@ -165,10 +168,20 @@ def seed_payloads(store: SessionStore, partners: list[PartnerDef]) -> None:
 # ---------------------------------------------------------------------------
 
 
+# Failed admin logins share one queue: each takes a slot of AUTH_FAILURE_DELAY_SECONDS before its 401,
+# so guessing the key runs at ~2 tries per second however many clients or IPs try at once (behind an
+# ingress every client has the same IP, so a per-IP lockout would lock the whole team out instead).
+# Requests with the right key never wait. Past AUTH_FAILURE_MAX_WAIT_SECONDS of queue, 429 at once.
+AUTH_FAILURE_DELAY_SECONDS = 0.5
+AUTH_FAILURE_MAX_WAIT_SECONDS = 10.0
+
+
 def _register_admin_auth_middleware(app: FastAPI, admin_key: str) -> None:
     """Add middleware that enforces Bearer token auth on all /imnot/admin/* paths."""
 
     from starlette.middleware.base import BaseHTTPMiddleware
+
+    failures = {"next_slot": 0.0}  # monotonic time when the next failed attempt may be answered
 
     class AdminAuthMiddleware(BaseHTTPMiddleware):
         async def dispatch(self, request: Request, call_next):  # type: ignore[override]
@@ -181,6 +194,18 @@ def _register_admin_auth_middleware(app: FastAPI, admin_key: str) -> None:
                         request.url.path,
                         request.client.host if request.client else "unknown",
                     )
+                    now = time.monotonic()
+                    slot = max(now, failures["next_slot"])
+                    if slot - now > AUTH_FAILURE_MAX_WAIT_SECONDS:
+                        return Response(
+                            content='{"detail":"Too many failed admin key attempts, retry later"}',
+                            status_code=429,
+                            media_type="application/json",
+                            headers={"Retry-After": str(math.ceil(slot - now))},
+                        )
+                    # Claimed before the await, so concurrent failures queue up instead of all waiting once.
+                    answer_at = failures["next_slot"] = slot + AUTH_FAILURE_DELAY_SECONDS
+                    await asyncio.sleep(answer_at - now)
                     return Response(
                         content='{"detail":"Unauthorized"}',
                         status_code=401,

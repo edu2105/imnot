@@ -30,3 +30,11 @@ def isolate_imnot_env():
     for key in [k for k in os.environ if k.startswith("IMNOT_")]:
         del os.environ[key]
     os.environ.update(saved)
+
+
+@pytest.fixture(autouse=True)
+def no_admin_auth_failure_delay(monkeypatch):
+    """Failed admin logins wait AUTH_FAILURE_DELAY_SECONDS; tests that check the delay set it back."""
+    from imnot.engine import router
+
+    monkeypatch.setattr(router, "AUTH_FAILURE_DELAY_SECONDS", 0.0)

@@ -53,7 +53,7 @@ For Kubernetes and similar platforms, run imnot **stateless**: partners baked in
 # Dockerfile in your contracts repo (partners/<partner>/partner.yaml, partners/<partner>/payloads/*.json)
 FROM ghcr.io/edu2105/imnot:<version>
 COPY partners /app/partners
-ENV IMNOT_STATELESS=1 IMNOT_STRICT=1
+ENV IMNOT_STATELESS=1 IMNOT_STRICT=1 IMNOT_REQUIRE_ADMIN_KEY=1
 ```
 
 ```bash
@@ -63,7 +63,7 @@ docker run --read-only -e IMNOT_ADMIN_KEY=<secret> -p 8000:8000 <your-image>
 - **`IMNOT_STATELESS=1`** (`--stateless`) — in-memory database, logs to stdout only, no `imnot.pid`, no `imnot.toml`, no volume and no writable directory needed. Payloads and sessions uploaded through the admin API work as usual and are gone after a restart; `payloads/<datapoint>.json` files are loaded again at every start. Partners created, edited or deleted from the admin UI or `POST`/`DELETE /imnot/admin/partners` work too, in memory: see [below](#changing-partners-on-a-stateless-server). `imnot stop`, `imnot status`, `imnot payload` and `imnot sessions` cannot reach an in-memory server: stop it with `SIGTERM` and use the admin API.
 - **`IMNOT_STRICT=1`** (`--strict`) — start-up exits 1 unless every partner passes `imnot validate`. A completely empty partners directory passes (an instance whose partners are made in the UI); one with content but no `<partner>/partner.yaml` fails. Without it a broken `partner.yaml` is skipped and the container still reports healthy. Run `imnot validate --partners-dir partners` in the contracts repo's CI as well.
 - **Configuration** — every `imnot start` option has an environment variable (see [cli.md](cli.md#environment-variables)). Set `IMNOT_BASE_URL` to the public URL if you use `page_number_url` pagination or the Postman export. Other settings go in an `imnot.toml` copied to `/app/imnot.toml`.
-- **Admin key** — set `IMNOT_ADMIN_KEY` from a secret. Required for any deployment reachable outside localhost.
+- **Admin key** — set `IMNOT_ADMIN_KEY` from a secret: a long random value (`openssl rand -hex 32`). Required for any deployment reachable outside localhost; `IMNOT_REQUIRE_ADMIN_KEY=1` turns a missing key into a start-up error instead of an open admin API. Failed attempts are slowed down for everyone ([details](admin-api.md#securing-admin-endpoints)).
 - **Health checks** — `GET /healthz` for liveness and readiness. It answers `200 {"status":"ok","version":"…"}` with no auth and no I/O, and only once partners are loaded and payload files seeded.
 
 ### Changing partners on a stateless server
@@ -97,7 +97,7 @@ imnot-contracts/
 FROM ghcr.io/edu2105/imnot:<version>
 ARG TEAM
 COPY teams/${TEAM}/partners /app/partners
-ENV IMNOT_STATELESS=1 IMNOT_STRICT=1 IMNOT_INSTANCE_NAME=${TEAM}
+ENV IMNOT_STATELESS=1 IMNOT_STRICT=1 IMNOT_REQUIRE_ADMIN_KEY=1 IMNOT_INSTANCE_NAME=${TEAM}
 ```
 
 CI validates and builds one image per folder, for example with a GitHub Actions matrix:

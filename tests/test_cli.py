@@ -991,6 +991,46 @@ def test_start_no_warning_when_admin_key_set_with_0_0_0_0(runner, tmp_path):
     assert "IMNOT_ADMIN_KEY" not in result.output
 
 
+def _start_with(runner, tmp_path, *args, env=None):
+    partners_dir = tmp_path / "partners"
+    partners_dir.mkdir(exist_ok=True)
+    original = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        with patch("imnot.cli.uvicorn.run") as run:
+            result = runner.invoke(
+                cli,
+                ["start", "--db", str(tmp_path / "test.db"), "--partners-dir", str(partners_dir), *args],
+                env=env,
+            )
+    finally:
+        os.chdir(original)
+    return result, run
+
+
+def test_require_admin_key_refuses_to_start_without_one(runner, tmp_path):
+    result, run = _start_with(runner, tmp_path, env={"IMNOT_REQUIRE_ADMIN_KEY": "1"})
+    assert result.exit_code == 1
+    assert "--require-admin-key" in result.output
+    run.assert_not_called()
+    assert not (tmp_path / "test.pid").exists()
+
+
+def test_require_admin_key_starts_with_a_key(runner, tmp_path):
+    key = "k" * 32
+    result, run = _start_with(runner, tmp_path, "--require-admin-key", env={"IMNOT_ADMIN_KEY": key})
+    assert result.exit_code == 0, result.output
+    run.assert_called_once()
+    assert "shorter than" not in result.output
+
+
+def test_short_admin_key_warns_but_starts(runner, tmp_path):
+    result, run = _start_with(runner, tmp_path, "--admin-key", "short")
+    assert result.exit_code == 0
+    assert "shorter than 16 characters" in result.output
+    run.assert_called_once()
+
+
 # ---------------------------------------------------------------------------
 # Log dir defaults to db_path.parent, not CWD
 # ---------------------------------------------------------------------------

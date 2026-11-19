@@ -24,8 +24,16 @@ MAX_BODY_BYTES = 64 * 1024
 _SKIP_PREFIXES = ("/imnot/", "/docs/")
 _SKIP_EXACT = {"/imnot", "/healthz", "/docs", "/redoc", "/openapi.json"}
 _SECRET_HEADERS = {"authorization", "proxy-authorization", "cookie", "x-api-key"}
-_SECRET_WORDS = re.compile(r"token|secret|password|api-key|apikey", re.IGNORECASE)
+_SECRET_PATTERN = r"token|secret|password|api[-_]?key"  # nosec B105: field names to redact, not a password
+_SECRET_WORDS = re.compile(_SECRET_PATTERN, re.IGNORECASE)
 REDACTED = "[redacted]"
+# Values of secret-named fields, edited in the text so the rest of the body stays byte for byte as sent
+# (and a truncated body is still covered): JSON string members and form/query pairs. Field names are
+# bounded to 128 characters so a body like '{"tokentoken…' with no closing quote stays linear.
+_SECRET_JSON_MEMBER = re.compile(
+    rf'("[^"\\]{{0,128}}(?:{_SECRET_PATTERN})[^"\\]{{0,128}}"\s*:\s*)"(?:[^"\\]|\\.)*(?:"|$)', re.IGNORECASE
+)
+_SECRET_FORM_PAIR = re.compile(rf"((?:^|&)[^=&]{{0,128}}(?:{_SECRET_PATTERN})[^=&]{{0,128}}=)[^&]*", re.IGNORECASE)
 
 
 def redact_headers(headers: list[tuple[bytes, bytes]]) -> dict[str, str]:
@@ -35,6 +43,18 @@ def redact_headers(headers: list[tuple[bytes, bytes]]) -> dict[str, str]:
         value = raw_value.decode("latin-1")
         out[name] = REDACTED if name in _SECRET_HEADERS or _SECRET_WORDS.search(name) else value
     return out
+
+
+def redact_query(query: str) -> str:
+    return _SECRET_FORM_PAIR.sub(rf"\g<1>{REDACTED}", query)
+
+
+def redact_body(body: str, content_type: str | None) -> str:
+    """Replace the values of fields named like a secret (``client_secret``, ``password``, ``access_token``…)."""
+    body = _SECRET_JSON_MEMBER.sub(rf'\g<1>"{REDACTED}"', body)
+    if content_type and content_type.split(";")[0].strip().lower() == "application/x-www-form-urlencoded":
+        body = redact_query(body)
+    return body
 
 
 class JournalMiddleware:
@@ -104,9 +124,9 @@ class JournalMiddleware:
                     "session_id": headers.get("x-imnot-session"),
                     "method": method,
                     "path": scope.get("path", ""),
-                    "query": scope.get("query_string", b"").decode("latin-1"),
+                    "query": redact_query(scope.get("query_string", b"").decode("latin-1")),
                     "headers": headers,
-                    "body": body.decode("utf-8", errors="replace"),
+                    "body": redact_body(body.decode("utf-8", errors="replace"), headers.get("content-type")),
                     "body_truncated": truncated,
                     "status": status,
                 }

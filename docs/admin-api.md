@@ -114,7 +114,10 @@ curl -s "http://localhost:8000/imnot/admin/requests?partner=bookingco&session=$S
   that match no mock route (`partner: null`, usually a 404), which helps spot a wrong URL.
 - Secret headers are saved as `[redacted]`: `Authorization`, `Proxy-Authorization`, `Cookie`,
   `X-Api-Key` and any header whose name contains `token`, `secret`, `password` or `api-key`.
-  The query string and the body are stored as sent (e.g. a `client_secret` in a token request).
+- The value of any field whose name contains `token`, `secret`, `password` or `api-key`/`api_key` is
+  saved as `[redacted]` (e.g. `client_secret` in a token request): in the query string, in form bodies
+  (`application/x-www-form-urlencoded`), and in any body for JSON-style `"name": "value"` members, whatever
+  the content type says. The rest of the body is kept byte for byte; non-string JSON values are stored as sent.
 - `body` is the raw request body as text, cut at 64 KB (`body_truncated: true`).
 - The newest 1000 entries are kept in `imnot.db`; older ones are dropped automatically.
 
@@ -149,6 +152,10 @@ Authorization: Bearer your-secret-key
 ```
 
 Consumer endpoints (partner routes, `/healthz`) are never affected. Set `IMNOT_ADMIN_KEY` in `docker-compose.yml` for Docker deployments.
+
+- Use a long random key (`openssl rand -hex 32`): a key shorter than 16 characters starts with a warning.
+- Failed attempts wait in one shared queue, 0.5 s each, before their `401`, so the key can be tried about twice a second no matter how many clients try at once. Requests with the right key never wait. When the queue is more than 10 s long, a failed attempt gets `429` with `Retry-After` straight away. Nobody is locked out by IP: behind an ingress every client has the same IP.
+- `--require-admin-key` / `IMNOT_REQUIRE_ADMIN_KEY=1` makes `imnot start` exit 1 when no key is set, so a shared deployment never comes up with an open admin API.
 
 ---
 
