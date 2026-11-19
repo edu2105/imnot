@@ -886,8 +886,8 @@ def test_stop_explicit_pid_file_path(runner, tmp_path):
     assert not pid_file.exists()
 
 
-def test_start_missing_partners_dir_warns_no_partners(runner, tmp_path):
-    """Missing default partners dir: warn and start with zero partners."""
+def test_start_missing_partners_dir_creates_it_and_starts_with_no_partners(runner, tmp_path):
+    """Missing default partners dir: create it next to the DB and start with zero partners."""
     original = os.getcwd()
     try:
         os.chdir(tmp_path)  # no partners/ here or in any ancestor up to tmp_path
@@ -904,7 +904,8 @@ def test_start_missing_partners_dir_warns_no_partners(runner, tmp_path):
         os.chdir(original)
 
     assert result.exit_code == 0
-    assert "zero partners" in result.output
+    assert "No partners directory found: created" in result.output and "0 loaded" in result.output
+    assert (tmp_path / "partners").is_dir()
 
 
 # ---------------------------------------------------------------------------

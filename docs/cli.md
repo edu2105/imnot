@@ -7,7 +7,7 @@
 | `imnot init` | Scaffold a new project with three example partners covering all six patterns (`ratesync` ships example payloads) and `imnot.toml` |
 | `imnot init --dir <path>` | Scaffold into a specific directory (created if it does not exist) |
 | `imnot init --empty` | Scaffold without the example partners: an empty `partners/` and `imnot.toml`. The admin UI then offers to create your first partner or load the examples |
-| `imnot start` | Load partner YAMLs and start the server. Starts with zero partners if no `partners/` exists. Auto-creates `imnot.toml` on first run. |
+| `imnot start` | Load partner YAMLs and start the server. On first run it creates what is missing next to the database: `imnot.toml`, and an empty `partners/` if none is found here or in a parent directory (so the admin UI can create a partner or load the examples). An explicit `--partners-dir` / `IMNOT_PARTNERS_DIR` that does not exist is never created: the server warns and starts with zero partners. |
 | `imnot start --stateless` | Write nothing to disk: in-memory database, logs to stdout only, no `imnot.pid`, no `imnot.toml`. For containers; see [deployment.md](deployment.md#containers-without-storage-stateless-mode) |
 | `imnot start --strict` | Exit 1 unless the partners directory passes `imnot validate` (same rule for an empty one, see below) |
 | `imnot start --reload` | Start with auto-restart on any YAML change (recommended for development) |

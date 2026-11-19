@@ -270,6 +270,20 @@ def start(
         resolved_partners_dir: Path | None = _resolve_partners_dir(effective_partners_dir)
     except FileNotFoundError:
         resolved_partners_dir = None
+        # First use: a plain `imnot start` with nothing around creates partners/ next to the database,
+        # like imnot.toml above, so the UI's "Create your first partner" and "Load examples" can write.
+        # Not when the directory was named explicitly (a typo must stay visible), not in stateless
+        # mode (nothing is written) and not under --strict (a missing directory is an error there).
+        if partners_dir is None and effective_partners_dir == DEFAULT_PARTNERS_DIR and not stateless and not strict:
+            candidate = db_path.parent / DEFAULT_PARTNERS_DIR
+            try:
+                candidate.mkdir(exist_ok=True)
+                resolved_partners_dir = candidate.resolve()
+                cli_log.info("No partners directory found: using %s (created if missing)", resolved_partners_dir)
+                click.echo(f"No partners directory found: created {resolved_partners_dir}")
+            except OSError as exc:
+                cli_log.warning("Could not create %s: %s", candidate, exc)
+    if resolved_partners_dir is None:
         click.echo(
             "Warning: No partners directory found — server starting with zero partners.\n"
             "Run `imnot init` to create example partners, or use `imnot generate` / "

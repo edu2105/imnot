@@ -289,3 +289,85 @@ def test_validate_passes_on_a_completely_empty_dir(runner, tmp_path):
     result = runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path)])
     assert result.exit_code == 0 and "is empty" in result.output
     assert runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path / "nope")]).exit_code == 1
+
+
+# ---------------------------------------------------------------------------
+# `imnot start` with no partners directory at all
+# ---------------------------------------------------------------------------
+
+
+def test_plain_start_creates_partners_dir_so_both_ui_actions_work(runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result, mock_run = _start(runner)
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "partners").is_dir() and "created" in result.output
+    assert "No partners directory found — server starting with zero partners" not in result.output
+
+    with TestClient(mock_run.call_args.args[0]) as c:
+        assert _names(c) == []
+        assert c.post(EXAMPLES).status_code == 201
+        assert c.get("/ratesync/v1/properties?limit=2").json()["total"] == 3
+        r = c.post("/imnot/admin/partners", content=_PARTNER.format(name="acme"))  # what the Builder sends
+        assert r.status_code == 201 and c.get("/acme/ping").json() == {"ok": True}
+    assert (tmp_path / "partners" / "acme" / "partner.yaml").is_file()
+    assert (tmp_path / "partners" / "ratesync" / "payloads" / "properties.json").is_file()
+
+    # A second start finds the same directory and its partners.
+    result, mock_run = _start(runner)
+    with TestClient(mock_run.call_args.args[0]) as c:
+        assert _names(c) == ["acme", "bookingco", "ratesync", "staylink"]
+
+
+def test_plain_start_creates_partners_dir_next_to_the_db(runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data").mkdir()
+    for _ in range(2):  # the second run reuses data/partners, which the walk up from the CWD does not find
+        result, mock_run = _start(runner, "--db", str(tmp_path / "data" / "imnot.db"))
+        assert result.exit_code == 0, result.output
+        assert mock_run.call_args.args[0].state.partners_dir == tmp_path / "data" / "partners"
+    assert not (tmp_path / "partners").exists()
+
+
+def test_stateless_start_without_partners_dir_creates_nothing(runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result, mock_run = _start(runner, "--stateless")
+    assert result.exit_code == 0, result.output
+    assert "No partners directory found — server starting with zero partners" in result.output
+    assert list(tmp_path.iterdir()) == []
+    with TestClient(mock_run.call_args.args[0]) as c:
+        assert c.post(EXAMPLES).status_code == 201  # in memory
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("how", ["flag", "env"])
+def test_explicit_missing_partners_dir_is_not_created(runner, tmp_path, monkeypatch, how):
+    monkeypatch.chdir(tmp_path)
+    missing = str(tmp_path / "nope")
+    if how == "flag":
+        result, mock_run = _start(runner, "--partners-dir", missing)
+    else:
+        monkeypatch.setenv("IMNOT_PARTNERS_DIR", missing)
+        result, mock_run = _start(runner)
+    assert result.exit_code == 0, result.output
+    assert "No partners directory found — server starting with zero partners" in result.output
+    assert not (tmp_path / "nope").exists() and not (tmp_path / "partners").exists()
+    with TestClient(mock_run.call_args.args[0]) as c:
+        r = c.post(EXAMPLES)
+        assert r.status_code == 400 and "imnot init" in r.json()["detail"]
+
+
+@pytest.mark.skipif(os.name != "posix" or os.geteuid() == 0, reason="needs POSIX permissions as non-root")
+def test_start_degrades_when_partners_dir_cannot_be_created(runner, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    real_mkdir = Path.mkdir
+
+    def mkdir(self, *args, **kwargs):
+        if self.name == "partners":
+            raise PermissionError(13, "Permission denied")
+        return real_mkdir(self, *args, **kwargs)
+
+    with patch("pathlib.Path.mkdir", mkdir):
+        result, mock_run = _start(runner)
+    assert result.exit_code == 0, result.output
+    assert "No partners directory found — server starting with zero partners" in result.output
+    assert mock_run.call_args.args[0].state.partners_dir is None
