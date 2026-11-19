@@ -23,6 +23,13 @@ conventional_commits = true
 filter_unconventional = true   # drops merge commits and anything not in type: desc format
 split_commits = false
 
+# Early commit messages name a real product; the repo never does (see CLAUDE.md), so the
+# changelog rewrites them. The patterns avoid spelling the name.
+commit_preprocessors = [
+  { pattern = 'patterns, \w+ partner, expanded CLI', replace = "patterns, a first example partner, expanded CLI" },
+  { pattern = 'replace \w+ with fictional bookingco', replace = "replace a real partner name with the fictional bookingco" },
+]
+
 commit_parsers = [
   { message = "^feat", group = "Added" },
   { message = "^fix", group = "Fixed" },
