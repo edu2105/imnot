@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import time
 from urllib.parse import urlparse
 
@@ -36,10 +37,12 @@ def register_stress_routes(app: FastAPI, store: SessionStore, stress_store: Stre
                 content={"detail": "Exactly one of total_count or duration_seconds must be provided"},
             )
 
+        if config.get("rate_per_second") is None:
+            return JSONResponse(status_code=422, content={"detail": "rate_per_second is required"})
         try:
             rate = float(config.get("rate_per_second"))
             if total_count is not None:
-                total_count = int(total_count)
+                total_count = float(total_count)
             if duration_seconds is not None:
                 duration_seconds = float(duration_seconds)
         except (TypeError, ValueError):
@@ -47,6 +50,14 @@ def register_stress_routes(app: FastAPI, store: SessionStore, stress_store: Stre
                 status_code=422,
                 content={"detail": "rate_per_second, total_count, and duration_seconds must be numbers"},
             )
+        # json.loads accepts Infinity and NaN: without this, int(inf) or ceil(inf * rate) raise a 500.
+        if not all(math.isfinite(v) for v in (rate, total_count, duration_seconds) if v is not None):
+            return JSONResponse(
+                status_code=422,
+                content={"detail": "rate_per_second, total_count, and duration_seconds must be finite numbers"},
+            )
+        if total_count is not None:
+            total_count = int(total_count)
 
         if not (MIN_RATE_PER_SECOND <= rate <= MAX_RATE_PER_SECOND):
             return JSONResponse(
