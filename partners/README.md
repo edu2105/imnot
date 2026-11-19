@@ -455,6 +455,11 @@ body field or header), stores the request, returns the configured status code wi
 Exactly one of `callback_url_field` or `callback_url_header` must be present — specifying
 both or neither is a validation error caught at startup.
 
+**Where a callback may go:** only `http`/`https`, and never a link-local or cloud metadata
+address (`169.254.0.0/16`, `fe80::/10`, `fd00:ec2::254`); the submit gets a `422` saying why.
+Local and private addresses are fine. A server started with `IMNOT_CALLBACK_ALLOWED_HOSTS`
+only calls back the hosts it lists ([cli.md](../docs/cli.md#environment-variables)).
+
 **Example — callback URL in request body:**
 
 ```yaml
