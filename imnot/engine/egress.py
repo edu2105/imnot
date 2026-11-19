@@ -17,7 +17,9 @@ host names (``orders.team-a``), ``*.`` suffixes (``*.team-a.svc.cluster.local``)
 addresses inside the listed networks.
 
 The URL is checked when the submit arrives (a clear 422) and again before every delivery attempt,
-after a fresh DNS lookup, so a name that later resolves to a blocked address is still refused.
+after a fresh DNS lookup. That narrows DNS rebinding but does not pin the connection: httpx resolves
+the name again when it connects, so a TTL-0 answer can still differ. An egress NetworkPolicy is the
+hard limit (see docs/deployment.md).
 """
 
 from __future__ import annotations
