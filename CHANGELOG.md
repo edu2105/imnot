@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [1.7.0] - 2026-11-19
+
+### Added
+
+- First-use empty state with Create your first partner and Load examples ([150e5e6](https://github.com/edu2105/imnot/commit/150e5e654f6b66347bd89f5246ed198713c7f0ad))
+- Load the example partners from the admin API, init --empty, strict accepts an empty partners dir ([7041b1b](https://github.com/edu2105/imnot/commit/7041b1badcb1ecaba998085dc4b33041f75f164c))
+- --instance-name labels an instance in the UI and /healthz ([aa8fcb1](https://github.com/edu2105/imnot/commit/aa8fcb10fd782f753db44d1f0c8c97e166386183))
+- Stateless banner, download partner.yaml, reload warning ([cefd2b2](https://github.com/edu2105/imnot/commit/cefd2b2acd57988815036b37bb5a022c2a924fd1))
+- Partners changed through the admin API live in memory ([de7baa9](https://github.com/edu2105/imnot/commit/de7baa968938dbf49abcf42cc9f704836927672a))
+- Stateless and strict modes, options from environment variables ([059415c](https://github.com/edu2105/imnot/commit/059415c6a50bd3c9203a44ee55a7ebcb001a59aa))
+
+### Documentation
+
+- Init --empty, the examples endpoint and the empty-directory rule of --strict/validate ([d9da135](https://github.com/edu2105/imnot/commit/d9da1358256e4428e12ea03c473679508c2c13d0))
+- Changing partners on a stateless server ([4f95add](https://github.com/edu2105/imnot/commit/4f95add586a247cc876456c0224895161ba407e9))
+- Shorter container bullet, clearer one-replica limit ([f602639](https://github.com/edu2105/imnot/commit/f602639ee913a96bbec176f2e0be4e9aff118344))
+- Container mode, deployment model and upgrade notes ([034235a](https://github.com/edu2105/imnot/commit/034235a1d2c5c2066d43f454c1a75c669da07be9))
+
+### Fixed
+
+- Say 'created' only when partners/ was actually created ([9a35472](https://github.com/edu2105/imnot/commit/9a35472efd79f12539b171f179c65de5125b6a17))
+- Create partners/ next to the database when none is found ([9feda64](https://github.com/edu2105/imnot/commit/9feda6407042bcaf643fd1946ed2a13d324db569))
+- Download keeps the partner name in the file name ([0736b40](https://github.com/edu2105/imnot/commit/0736b400ee7f80c0e39ed6f8d98e25e86217e854))
+- Load test without target_url, body rules in paginated, cursor scope ([66f07b7](https://github.com/edu2105/imnot/commit/66f07b7daf1b4c68fb70fe53edbae82bbff20243))
+
+### Maintenance
+
+- Regenerate openapi.json with the examples endpoint ([0cb5db0](https://github.com/edu2105/imnot/commit/0cb5db08d90d98d774967561cd3afc6216c7c945))
+
 ## [1.6.0] - 2026-11-18
 
 ### Added
@@ -59,6 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Maintenance
 
+- Show the E2E output when it fails ([a55709d](https://github.com/edu2105/imnot/commit/a55709d20d18eeb967f835820f5e002d01e1c8f0))
 - Tidy the PAYLOAD_PATTERNS comment and unused test fixture ([af20897](https://github.com/edu2105/imnot/commit/af20897cc914cc1d97c45424ed7d82f399527b8f))
 - Replace real product names with fictional ones ([a821f08](https://github.com/edu2105/imnot/commit/a821f08a2bc0e4832e0ac2dd5d4e27903837f080))
 - Share the version constant with /healthz and refresh openapi.json ([a5582ca](https://github.com/edu2105/imnot/commit/a5582cae7b399d6f82bc97a512f1bb3835dbddf2))

@@ -24,7 +24,7 @@
 - **Fails on demand.** `delay_ms` and `fail: {status, first_n}` on any endpoint simulate a slow or flaky partner, to test timeouts and retries.
 - **Records what your integration sent.** Every request to a mock route lands in a journal (`GET /imnot/admin/requests`, secrets redacted), so a test can assert the exact body and headers your code produced.
 - **Ships with your tests.** Partner definitions — and, optionally, their payloads as `payloads/<datapoint>.json` — are version-controlled alongside the integration they test and run anywhere Docker runs.
-- **Runs in a container with no storage.** `--stateless --strict`: read-only filesystem, logs on stdout, and a broken partner stops the rollout. See [docs/deployment.md](docs/deployment.md).
+- **Runs in a container with no storage.** `--stateless --strict`: read-only filesystem, logs on stdout, and a broken partner stops the rollout. One instance per team, each with its own partners and key. See [docs/deployment.md](docs/deployment.md).
 
 ---
 
@@ -41,6 +41,8 @@ imnot start
 > `pipx` installs CLI tools into isolated environments. Alternatively: `pip install imnot` inside an existing virtual environment.
 
 `imnot init` creates a `partners/` directory with three working example partners that cover all six patterns: `staylink` (oauth + polling), `bookingco` (static + fetch) and `ratesync` (callback + paginated, with example payloads in `payloads/`, so it answers right away). Edit or replace them whenever you're ready.
+
+Or skip `imnot init`: `imnot start` alone opens an empty Admin UI where you create your first partner or load the examples.
 
 ---
 
@@ -68,6 +70,7 @@ imnot ships an embedded Admin UI at `GET /imnot/admin/ui`. No setup required —
 From the browser you can:
 
 - Browse loaded partners and their datapoints
+- Create and edit partners without writing YAML (Builder), and download them as `partner.yaml`
 - Upload and inspect payloads (global or session-scoped)
 - Run end-to-end endpoint tests — including full polling flows
 - Manage active sessions
