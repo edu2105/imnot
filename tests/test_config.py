@@ -2,7 +2,17 @@
 
 from __future__ import annotations
 
-from imnot.config import ImnotConfig, LoggingConfig, PaginationConfig, ServerConfig, UIConfig, load_config
+import pytest
+
+from imnot.config import (
+    ConfigError,
+    ImnotConfig,
+    LoggingConfig,
+    PaginationConfig,
+    ServerConfig,
+    UIConfig,
+    load_config,
+)
 
 # ---------------------------------------------------------------------------
 # Defaults
@@ -197,3 +207,82 @@ def test_imnot_toml_template_shows_the_real_defaults():
     for section, values in shown.items():
         for key, value in values.items():
             assert getattr(getattr(defaults, section), key) == value, f"[{section}] {key}"
+
+
+# ---------------------------------------------------------------------------
+# IMNOT_<SECTION>_<KEY> overrides
+# ---------------------------------------------------------------------------
+
+
+def test_env_overrides_every_type():
+    cfg = load_config(
+        None,
+        {
+            "IMNOT_LOGGING_FORMAT": "JSON",
+            "IMNOT_LOGGING_DEBUG": "yes",
+            "IMNOT_LOGGING_MAX_BYTES": "2048",
+            "IMNOT_LOGGING_LOG_DIR": "/var/log/imnot",
+            "IMNOT_UI_ENABLED": "off",
+            "IMNOT_UI_DEFAULT_THEME": "light",
+            "IMNOT_PAGINATION_DEFAULT_LIMIT": "7",
+        },
+    )
+    assert cfg.logging.format == "json"
+    assert cfg.logging.debug is True
+    assert cfg.logging.max_bytes == 2048
+    assert cfg.logging.log_dir == "/var/log/imnot"
+    assert cfg.ui.enabled is False
+    assert cfg.ui.default_theme == "light"
+    assert cfg.pagination.default_limit == 7
+
+
+def test_env_wins_over_the_toml(tmp_path):
+    toml = tmp_path / "imnot.toml"
+    toml.write_text('[logging]\nformat = "text"\ndebug = true\n[ui]\nenabled = true\n')
+    cfg = load_config(toml, {"IMNOT_LOGGING_FORMAT": "json", "IMNOT_UI_ENABLED": "0"})
+    assert cfg.logging.format == "json"
+    assert cfg.logging.debug is True  # not overridden, the toml value stays
+    assert cfg.ui.enabled is False
+
+
+def test_server_section_and_other_variables_are_not_read_this_way():
+    # [server] settings have their own names (IMNOT_BIND_HOST…) handled by the CLI.
+    cfg = load_config(None, {"IMNOT_SERVER_HOST": "0.0.0.0", "IMNOT_BIND_HOST": "0.0.0.0", "HOME": "/x"})
+    assert cfg.server.host == "127.0.0.1"
+
+
+def test_default_reads_os_environ(monkeypatch):
+    monkeypatch.setenv("IMNOT_UI_DEFAULT_THEME", "system")
+    assert load_config(None).ui.default_theme == "system"
+
+
+@pytest.mark.parametrize(
+    "env, message",
+    [
+        ({"IMNOT_UI_ENABLE": "1"}, "unknown setting. Known: IMNOT_UI_ENABLED, IMNOT_UI_DEFAULT_THEME"),
+        ({"IMNOT_LOGGING_FORMAT": "yaml"}, "expected one of text, json"),
+        ({"IMNOT_LOGGING_STDOUT": "maybe"}, "expected true or false"),
+        ({"IMNOT_PAGINATION_DEFAULT_LIMIT": "ten"}, "expected a number"),
+    ],
+)
+def test_bad_env_values_are_errors(env, message):
+    with pytest.raises(ConfigError, match=message):
+        load_config(None, env)
+
+
+def test_kubernetes_service_links_are_skipped():
+    # A Service named "imnot-ui" or "imnot-logging" in the namespace injects these into every pod.
+    env = {
+        "IMNOT_UI_PORT": "tcp://10.0.0.1:80",
+        "IMNOT_UI_SERVICE_HOST": "10.0.0.1",
+        "IMNOT_UI_SERVICE_PORT": "80",
+        "IMNOT_UI_SERVICE_PORT_HTTP": "80",
+        "IMNOT_UI_PORT_80_TCP": "tcp://10.0.0.1:80",
+        "IMNOT_UI_PORT_80_TCP_ADDR": "10.0.0.1",
+        "IMNOT_LOGGING_PORT_8000_TCP_PROTO": "tcp",
+        "IMNOT_UI_BACKEND_SERVICE_HOST": "10.0.0.2",  # a Service named "imnot-ui-backend"
+        "IMNOT_UI_BACKEND_PORT": "tcp://10.0.0.2:80",
+    }
+    assert load_config(None, env).ui.enabled is True
+    with pytest.raises(ConfigError, match="IMNOT_UI_PORTS: unknown setting"):
+        load_config(None, {"IMNOT_UI_PORTS": "1"})

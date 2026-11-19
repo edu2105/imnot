@@ -186,6 +186,25 @@ def test_logging_middleware_emits_http_log(tmp_path, caplog):
     assert any("GET" in r.message and "/imnot/admin/partners" in r.message for r in caplog.records)
 
 
+def test_logging_middleware_passes_structured_fields(tmp_path, caplog):
+    import logging
+
+    app = create_app(partners_dir=PARTNERS_DIR, db_path=tmp_path / "test.db")
+    with TestClient(app) as c:
+        with caplog.at_level(logging.INFO, logger="imnot.http"):
+            r = c.get("/nowhere", headers={"X-Imnot-Session": "s1", "X-Request-ID": "rid-1"})
+    (record,) = [r for r in caplog.records if r.name == "imnot.http"]
+    assert record.fields == {
+        "method": "GET",
+        "path": "/nowhere",
+        "status": 404,
+        "duration_ms": record.fields["duration_ms"],
+        "request_id": "rid-1",
+        "session": "s1",
+    }
+    assert r.headers["x-request-id"] == "rid-1"
+
+
 def test_logging_middleware_excludes_healthz(tmp_path, caplog):
     import logging
 

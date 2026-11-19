@@ -233,3 +233,51 @@ def test_cli_messages_are_not_written_twice(tmp_path):
     for h in logging.getLogger("imnot.cli").handlers:
         h.flush()
     assert (tmp_path / "imnot.cli.log").read_text().count("once") == 1
+
+
+# ---------------------------------------------------------------------------
+# JSON format
+# ---------------------------------------------------------------------------
+
+
+def test_json_format_writes_one_object_per_line_to_files(tmp_path):
+    import json
+
+    configure_logging(LoggingConfig(format="json"), log_dir=tmp_path)
+    logging.getLogger("imnot.http").info("GET /x 200 1ms", extra={"fields": {"method": "GET", "status": 200}})
+    logging.getLogger("imnot.loader.yaml_loader").info("module logger")
+    for handler in logging.getLogger("imnot.http").handlers + logging.getLogger("imnot").handlers:
+        handler.flush()
+    http = json.loads((tmp_path / "imnot.http.log").read_text().strip())
+    assert http["logger"] == "imnot.http" and http["level"] == "INFO"
+    assert http["message"] == "GET /x 200 1ms"
+    assert http["method"] == "GET" and http["status"] == 200
+    assert http["time"].endswith("+00:00")
+    cli_lines = [json.loads(line) for line in (tmp_path / "imnot.cli.log").read_text().splitlines()]
+    assert any(e["logger"] == "imnot.loader.yaml_loader" for e in cli_lines)
+
+
+def test_json_formatter_keeps_its_own_keys_and_adds_the_traceback():
+    import json
+
+    from imnot.logging_setup import JsonFormatter
+
+    try:
+        raise RuntimeError("boom")
+    except RuntimeError:
+        record = logging.LogRecord("imnot.cli", logging.ERROR, __file__, 1, "failed %s", ("x",), exc_info=True)
+        record.exc_info = __import__("sys").exc_info()
+    record.fields = {"message": "must not replace", "extra_key": 1}
+    entry = json.loads(JsonFormatter().format(record))
+    assert entry["message"] == "failed x"
+    assert entry["extra_key"] == 1
+    assert "RuntimeError: boom" in entry["exception"]
+
+
+def test_uvicorn_log_config_only_in_json_mode():
+    from imnot.logging_setup import uvicorn_log_config
+
+    assert uvicorn_log_config("text") is None
+    cfg = uvicorn_log_config("json")
+    assert cfg["formatters"]["json"]["()"] == "imnot.logging_setup.JsonFormatter"
+    assert set(cfg["loggers"]) == {"uvicorn", "uvicorn.error", "uvicorn.access"}

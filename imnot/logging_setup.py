@@ -1,15 +1,61 @@
 from __future__ import annotations
 
+import json
 import logging
 import logging.handlers
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from imnot.config import LoggingConfig
 
 _FORMAT = "%(asctime)s %(levelname)-8s %(name)s — %(message)s"
 _STREAMS = ("imnot.cli", "imnot.http")
+UVICORN_LOGGERS = ("uvicorn", "uvicorn.error", "uvicorn.access")
+
+
+class JsonFormatter(logging.Formatter):
+    """One JSON object per line: ``time`` (UTC, ISO 8601), ``level``, ``logger``, ``message``.
+
+    Fields passed as ``extra={"fields": {...}}`` are added at the top level (the HTTP log adds
+    ``method``, ``path``, ``status``, ``duration_ms``…), and ``exception`` holds a traceback if any.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        entry: dict[str, Any] = {
+            "time": datetime.fromtimestamp(record.created, timezone.utc).isoformat(timespec="milliseconds"),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        extra = getattr(record, "fields", None)
+        if isinstance(extra, dict):
+            entry.update({k: v for k, v in extra.items() if k not in entry})
+        if record.exc_info:
+            entry["exception"] = self.formatException(record.exc_info)
+        return json.dumps(entry, default=str)
+
+
+def make_formatter(log_format: str) -> logging.Formatter:
+    return JsonFormatter() if log_format == "json" else logging.Formatter(_FORMAT)
+
+
+def uvicorn_log_config(log_format: str) -> dict[str, Any] | None:
+    """``log_config`` for ``uvicorn.run`` in JSON mode (uvicorn's own lines to stdout as JSON).
+
+    None in text mode: the caller then leaves ``log_config`` out, because ``log_config=None`` would turn
+    uvicorn's logs off instead of keeping its defaults.
+    """
+    if log_format != "json":
+        return None
+    return {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {"json": {"()": "imnot.logging_setup.JsonFormatter"}},
+        "handlers": {"stdout": {"class": "logging.StreamHandler", "formatter": "json", "stream": "ext://sys.stdout"}},
+        "loggers": {name: {"handlers": ["stdout"], "level": "INFO", "propagate": False} for name in UVICORN_LOGGERS},
+    }
 
 
 class ArchivingRotatingHandler(logging.handlers.RotatingFileHandler):
@@ -66,7 +112,7 @@ def configure_logging(config: LoggingConfig, log_dir: Path | None) -> None:
     With *log_dir* ``None`` (stateless mode) no file is created: everything goes to stdout.
     """
     level = logging.DEBUG if config.debug else logging.INFO
-    formatter = logging.Formatter(_FORMAT)
+    formatter = make_formatter(config.format)
 
     archived_logs_dir = Path(config.archived_logs_dir)
     if log_dir is not None:
