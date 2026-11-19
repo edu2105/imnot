@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [1.8.0] - 2026-11-19
+
+### Documentation
+
+- The egress check narrows DNS rebinding, it does not pin ([df01d92](https://github.com/edu2105/imnot/commit/df01d928da46adb088ddc5ff653939060ee7e7ac))
+- Where a callback may go and IMNOT_CALLBACK_ALLOWED_HOSTS ([f994a49](https://github.com/edu2105/imnot/commit/f994a49503653adcd81eb9d6666d1e5b853fb5f1))
+- Admin key hardening and journal body redaction ([9c18272](https://github.com/edu2105/imnot/commit/9c1827265d9b28497ef1c8f8427a4dc78d3ae21e))
+
+### Fixed
+
+- Reject Infinity and NaN with 422 instead of 500 ([92f1130](https://github.com/edu2105/imnot/commit/92f113022cdc242f90649f09437522635be64d5f))
+- Never call link-local or metadata addresses; opt-in allowed hosts ([626e332](https://github.com/edu2105/imnot/commit/626e332d1cd0dc1a4ef0e6e3b8c0cab990e43f3a))
+- Bound field names in the redaction regexes; one more real name out of the changelog ([f73af8e](https://github.com/edu2105/imnot/commit/f73af8ef281155df932810fb0e66c88344044dc8))
+- Redact secret-named fields in the query and JSON/form bodies ([9e365d4](https://github.com/edu2105/imnot/commit/9e365d47ea99187ef3602682e7973310fa8b8b32))
+- Slow down failed admin logins, warn on short keys, --require-admin-key ([8cee05c](https://github.com/edu2105/imnot/commit/8cee05c34ababa962ac0f6620cfc8c83b1727423))
+
+### Maintenance
+
+- Keep a real product name out of the changelog ([e2b2e3d](https://github.com/edu2105/imnot/commit/e2b2e3d4022290718b3a3a7638694e9056c210e4))
+
 ## [1.7.0] - 2026-11-19
 
 ### Added
@@ -17,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- Start without init, Builder, one instance per team ([3f9344e](https://github.com/edu2105/imnot/commit/3f9344e3859eab78ccdcb3c595f977929d2dcae0))
 - Init --empty, the examples endpoint and the empty-directory rule of --strict/validate ([d9da135](https://github.com/edu2105/imnot/commit/d9da1358256e4428e12ea03c473679508c2c13d0))
 - Changing partners on a stateless server ([4f95add](https://github.com/edu2105/imnot/commit/4f95add586a247cc876456c0224895161ba407e9))
 - Shorter container bullet, clearer one-replica limit ([f602639](https://github.com/edu2105/imnot/commit/f602639ee913a96bbec176f2e0be4e9aff118344))
