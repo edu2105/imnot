@@ -69,6 +69,41 @@ def test_redacts_secret_headers(client):
     assert h["x-trace"] == "keep"
 
 
+def test_redacts_secret_fields_in_json_body_and_keeps_the_rest_verbatim(client):
+    body = '{"user": "ana", "password": "p\\"w", "auth": {"client_secret": "s"}, "access_token": "t", "n": 1}'
+    client.post("/nobody", content=body, headers={"Content-Type": "application/json"})
+    (entry,) = _entries(client)
+    assert entry["body"] == (
+        '{"user": "ana", "password": "[redacted]", "auth": {"client_secret": "[redacted]"}, '
+        '"access_token": "[redacted]", "n": 1}'
+    )
+
+
+def test_redacts_secret_fields_in_form_body_and_query(client):
+    client.post(
+        "/nobody?api_key=k&page=2",
+        content="grant_type=client_credentials&client_id=app&client_secret=abc",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    (entry,) = _entries(client)
+    assert entry["query"] == "api_key=[redacted]&page=2"
+    assert entry["body"] == "grant_type=client_credentials&client_id=app&client_secret=[redacted]"
+
+
+def test_plain_text_body_with_secret_looking_pairs_is_kept(client):
+    # Form redaction only applies to form bodies: a text body is not guessed at.
+    client.post("/nobody", content="token=abc", headers={"Content-Type": "text/plain"})
+    (entry,) = _entries(client)
+    assert entry["body"] == "token=abc"
+
+
+def test_secret_cut_by_truncation_is_still_redacted(client, monkeypatch):
+    monkeypatch.setattr(journal, "MAX_BODY_BYTES", 16)
+    client.post("/nobody", content='{"password": "abcdefgh"}', headers={"Content-Type": "application/json"})
+    (entry,) = _entries(client)
+    assert entry["body"] == '{"password": "[redacted]"' and entry["body_truncated"] is True
+
+
 def test_large_bodies_are_truncated(client, monkeypatch):
     monkeypatch.setattr(journal, "MAX_BODY_BYTES", 10)
     client.post("/nobody", content=b"x" * 50)
