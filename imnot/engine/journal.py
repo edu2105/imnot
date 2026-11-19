@@ -57,13 +57,32 @@ def redact_body(body: str, content_type: str | None) -> str:
     return body
 
 
+def is_mock_path(path: str) -> bool:
+    """True for requests to the mock routes (and unmatched paths), False for imnot's own routes and docs."""
+    return path not in _SKIP_EXACT and not path.startswith(_SKIP_PREFIXES)
+
+
+def route_owner(scope: Scope) -> tuple[str | None, str | None]:
+    """``(partner, datapoint)`` of the mock route that handled *scope*, or ``(None, None)``. Call after the app ran."""
+    app: Any = scope.get("app")
+    route_path: str | None = getattr(scope.get("route"), "path", None)
+    if route_path is None or app is None:
+        return None, None
+    canonical = route_path[:-1] if route_path.endswith("/") and route_path != "/" else route_path
+    owner = getattr(app.state, "registered_routes", {}).get((scope.get("method", ""), canonical))
+    if not owner:
+        return None, None
+    partner, datapoint = owner.split("/", 1)
+    return partner, datapoint
+
+
 class JournalMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         path: str = scope.get("path", "")
-        if scope["type"] != "http" or path in _SKIP_EXACT or path.startswith(_SKIP_PREFIXES):
+        if scope["type"] != "http" or not is_mock_path(path):
             await self.app(scope, receive, send)
             return
 
@@ -107,14 +126,7 @@ class JournalMiddleware:
         if store is None or getattr(store, "_conn", None) is None:  # app built but not started (tests)
             return
         method: str = scope.get("method", "")
-        partner = datapoint = None
-        route = scope.get("route")
-        route_path: str | None = getattr(route, "path", None)
-        if route_path is not None:
-            canonical = route_path[:-1] if route_path.endswith("/") and route_path != "/" else route_path
-            owner = app.state.registered_routes.get((method, canonical))
-            if owner:
-                partner, datapoint = owner.split("/", 1)
+        partner, datapoint = route_owner(scope)
         headers = redact_headers(scope.get("headers", []))
         try:
             store.log_request(

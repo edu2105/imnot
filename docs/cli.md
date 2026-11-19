@@ -45,7 +45,7 @@ Every `imnot start` option can also come from the environment. Precedence: flag,
 | `IMNOT_REQUIRE_ADMIN_KEY` | `--require-admin-key` | Exit 1 when no admin key is set. For shared deployments |
 | `IMNOT_CALLBACK_ALLOWED_HOSTS` | `--callback-allowed-hosts` | Comma-separated host names, `*.` suffixes and CIDRs (`orders.team-a,*.team-a.svc.cluster.local,10.20.0.0/16`). When set, a `callback` submit to anything else gets `422`. Link-local and cloud metadata addresses are refused with or without it |
 
-Every key of the `[logging]`, `[pagination]` and `[ui]` sections of `imnot.toml` can also be set as `IMNOT_<SECTION>_<KEY>`, and the variable wins over the file:
+Every key of the `[logging]`, `[pagination]`, `[ui]` and `[metrics]` sections of `imnot.toml` can also be set as `IMNOT_<SECTION>_<KEY>`, and the variable wins over the file:
 
 | Variable | `imnot.toml` key | Values |
 |---|---|---|
@@ -56,8 +56,9 @@ Every key of the `[logging]`, `[pagination]` and `[ui]` sections of `imnot.toml`
 | `IMNOT_PAGINATION_DEFAULT_LIMIT` | `[pagination] default_limit` | a number |
 | `IMNOT_UI_ENABLED` | `[ui] enabled` | true/false as above |
 | `IMNOT_UI_DEFAULT_THEME` | `[ui] default_theme` | `light`, `dark` or `system` |
+| `IMNOT_METRICS_ENABLED` | `[metrics] enabled` | true/false; Prometheus metrics at `/imnot/metrics` ([below](#metrics)) |
 
-An unknown `IMNOT_LOGGING_*` / `IMNOT_PAGINATION_*` / `IMNOT_UI_*` name or a value of the wrong type stops `imnot` with an error. `[server]` keys use the names in the table above (`IMNOT_BIND_HOST`, `IMNOT_DB_PATH`…), not `IMNOT_SERVER_*`. The variables Kubernetes adds for a Service named `imnot-ui`, `imnot-logging`… (`IMNOT_UI_PORT`, `IMNOT_UI_SERVICE_HOST`…) are ignored.
+An unknown `IMNOT_LOGGING_*` / `IMNOT_PAGINATION_*` / `IMNOT_UI_*` / `IMNOT_METRICS_*` name or a value of the wrong type stops `imnot` with an error. `[server]` keys use the names in the table above (`IMNOT_BIND_HOST`, `IMNOT_DB_PATH`…), not `IMNOT_SERVER_*`. The variables Kubernetes adds for a Service named `imnot-ui`, `imnot-logging`… (`IMNOT_UI_PORT`, `IMNOT_UI_SERVICE_HOST`…) are ignored.
 
 ---
 
@@ -89,6 +90,9 @@ An unknown `IMNOT_LOGGING_*` / `IMNOT_PAGINATION_*` / `IMNOT_UI_*` name or a val
 [ui]
 # enabled = true                          # set to false to disable the admin UI (→ 404)
 # default_theme = "dark"                  # "light", "dark", or "system"
+
+# [metrics]
+# enabled = false                         # Prometheus metrics at GET /imnot/metrics (no auth)
 ```
 
 `IMNOT_ADMIN_KEY` is environment-variable only — never written to `imnot.toml`.
@@ -115,6 +119,25 @@ Warnings are also printed to the console. With `--stateless` no log file is writ
 - Every line has `time` (UTC), `level`, `logger` and `message`; `imnot.http` lines add `method`, `path`, `status`, `duration_ms`, `request_id` and, when present, `partner`, `datapoint` and `session`; errors add `exception`.
 - uvicorn's own lines (`uvicorn.error`, `uvicorn.access`) are JSON too.
 - `imnot start` skips its human-readable startup summary so stdout stays JSON only; the same facts are logged (`Starting imnot host=…`, partners loaded, warnings).
+
+---
+
+## Metrics
+
+Off by default. With `[metrics] enabled = true` (or `IMNOT_METRICS_ENABLED=1`), `GET /imnot/metrics` serves Prometheus metrics in the text format. It needs no admin key, like `/healthz`, and is not written to the HTTP log.
+
+| Metric | Type | Labels |
+|---|---|---|
+| `imnot_http_requests_total` | counter | `partner`, `datapoint`, `method`, `status` |
+| `imnot_http_request_duration_seconds` | histogram | `partner`, `datapoint` |
+| `imnot_callback_deliveries_total` | counter | `partner`, `datapoint`, `result`: `delivered`, `failed` (after the last retry), `refused` (callback policy) or `skipped` (no payload) |
+| `imnot_admin_auth_failures_total` | counter | |
+| `imnot_partners_loaded` | gauge | |
+| `imnot_info` | gauge, always 1 | `version` |
+
+- Only requests to mock routes are counted (not `/imnot/*` or `/healthz`). A path that matches no route counts with `partner=""` and `datapoint=""`; raw paths, payloads and headers never become labels. Unusual HTTP methods count as `OTHER`.
+- The duration ends when the response is sent: a callback delivery that runs afterwards is not part of it.
+- Counters live in the process and start from zero at every restart.
 
 ---
 

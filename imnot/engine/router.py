@@ -34,6 +34,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Res
 
 from imnot.config import UIConfig
 from imnot.engine.faults import with_faults
+from imnot.engine.metrics import get_metrics
 from imnot.engine.patterns.async_ import make_async_handlers
 from imnot.engine.patterns.fetch import make_fetch_handler
 from imnot.engine.patterns.oauth import make_oauth_handler
@@ -194,6 +195,9 @@ def _register_admin_auth_middleware(app: FastAPI, admin_key: str) -> None:
                         request.url.path,
                         request.client.host if request.client else "unknown",
                     )
+                    metrics = get_metrics(request.app)
+                    if metrics is not None:
+                        metrics.admin_auth_failures += 1
                     now = time.monotonic()
                     slot = max(now, failures["next_slot"])
                     if slot - now > AUTH_FAILURE_MAX_WAIT_SECONDS:
@@ -490,6 +494,7 @@ def _register_admin_routes(
                 context={"request_id": request_id},  # the submit request itself is not stored
                 delivery=delivery_config(datapoint.endpoints[0].response),
                 policy=getattr(request.app.state, "callback_policy", None),
+                metrics=get_metrics(request.app),
             )
             return JSONResponse({"status": "dispatched", "request_id": request_id})
 

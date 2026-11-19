@@ -38,6 +38,7 @@ from fastapi.responses import JSONResponse, Response
 
 from imnot.engine.egress import CallbackPolicy
 from imnot.engine.errors import validation_error_response
+from imnot.engine.metrics import Metrics, get_metrics
 from imnot.engine.session_store import SessionStore
 from imnot.engine.templating import has_placeholders, render, request_context
 from imnot.engine.validator import validate_request
@@ -146,6 +147,7 @@ def make_push_handler(
             context=request_context(request, parsed_body, request_id=push_uuid),
             delivery=delivery,
             policy=policy,
+            metrics=get_metrics(request.app),
         )
 
         return JSONResponse(status_code=status_code, content={"request_id": push_uuid})
@@ -165,6 +167,7 @@ async def fire_callback(
     context: dict[str, Any] | None = None,
     delivery: dict[str, Any] | None = None,
     policy: CallbackPolicy | None = None,
+    metrics: Metrics | None = None,
 ) -> None:
     """Resolve the stored payload, render its placeholders with *context*, and deliver it.
 
@@ -172,7 +175,13 @@ async def fire_callback(
     request (``templating.request_context``); a retrigger only knows the ``request_id``.
     *delivery* is ``delivery_config(endpoint.response)``: extra headers, an HMAC signature and retries.
     *policy* (``egress.CallbackPolicy``) is checked again before every attempt, after a fresh DNS lookup.
+    *metrics*, when on, counts the outcome: delivered, failed (after the last attempt), refused or skipped.
     """
+
+    def outcome(result: str) -> None:
+        if metrics is not None:
+            metrics.observe_callback(partner, datapoint, result)
+
     policy = policy or CallbackPolicy()
     if delay > 0:
         await asyncio.sleep(delay)
@@ -186,6 +195,7 @@ async def fire_callback(
             session_id,
             callback_url,
         )
+        outcome("skipped")
         return
     if context is not None and has_placeholders(payload):
         payload = render(payload, context)
@@ -212,12 +222,14 @@ async def fire_callback(
         problem = await policy.problem(callback_url)
         if problem:
             logger.error("Callback: to %s refused: the URL %s", callback_url, problem)
+            outcome("refused")
             return
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.request(callback_method, callback_url, headers=headers, **request_kwargs)
             if resp.is_success:
                 logger.info("Callback: delivered to %s — HTTP %d (attempt %d)", callback_url, resp.status_code, attempt)
+                outcome("delivered")
                 return
             logger.error(
                 "Callback: to %s returned non-2xx status %d (attempt %d/%d)",
@@ -230,3 +242,4 @@ async def fire_callback(
             logger.error("Callback: to %s failed: %s (attempt %d/%d)", callback_url, exc, attempt, attempts)
         if attempt < attempts:
             await asyncio.sleep(backoff * attempt)  # linear backoff: 1×, 2×, 3× backoff_seconds
+    outcome("failed")

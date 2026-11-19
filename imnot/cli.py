@@ -42,7 +42,7 @@ _ADMIN_KEY_MIN_LENGTH = 16
 _IMNOT_TOML_TEMPLATE = """\
 # imnot.toml — runtime configuration for imnot
 # All values shown are defaults. Uncomment and change what you need.
-# Every [logging], [pagination] and [ui] key can also be set as IMNOT_<SECTION>_<KEY>
+# Every [logging], [pagination], [ui] and [metrics] key can also be set as IMNOT_<SECTION>_<KEY>
 # (e.g. IMNOT_LOGGING_FORMAT=json, IMNOT_UI_ENABLED=false); the variable wins over this file.
 
 [server]
@@ -68,6 +68,9 @@ _IMNOT_TOML_TEMPLATE = """\
 [ui]
 # enabled = true                          # set to false to disable the admin UI entirely
 # default_theme = "dark"                  # "light", "dark", or "system"
+
+# [metrics]
+# enabled = false                         # Prometheus metrics at GET /imnot/metrics (no auth)
 """
 
 
@@ -417,6 +420,7 @@ def start(
                 stateless=stateless,
                 instance_name=instance_name,
                 callback_allowed_hosts=callback_allowed_hosts,
+                metrics_enabled=config.metrics.enabled,
             )
             uvicorn.run(app, host=effective_host, port=effective_port, **uvicorn_options)
     finally:

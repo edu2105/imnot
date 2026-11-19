@@ -27,6 +27,7 @@ from starlette.requests import Request
 from imnot.config import UIConfig, load_config
 from imnot.engine.egress import CallbackPolicy
 from imnot.engine.journal import JournalMiddleware
+from imnot.engine.metrics import METRICS_PATH, register_metrics
 from imnot.engine.router import _IMNOT_VERSION, register_routes, seed_payloads
 from imnot.engine.session_store import SessionStore
 from imnot.engine.stress import StressStore
@@ -40,10 +41,10 @@ DEFAULT_DB_PATH = Path("imnot.db")
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
-    """Log every HTTP request/response to the imnot.http stream, excluding /healthz."""
+    """Log every HTTP request/response to the imnot.http stream, excluding /healthz and /imnot/metrics."""
 
     async def dispatch(self, request: Request, call_next):  # type: ignore[override]
-        if request.url.path == "/healthz":
+        if request.url.path in ("/healthz", METRICS_PATH):
             return await call_next(request)
 
         request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
@@ -91,6 +92,7 @@ def create_app(
     stateless: bool = False,
     instance_name: str | None = None,
     callback_allowed_hosts: str | None = None,
+    metrics_enabled: bool = False,
 ) -> FastAPI:
     """Build and return a fully configured FastAPI application.
 
@@ -108,6 +110,8 @@ def create_app(
 
     *callback_allowed_hosts* restricts where ``callback`` deliveries may go (``egress.CallbackPolicy``;
     raises ValueError on a bad entry). Link-local and metadata addresses are refused either way.
+
+    *metrics_enabled* serves Prometheus metrics at ``GET /imnot/metrics`` (``imnot.engine.metrics``).
     """
     callback_policy = CallbackPolicy.parse(callback_allowed_hosts)
     store = SessionStore(db_path=db_path)
@@ -140,6 +144,8 @@ def create_app(
     app.state.callback_policy = callback_policy
     app.add_middleware(LoggingMiddleware)
     app.add_middleware(JournalMiddleware)
+    if metrics_enabled:
+        register_metrics(app, _IMNOT_VERSION)
     register_routes(
         app,
         partners,
@@ -189,6 +195,7 @@ def create_app_from_env() -> FastAPI:
         base_url=os.environ.get("IMNOT_BASE_URL") or config.server.base_url,
         instance_name=os.environ.get("IMNOT_INSTANCE_NAME") or None,
         callback_allowed_hosts=os.environ.get("IMNOT_CALLBACK_ALLOWED_HOSTS") or None,
+        metrics_enabled=config.metrics.enabled,
         default_limit=default_limit,
         ui_config=config.ui,
     )
