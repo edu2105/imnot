@@ -28,11 +28,12 @@ _SECRET_PATTERN = r"token|secret|password|api[-_]?key"  # nosec B105: field name
 _SECRET_WORDS = re.compile(_SECRET_PATTERN, re.IGNORECASE)
 REDACTED = "[redacted]"
 # Values of secret-named fields, edited in the text so the rest of the body stays byte for byte as sent
-# (and a truncated body is still covered): JSON string members and form/query pairs.
+# (and a truncated body is still covered): JSON string members and form/query pairs. Field names are
+# bounded to 128 characters so a body like '{"tokentoken…' with no closing quote stays linear.
 _SECRET_JSON_MEMBER = re.compile(
-    rf'("[^"\\]*(?:{_SECRET_PATTERN})[^"\\]*"\s*:\s*)"(?:[^"\\]|\\.)*(?:"|$)', re.IGNORECASE
+    rf'("[^"\\]{{0,128}}(?:{_SECRET_PATTERN})[^"\\]{{0,128}}"\s*:\s*)"(?:[^"\\]|\\.)*(?:"|$)', re.IGNORECASE
 )
-_SECRET_FORM_PAIR = re.compile(rf"((?:^|&)[^=&]*(?:{_SECRET_PATTERN})[^=&]*=)[^&]*", re.IGNORECASE)
+_SECRET_FORM_PAIR = re.compile(rf"((?:^|&)[^=&]{{0,128}}(?:{_SECRET_PATTERN})[^=&]{{0,128}}=)[^&]*", re.IGNORECASE)
 
 
 def redact_headers(headers: list[tuple[bytes, bytes]]) -> dict[str, str]:

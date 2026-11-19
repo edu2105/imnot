@@ -27,6 +27,7 @@ split_commits = false
 # changelog rewrites them. The patterns avoid spelling the name.
 commit_preprocessors = [
   { pattern = 'patterns, \w+ partner, expanded CLI', replace = "patterns, a first example partner, expanded CLI" },
+  { pattern = '(?i)replace \w+ with fictional staylink', replace = "replace a real partner name with the fictional staylink" },
   { pattern = 'replace \w+ with fictional bookingco', replace = "replace a real partner name with the fictional bookingco" },
 ]
 

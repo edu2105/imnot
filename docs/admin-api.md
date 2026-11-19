@@ -114,10 +114,10 @@ curl -s "http://localhost:8000/imnot/admin/requests?partner=bookingco&session=$S
   that match no mock route (`partner: null`, usually a 404), which helps spot a wrong URL.
 - Secret headers are saved as `[redacted]`: `Authorization`, `Proxy-Authorization`, `Cookie`,
   `X-Api-Key` and any header whose name contains `token`, `secret`, `password` or `api-key`.
-- In the query string, JSON bodies and form bodies (`application/x-www-form-urlencoded`), the value of
-  any field whose name contains `token`, `secret`, `password` or `api-key`/`api_key` is saved as
-  `[redacted]` (e.g. `client_secret` in a token request). The rest of the body is kept byte for byte;
-  other body types and non-string JSON values are stored as sent.
+- The value of any field whose name contains `token`, `secret`, `password` or `api-key`/`api_key` is
+  saved as `[redacted]` (e.g. `client_secret` in a token request): in the query string, in form bodies
+  (`application/x-www-form-urlencoded`), and in any body for JSON-style `"name": "value"` members, whatever
+  the content type says. The rest of the body is kept byte for byte; non-string JSON values are stored as sent.
 - `body` is the raw request body as text, cut at 64 KB (`body_truncated: true`).
 - The newest 1000 entries are kept in `imnot.db`; older ones are dropped automatically.
 

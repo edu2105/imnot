@@ -90,8 +90,8 @@ def test_redacts_secret_fields_in_form_body_and_query(client):
     assert entry["body"] == "grant_type=client_credentials&client_id=app&client_secret=[redacted]"
 
 
-def test_plain_text_body_with_secret_looking_pairs_is_kept(client):
-    # Form redaction only applies to form bodies: a text body is not guessed at.
+def test_form_pairs_in_a_non_form_body_are_kept(client):
+    # Form redaction only applies to form bodies (JSON members are redacted in any body).
     client.post("/nobody", content="token=abc", headers={"Content-Type": "text/plain"})
     (entry,) = _entries(client)
     assert entry["body"] == "token=abc"
@@ -102,6 +102,15 @@ def test_secret_cut_by_truncation_is_still_redacted(client, monkeypatch):
     client.post("/nobody", content='{"password": "abcdefgh"}', headers={"Content-Type": "application/json"})
     (entry,) = _entries(client)
     assert entry["body"] == '{"password": "[redacted]"' and entry["body_truncated"] is True
+
+
+def test_unclosed_secret_like_field_name_is_linear(client):
+    # A 64 KB name with no closing quote (or no "=") used to take over a second of regex backtracking.
+    import time
+
+    start = time.monotonic()
+    journal.redact_body('{"' + "token" * 13000, "application/x-www-form-urlencoded")
+    assert time.monotonic() - start < 0.2
 
 
 def test_large_bodies_are_truncated(client, monkeypatch):

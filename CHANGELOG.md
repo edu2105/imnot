@@ -437,7 +437,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove real partner names from README ([6e374a5](https://github.com/edu2105/imnot/commit/6e374a5b4cfafd891cb559e57d83281bf5919de3))
 - Remove superpowers plugin output and ignore it ([84b79fd](https://github.com/edu2105/imnot/commit/84b79fdcb5af67a6f74a0655bf219f736bac92cc))
 - Remove poll pattern (replaced by async) ([331c610](https://github.com/edu2105/imnot/commit/331c6104df6ec6fe05e0252798d7402b8f6dce11))
-- Replace ohip with fictional staylink example partner ([7adba19](https://github.com/edu2105/imnot/commit/7adba19ce3e716b8f037caa0c87aa48c07c44efc))
+- Replace a real partner name with the fictional staylink example partner ([7adba19](https://github.com/edu2105/imnot/commit/7adba19ce3e716b8f037caa0c87aa48c07c44efc))
 - Replace a real partner name with the fictional bookingco example partner ([d190fa6](https://github.com/edu2105/imnot/commit/d190fa6c14e1ab01345dcc36e320e8bcf641d278))
 - Tighten .gitignore ([3a19fff](https://github.com/edu2105/imnot/commit/3a19fff45a1151e9e0504f05829f1f856247677c))
 - Exclude CLAUDE.md and PLAN.md from version control ([cdd65c0](https://github.com/edu2105/imnot/commit/cdd65c06a22b9425ea717f6a4f66282e5b1d0844))
