@@ -55,6 +55,16 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         partner = request.path_params.get("partner") if request.path_params else None
         datapoint = request.path_params.get("datapoint") if request.path_params else None
 
+        fields = {
+            "method": request.method,
+            "path": request.url.path,
+            "status": response.status_code,
+            "duration_ms": duration_ms,
+            "request_id": request_id,
+            "partner": partner,
+            "datapoint": datapoint,
+            "session": session_id,
+        }
         _http_logger.info(
             "%s %s %d %dms%s%s%s",
             request.method,
@@ -64,6 +74,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             f" partner={partner}" if partner else "",
             f" datapoint={datapoint}" if datapoint else "",
             f" session={session_id}" if session_id else "",
+            extra={"fields": {k: v for k, v in fields.items() if v is not None}},  # used by JSON logs
         )
 
         response.headers["X-Request-ID"] = request_id
