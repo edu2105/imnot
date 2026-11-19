@@ -91,7 +91,7 @@ An unknown `IMNOT_LOGGING_*` / `IMNOT_PAGINATION_*` / `IMNOT_UI_*` / `IMNOT_METR
 # enabled = true                          # set to false to disable the admin UI (→ 404)
 # default_theme = "dark"                  # "light", "dark", or "system"
 
-[metrics]
+# [metrics]
 # enabled = false                         # Prometheus metrics at GET /imnot/metrics (no auth)
 ```
 

@@ -68,6 +68,21 @@ def test_requests_are_counted_by_route_owner_not_raw_path(client):
     assert s["imnot_partners_loaded"] >= 1
 
 
+def test_an_unhandled_error_counts_as_500():
+    # ServerErrorMiddleware turns it into a 500 outside this middleware, which never sees a response start.
+    app = FastAPI()
+    app.state.metrics = Metrics("x")
+    app.add_middleware(MetricsMiddleware)
+
+    @app.get("/boom")
+    async def boom():
+        raise RuntimeError("boom")
+
+    with TestClient(app, raise_server_exceptions=False) as c:
+        assert c.get("/boom").status_code == 500
+    assert dict(app.state.metrics.requests) == {("", "", "GET", "500"): 1}
+
+
 def test_histogram_buckets_are_cumulative(client):
     for _ in range(3):
         client.get("/nowhere")

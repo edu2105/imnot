@@ -12,7 +12,7 @@ Metrics:
 - ``imnot_http_requests_total{partner,datapoint,method,status}``: requests to mock routes.
 - ``imnot_http_request_duration_seconds{partner,datapoint}``: histogram of their durations.
 - ``imnot_callback_deliveries_total{partner,datapoint,result}``: ``delivered``, ``failed`` (after the
-  last retry) or ``refused`` (blocked by the callback policy).
+  last retry), ``refused`` (blocked by the callback policy) or ``skipped`` (no payload to send).
 - ``imnot_admin_auth_failures_total``: requests to ``/imnot/admin/*`` with a wrong or missing key.
 - ``imnot_partners_loaded``: partners with registered routes.
 - ``imnot_info{version}``: always 1.
@@ -61,11 +61,11 @@ class Metrics:
         self.admin_auth_failures = 0
 
     def observe_request(
-        self, partner: str | None, datapoint: str | None, method: str, status: int | None, seconds: float
+        self, partner: str | None, datapoint: str | None, method: str, status: int, seconds: float
     ) -> None:
         p, d = partner or "", datapoint or ""
         m = method if method in _METHODS else "OTHER"
-        self.requests[(p, d, m, str(status or 0))] += 1
+        self.requests[(p, d, m, str(status))] += 1
         buckets = self.duration_buckets.setdefault((p, d), [0] * len(DURATION_BUCKETS))
         for i, bound in enumerate(DURATION_BUCKETS):
             if seconds <= bound:
@@ -140,7 +140,7 @@ class MetricsMiddleware:
             if metrics is not None:
                 partner, datapoint = route_owner(scope)
                 metrics.observe_request(
-                    partner, datapoint, scope.get("method", ""), status.get("code"), time.perf_counter() - start
+                    partner, datapoint, scope.get("method", ""), status.get("code", 500), time.perf_counter() - start
                 )
 
         async def send_and_watch(message: Message) -> None:
@@ -155,7 +155,7 @@ class MetricsMiddleware:
         try:
             await self.app(scope, receive, send_and_watch)
         finally:
-            record()  # no-op if already recorded; covers an app that failed before answering
+            record()  # no-op if already recorded; an unhandled error never answered here and becomes a 500 outside
 
 
 def register_metrics(app: FastAPI, version: str) -> None:
