@@ -26,11 +26,11 @@ import uvicorn
 import yaml
 
 from imnot.api.server import create_app
-from imnot.config import load_config
+from imnot.config import ConfigError, load_config
 from imnot.engine.egress import CallbackPolicy
 from imnot.engine.session_store import SessionStore
 from imnot.loader.yaml_loader import PAYLOAD_PATTERNS, load_partners, load_payload_files, parse_partner_yaml
-from imnot.logging_setup import configure_logging
+from imnot.logging_setup import configure_logging, uvicorn_log_config
 from imnot.partners import EXAMPLE_PARTNERS, register_partner, write_example_partner
 from imnot.postman import build_postman_collection, collection_stats
 
@@ -42,6 +42,8 @@ _ADMIN_KEY_MIN_LENGTH = 16
 _IMNOT_TOML_TEMPLATE = """\
 # imnot.toml — runtime configuration for imnot
 # All values shown are defaults. Uncomment and change what you need.
+# Every [logging], [pagination] and [ui] key can also be set as IMNOT_<SECTION>_<KEY>
+# (e.g. IMNOT_LOGGING_FORMAT=json, IMNOT_UI_ENABLED=false); the variable wins over this file.
 
 [server]
 # host = "127.0.0.1"                   # bind host
@@ -58,6 +60,7 @@ _IMNOT_TOML_TEMPLATE = """\
 # archived_logs_dir = "./archived"        # rotated backups, relative to log_dir
 # debug = false                           # enable DEBUG-level logs
 # stdout = false                          # also emit to stdout (useful for Docker/ECS)
+# format = "text"                         # "text" or "json" (one JSON object per line)
 
 # [pagination]
 # default_limit = 50                      # default page size for paginated pattern endpoints
@@ -90,9 +93,17 @@ def _resolve_config(db_path: Path | None = None) -> Path | None:
         current = parent
 
 
+def _load_config(path: Path | None):
+    """``load_config`` with a bad IMNOT_LOGGING_* / IMNOT_UI_* / IMNOT_PAGINATION_* value as a usage error."""
+    try:
+        return load_config(path)
+    except ConfigError as exc:
+        raise click.UsageError(str(exc)) from exc
+
+
 def _setup_logging(log_dir: Path | None = None) -> logging.Logger:
     """Configure logging from imnot.toml (if found) and return the imnot.cli logger."""
-    config = load_config(_resolve_config())
+    config = _load_config(_resolve_config())
     resolved = Path(config.logging.log_dir)
     if not resolved.is_absolute():
         # Prefer the DB directory (guaranteed writable) over CWD, which may be read-only
@@ -256,7 +267,7 @@ def start(
     # DB (e.g. /app/data/imnot.toml) before we know the full config.
     early_db_path = Path(db) if db else Path(DEFAULT_DB)
     config_path = _resolve_config(db_path=None if stateless else early_db_path)
-    config = load_config(config_path)
+    config = _load_config(config_path)
 
     effective_db = db or config.server.db
     effective_host = host or config.server.host
@@ -285,6 +296,10 @@ def start(
         )
         raise SystemExit(1)
     cli_log = logging.getLogger("imnot.cli")
+    # With JSON logs stdout must be JSON only: the human summary and warnings below are skipped, since every
+    # one of them is also logged. (Fatal errors before logging is set up are still printed as text.)
+    json_logs = config.logging.format == "json"
+    say = (lambda *args, **kwargs: None) if json_logs else click.echo
 
     # Auto-write imnot.toml co-located with the DB (guaranteed writable directory).
     if config_path is None and not stateless:
@@ -311,11 +326,11 @@ def start(
                 verb = "using" if existed else "created"
                 cli_log.info("Partners directory next to the database: %s %s", verb, resolved_partners_dir)
                 if not existed:
-                    click.echo(f"No partners directory found: created {resolved_partners_dir}")
+                    say(f"No partners directory found: created {resolved_partners_dir}")
             except OSError as exc:
                 cli_log.warning("Could not create %s: %s", candidate, exc)
     if resolved_partners_dir is None:
-        click.echo(
+        say(
             "Warning: No partners directory found — server starting with zero partners.\n"
             "Run `imnot init` to create example partners, or use `imnot generate` / "
             "POST /imnot/admin/partners to add your own.",
@@ -336,20 +351,21 @@ def start(
             "Admin endpoints are unauthenticated and reachable from the network. "
             "Set IMNOT_ADMIN_KEY or bind to 127.0.0.1 for non-local deployments."
         )
-        click.echo(_warn, err=True)
+        say(_warn, err=True)
         cli_log.warning("Binding to 0.0.0.0 with no IMNOT_ADMIN_KEY — admin endpoints are unauthenticated")
     if effective_admin_key and len(effective_admin_key) < _ADMIN_KEY_MIN_LENGTH:
-        click.echo(
+        say(
             f"WARNING: the admin key is shorter than {_ADMIN_KEY_MIN_LENGTH} characters and can be guessed. "
             "Use a long random one, e.g. `openssl rand -hex 32`.",
             err=True,
         )
         cli_log.warning("Admin key shorter than %d characters", _ADMIN_KEY_MIN_LENGTH)
 
-    click.echo(f"Starting imnot on http://{effective_host}:{effective_port}")
-    if instance_name:
-        click.echo(f"  Instance:  {instance_name}")
-    _print_startup_summary(resolved_partners_dir, db_path, effective_host, effective_port, config.ui.enabled)
+    if not json_logs:
+        click.echo(f"Starting imnot on http://{effective_host}:{effective_port}")
+        if instance_name:
+            click.echo(f"  Instance:  {instance_name}")
+        _print_startup_summary(resolved_partners_dir, db_path, effective_host, effective_port, config.ui.enabled)
     cli_log.info(
         "Starting imnot host=%s port=%d db=%s partners_dir=%s admin_key=%s",
         effective_host,
@@ -358,6 +374,10 @@ def start(
         resolved_partners_dir,
         "set" if effective_admin_key else "unset",
     )
+
+    # Only in JSON mode: log_config=None would switch uvicorn's own logs off rather than keep its defaults.
+    uvicorn_config = uvicorn_log_config(config.logging.format)
+    uvicorn_options: dict = {} if uvicorn_config is None else {"log_config": uvicorn_config}
 
     if pid_path is not None:
         pid_path.write_text(str(os.getpid()))
@@ -384,6 +404,7 @@ def start(
                 reload=True,
                 reload_includes=["*.yaml"],
                 factory=True,
+                **uvicorn_options,
             )
         else:
             app = create_app(
@@ -397,7 +418,7 @@ def start(
                 instance_name=instance_name,
                 callback_allowed_hosts=callback_allowed_hosts,
             )
-            uvicorn.run(app, host=effective_host, port=effective_port)
+            uvicorn.run(app, host=effective_host, port=effective_port, **uvicorn_options)
     finally:
         if pid_path is not None and pid_path.exists():
             pid_path.unlink()
@@ -422,7 +443,7 @@ _STOP_POLL_INTERVAL = 0.1
 def stop(pid_file: str) -> None:
     """Stop a running imnot server."""
     cli_log = _setup_logging()
-    stop_timeout = load_config(_resolve_config()).server.stop_timeout_seconds
+    stop_timeout = _load_config(_resolve_config()).server.stop_timeout_seconds
 
     try:
         pid_path = _resolve_pid(pid_file)
@@ -877,7 +898,7 @@ def export_postman(out: str, partners_dir: str, selected_partners: tuple[str, ..
             raise SystemExit(1)
         partners = [p for p in partners if p.partner in set(selected_partners)]
 
-    base_url = load_config(_resolve_config()).server.base_url
+    base_url = _load_config(_resolve_config()).server.base_url
     collection = build_postman_collection(partners, base_url=base_url)
     out_path = Path(out)
     out_path.write_text(json.dumps(collection, indent=2))
