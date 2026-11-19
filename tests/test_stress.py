@@ -555,7 +555,7 @@ def test_post_run_audit_log_unknown_client(app_client: TestClient, caplog: pytes
     assert any("unknown" in r.getMessage() for r in matching)
 
 
-def test_post_run_ceiling_exceeded_never_creates_task(app_client: TestClient):
+def test_post_run_rate_ceiling_exceeded_never_creates_task(app_client: TestClient):
     with patch("imnot.engine.stress_router.asyncio.create_task") as mock_create_task:
         resp = app_client.post(
             "/imnot/admin/stress/run",
@@ -563,6 +563,40 @@ def test_post_run_ceiling_exceeded_never_creates_task(app_client: TestClient):
         )
     assert resp.status_code == 422
     mock_create_task.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "field, literal",
+    [
+        ("total_count", "Infinity"),
+        ("total_count", "-Infinity"),
+        ("total_count", "NaN"),
+        ("duration_seconds", "Infinity"),
+        ("duration_seconds", "NaN"),
+        ("rate_per_second", "Infinity"),
+        ("rate_per_second", "NaN"),
+    ],
+)
+def test_post_run_non_finite_numbers_return_422(app_client: TestClient, field: str, literal: str):
+    # Python's json.loads accepts these non-standard literals; they used to raise OverflowError (500).
+    fields = {"rate_per_second": "10", "duration_seconds" if field == "duration_seconds" else "total_count": "5"}
+    fields[field] = literal
+    parts = [f'"{k}": {v}' for k, v in fields.items()]
+    body = '{"mode": "standalone", "target_url": "http://x.com", ' + ", ".join(parts) + "}"
+    with patch("imnot.engine.stress_router.asyncio.create_task") as mock_create_task:
+        resp = app_client.post("/imnot/admin/stress/run", content=body, headers={"content-type": "application/json"})
+    assert resp.status_code == 422
+    assert "finite" in resp.json()["detail"]
+    mock_create_task.assert_not_called()
+
+
+def test_post_run_missing_rate_says_required(app_client: TestClient):
+    resp = app_client.post(
+        "/imnot/admin/stress/run",
+        json={"mode": "standalone", "target_url": "http://x.com", "total_count": 10},
+    )
+    assert resp.status_code == 422
+    assert resp.json()["detail"] == "rate_per_second is required"
 
 
 def test_post_run_rate_zero_rejected_with_range_message(app_client: TestClient):
