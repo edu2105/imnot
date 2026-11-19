@@ -284,6 +284,40 @@
   border: 1px solid var(--color-border);
 }
 
+/* First use: no partners at all. Two ways in: the Builder, or the examples of `imnot init`. */
+.first-use {
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: var(--space-10) var(--space-6);
+  border: 1px dashed var(--color-rule);
+  border-radius: var(--radius-lg);
+}
+
+.first-use h3 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.first-use .first-use-lead {
+  font-size: 0.875rem;
+  margin-top: var(--space-2);
+}
+
+.first-use-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+.first-use .first-use-note {
+  font-size: 0.75rem;
+  margin-top: var(--space-4);
+  line-height: 1.5;
+}
+
 
 /* ---- Buttons ---------------------------------------------- */
 

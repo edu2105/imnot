@@ -703,6 +703,40 @@ img, svg {
   border: 1px solid var(--color-border);
 }
 
+/* First use: no partners at all. Two ways in: the Builder, or the examples of `imnot init`. */
+.first-use {
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: var(--space-10) var(--space-6);
+  border: 1px dashed var(--color-rule);
+  border-radius: var(--radius-lg);
+}
+
+.first-use h3 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.first-use .first-use-lead {
+  font-size: 0.875rem;
+  margin-top: var(--space-2);
+}
+
+.first-use-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+.first-use .first-use-note {
+  font-size: 0.75rem;
+  margin-top: var(--space-4);
+  line-height: 1.5;
+}
+
 
 /* ---- Buttons ---------------------------------------------- */
 
@@ -2143,14 +2177,49 @@ img, svg {
         .catch(function (e) { notify('Failed to load partners: ' + e.message, 'error'); });
     }
 
+    // What "Load examples" does depends on the mode, which /healthz reports after the first render.
+    function updateFirstUseNote() {
+      var note = document.getElementById('first-use-note');
+      if (!note) return;
+      note.textContent = 'The examples are StayLink, BookingCo and RateSync: three partners that cover the six patterns. '
+        + (_stateless
+          ? 'This server is stateless, so they stay in memory and go away on Reload or restart.'
+          : 'They are written to your partners directory, like imnot init does.');
+    }
+
+    function loadExamples(btn) {
+      btn.disabled = true;
+      fetch('/imnot/admin/partners/examples', { method: 'POST', headers: authHeaders() })
+        .then(function (r) {
+          return r.json().catch(function () { return {}; }).then(function (d) {
+            if (!r.ok) throw new Error(d.detail || 'HTTP ' + r.status);
+            return d;
+          });
+        })
+        .then(function (d) {
+          notify('Loaded ' + d.partners.join(', ') + (d.persisted ? '.' : ' in memory (gone on Reload or restart).'), 'ok');
+          return loadPartners();
+        })
+        .catch(function (e) {
+          btn.disabled = false;
+          notify('Could not load the examples: ' + e.message, 'error');
+        });
+    }
+
     function renderPartners(data) {
       var c = document.getElementById('partners-container');
       if (data && data.length) data.sort(function (a, b) { return a.partner.localeCompare(b.partner); });
       if (!data || !data.length) {
-        c.innerHTML = '<div class="empty-state">'
-          + '<p>No partners loaded.</p>'
-          + '<p>Run <code>imnot init</code> for examples, or add one with the <strong>+</strong> button, <code>imnot generate</code> or POST /imnot/admin/partners.</p>'
-          + '</div>';
+        c.innerHTML = '<div class="empty-state"><div class="first-use" id="first-use">'
+          + '<h3>No partners yet</h3>'
+          + '<p class="first-use-lead">A partner is one API you want to mock. Describe yours, or look around with the examples first.</p>'
+          + '<div class="first-use-actions">'
+          + '<button class="btn btn-primary" id="first-use-create" onclick="showBuilder(\'create\')">Create your first partner</button>'
+          + '<button class="btn btn-secondary" id="first-use-examples" onclick="loadExamples(this)">Load examples</button>'
+          + '</div>'
+          + '<p class="first-use-note" id="first-use-note"></p>'
+          + '</div></div>';
+        updateFirstUseNote();
         return;
       }
       c.innerHTML = data.map(function (p) {
@@ -4232,6 +4301,7 @@ img, svg {
         .then(function (d) {
           document.getElementById('server-status').textContent = 'v' + (d.version || '?');
           _stateless = !!d.stateless;
+          updateFirstUseNote();
           if (d.instance) {
             // Which imnot is this? Set with --instance-name when several teams run their own.
             var instanceEl = document.getElementById('instance-name');

@@ -886,8 +886,8 @@ def test_stop_explicit_pid_file_path(runner, tmp_path):
     assert not pid_file.exists()
 
 
-def test_start_missing_partners_dir_warns_no_partners(runner, tmp_path):
-    """Missing default partners dir: warn and start with zero partners."""
+def test_start_missing_partners_dir_creates_it_and_starts_with_no_partners(runner, tmp_path):
+    """Missing default partners dir: create it next to the DB and start with zero partners."""
     original = os.getcwd()
     try:
         os.chdir(tmp_path)  # no partners/ here or in any ancestor up to tmp_path
@@ -904,7 +904,28 @@ def test_start_missing_partners_dir_warns_no_partners(runner, tmp_path):
         os.chdir(original)
 
     assert result.exit_code == 0
-    assert "zero partners" in result.output
+    assert "No partners directory found: created" in result.output and "0 loaded" in result.output
+    assert (tmp_path / "partners").is_dir()
+
+
+def test_start_reusing_partners_dir_next_to_db_does_not_say_created(runner, tmp_path):
+    """--db in a subfolder: the walk up from the CWD never finds data/partners, so every start reuses it.
+    Only the first start says "created"."""
+    original = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        outputs = []
+        for _ in range(2):
+            with patch("imnot.cli.uvicorn.run"):
+                result = runner.invoke(cli, ["start", "--db", str(tmp_path / "data" / "imnot.db")])
+            assert result.exit_code == 0
+            outputs.append(result.output)
+    finally:
+        os.chdir(original)
+
+    assert "No partners directory found: created" in outputs[0]
+    assert "created" not in outputs[1]
+    assert (tmp_path / "data" / "partners").is_dir()
 
 
 # ---------------------------------------------------------------------------
@@ -1327,8 +1348,10 @@ def test_validate_reports_every_file_not_just_the_first(runner, tmp_path):
     assert "2 of 3" in result.output
 
 
-def test_validate_empty_and_missing_dir(runner, tmp_path):
-    # No partner.yaml at all is a failure: a wrongly nested layout must not pass CI as "nothing to check".
+def test_validate_wrong_layout_and_missing_dir(runner, tmp_path):
+    # Content but no <partner>/partner.yaml is a failure: a wrongly nested layout must not pass CI as
+    # "nothing to check". (A completely empty directory passes: see tests/test_first_use.py.)
+    (tmp_path / "partners" / "acme").mkdir(parents=True)
     empty = runner.invoke(cli, ["validate", "--partners-dir", str(tmp_path)])
     assert empty.exit_code == 1
     assert "No partner.yaml files found" in empty.output

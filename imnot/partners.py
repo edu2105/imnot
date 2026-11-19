@@ -4,8 +4,10 @@ Core partner registration logic, shared by the CLI and the HTTP admin endpoint.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
+from importlib.resources import files
 from pathlib import Path
 
 import yaml
@@ -189,3 +191,54 @@ def _carry(old: dict, new: dict, keys: set[str]) -> None:
     for key in keys:
         if key in old and key not in new:
             new[key] = old[key]
+
+
+# ---------------------------------------------------------------------------
+# Example partners (`imnot init` and POST /imnot/admin/partners/examples)
+# ---------------------------------------------------------------------------
+
+# Bundled in the wheel under imnot/examples/<name>/. Together they cover the six patterns.
+EXAMPLE_PARTNERS = [
+    ("staylink", "oauth + polling"),
+    ("bookingco", "static + fetch"),
+    ("ratesync", "callback + paginated"),
+]
+
+
+def example_partner_files(name: str) -> tuple[str, dict[str, str]]:
+    """The bundled example *name*: its partner.yaml text and ``{file name: text}`` of ``payloads/*.json``."""
+    source = files("imnot.examples").joinpath(name)
+    yaml_text = source.joinpath("partner.yaml").read_text(encoding="utf-8")
+    payloads_dir = source.joinpath("payloads")
+    payloads: dict[str, str] = {}
+    if payloads_dir.is_dir():
+        for item in sorted(payloads_dir.iterdir(), key=lambda x: x.name):
+            if item.name.endswith(".json"):
+                payloads[item.name] = item.read_text(encoding="utf-8")
+    return yaml_text, payloads
+
+
+def write_example_partner(name: str, partners_dir: Path) -> list[Path]:
+    """Write the example *name* under *partners_dir* (partner.yaml, then its payload files)."""
+    yaml_text, payloads = example_partner_files(name)
+    dest_dir = partners_dir / name
+    dest_dir.mkdir(parents=True)
+    written = [dest_dir / "partner.yaml"]
+    written[0].write_text(yaml_text, encoding="utf-8")
+    if payloads:
+        (dest_dir / "payloads").mkdir()
+        for file_name, text in payloads.items():
+            written.append(dest_dir / "payloads" / file_name)
+            written[-1].write_text(text, encoding="utf-8")
+    return written
+
+
+def load_example_partner(name: str) -> tuple[PartnerDef, str]:
+    """Parse the example *name* straight from the package, with its payloads as ``seed_payloads``.
+
+    Returns ``(partner, partner.yaml text)``. Nothing is read from or written to a partners directory.
+    """
+    yaml_text, payloads = example_partner_files(name)
+    partner = parse_partner_yaml(yaml_text)
+    partner.seed_payloads = {Path(file_name).stem: json.loads(text) for file_name, text in payloads.items()}
+    return partner, yaml_text
