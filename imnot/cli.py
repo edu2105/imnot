@@ -277,10 +277,13 @@ def start(
         if partners_dir is None and effective_partners_dir == DEFAULT_PARTNERS_DIR and not stateless and not strict:
             candidate = db_path.parent / DEFAULT_PARTNERS_DIR
             try:
+                existed = candidate.is_dir()
                 candidate.mkdir(exist_ok=True)
                 resolved_partners_dir = candidate.resolve()
-                cli_log.info("No partners directory found: using %s (created if missing)", resolved_partners_dir)
-                click.echo(f"No partners directory found: created {resolved_partners_dir}")
+                verb = "using" if existed else "created"
+                cli_log.info("Partners directory next to the database: %s %s", verb, resolved_partners_dir)
+                if not existed:
+                    click.echo(f"No partners directory found: created {resolved_partners_dir}")
             except OSError as exc:
                 cli_log.warning("Could not create %s: %s", candidate, exc)
     if resolved_partners_dir is None:

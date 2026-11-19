@@ -908,6 +908,26 @@ def test_start_missing_partners_dir_creates_it_and_starts_with_no_partners(runne
     assert (tmp_path / "partners").is_dir()
 
 
+def test_start_reusing_partners_dir_next_to_db_does_not_say_created(runner, tmp_path):
+    """--db in a subfolder: the walk up from the CWD never finds data/partners, so every start reuses it.
+    Only the first start says "created"."""
+    original = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        outputs = []
+        for _ in range(2):
+            with patch("imnot.cli.uvicorn.run"):
+                result = runner.invoke(cli, ["start", "--db", str(tmp_path / "data" / "imnot.db")])
+            assert result.exit_code == 0
+            outputs.append(result.output)
+    finally:
+        os.chdir(original)
+
+    assert "No partners directory found: created" in outputs[0]
+    assert "created" not in outputs[1]
+    assert (tmp_path / "data" / "partners").is_dir()
+
+
 # ---------------------------------------------------------------------------
 # Admin key warning when binding to 0.0.0.0 without a key
 # ---------------------------------------------------------------------------
