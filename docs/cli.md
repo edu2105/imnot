@@ -45,7 +45,19 @@ Every `imnot start` option can also come from the environment. Precedence: flag,
 | `IMNOT_REQUIRE_ADMIN_KEY` | `--require-admin-key` | Exit 1 when no admin key is set. For shared deployments |
 | `IMNOT_CALLBACK_ALLOWED_HOSTS` | `--callback-allowed-hosts` | Comma-separated host names, `*.` suffixes and CIDRs (`orders.team-a,*.team-a.svc.cluster.local,10.20.0.0/16`). When set, a `callback` submit to anything else gets `422`. Link-local and cloud metadata addresses are refused with or without it |
 
-The other settings (log level, UI, page size) live in `imnot.toml`.
+Every key of the `[logging]`, `[pagination]` and `[ui]` sections of `imnot.toml` can also be set as `IMNOT_<SECTION>_<KEY>`, and the variable wins over the file:
+
+| Variable | `imnot.toml` key | Values |
+|---|---|---|
+| `IMNOT_LOGGING_FORMAT` | `[logging] format` | `text` (default) or `json` |
+| `IMNOT_LOGGING_DEBUG` | `[logging] debug` | `1`/`0`, `true`/`false`, `yes`/`no`, `on`/`off` |
+| `IMNOT_LOGGING_STDOUT` | `[logging] stdout` | same as above |
+| `IMNOT_LOGGING_LOG_DIR`, `IMNOT_LOGGING_MAX_BYTES`, `IMNOT_LOGGING_BACKUP_NAME_FORMAT`, `IMNOT_LOGGING_ARCHIVED_LOGS_DIR` | the `[logging]` key of the same name | |
+| `IMNOT_PAGINATION_DEFAULT_LIMIT` | `[pagination] default_limit` | a number |
+| `IMNOT_UI_ENABLED` | `[ui] enabled` | true/false as above |
+| `IMNOT_UI_DEFAULT_THEME` | `[ui] default_theme` | `light`, `dark` or `system` |
+
+An unknown `IMNOT_LOGGING_*` / `IMNOT_PAGINATION_*` / `IMNOT_UI_*` name or a value of the wrong type stops `imnot` with an error. `[server]` keys use the names in the table above (`IMNOT_BIND_HOST`, `IMNOT_DB_PATH`…), not `IMNOT_SERVER_*`.
 
 ---
 
@@ -69,6 +81,7 @@ The other settings (log level, UI, page size) live in `imnot.toml`.
 # archived_logs_dir = "./archived"        # rotated backups, relative to log_dir
 # debug = false                           # enable DEBUG-level logs
 # stdout = false                          # also emit to stdout (useful for Docker/ECS)
+# format = "text"                         # "text" or "json" (one JSON object per line)
 
 [pagination]
 # default_limit = 50                      # default page size for paginated endpoints
@@ -90,6 +103,18 @@ imnot writes two log files to `logs/` next to `imnot.db` (`[logging] log_dir`):
 - `imnot.http.log` — all HTTP traffic except `/healthz`
 
 Warnings are also printed to the console. With `--stateless` no log file is written: both streams go to stdout. When a log file reaches `max_bytes`, it is moved to `logs/archived/` (`archived_logs_dir`) with a timestamp in the filename and a new file starts. `IMNOT_ADMIN_KEY` is never written to logs.
+
+### JSON logs
+
+`[logging] format = "json"` (or `IMNOT_LOGGING_FORMAT=json`) writes one JSON object per line, to the files and to stdout alike, for log platforms that parse JSON:
+
+```json
+{"time": "2026-11-19T16:28:28.806+00:00", "level": "INFO", "logger": "imnot.http", "message": "GET /staylink/x 404 0ms session=s1", "method": "GET", "path": "/staylink/x", "status": 404, "duration_ms": 0, "request_id": "587c6746-…", "session": "s1"}
+```
+
+- Every line has `time` (UTC), `level`, `logger` and `message`; `imnot.http` lines add `method`, `path`, `status`, `duration_ms`, `request_id` and, when present, `partner`, `datapoint` and `session`; errors add `exception`.
+- uvicorn's own lines (`uvicorn.error`, `uvicorn.access`) are JSON too.
+- `imnot start` skips its human-readable startup summary so stdout stays JSON only; the same facts are logged (`Starting imnot host=…`, partners loaded, warnings).
 
 ---
 
