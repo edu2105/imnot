@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [1.9.0] - 2026-11-19
+
+### Added
+
+- Optional Prometheus metrics at /imnot/metrics ([ba9b247](https://github.com/edu2105/imnot/commit/ba9b2479da1025d80eb43b42e48431ded389f1dd))
+- JSON logs with structured HTTP fields ([625d0b4](https://github.com/edu2105/imnot/commit/625d0b44ee88f87a7686136ee0e023d103417f63))
+- Every [logging], [pagination] and [ui] setting from IMNOT_<SECTION>_<KEY> ([de9c65b](https://github.com/edu2105/imnot/commit/de9c65b9e85288a46f08775d9fbe1228e4144aa5))
+
+### Documentation
+
+- Prometheus metrics ([4444d4e](https://github.com/edu2105/imnot/commit/4444d4e9bbf3c220ffb4123f4f8b794c24b095f3))
+- Config from environment variables and JSON logs ([b25cee1](https://github.com/edu2105/imnot/commit/b25cee1c5016d86653770b322b8e3089ee4c043e))
+
+### Fixed
+
+- Count an unhandled error as a 500; document the skipped result ([bc1807c](https://github.com/edu2105/imnot/commit/bc1807c94c7be6891e5cf25fe3496272b126d041))
+- A --strict refusal reaches the console as JSON with file-only logs; skip prefixed Kubernetes service links ([ae7af2d](https://github.com/edu2105/imnot/commit/ae7af2dea18e0a1fb5654696dfc56dce4e2a99d8))
+- Strict partner checks are logged in JSON mode; skip Kubernetes service-link variables ([7bcf0be](https://github.com/edu2105/imnot/commit/7bcf0be6d27a1e615b00fdd93be5e7ea0ede8cff))
+
 ## [1.8.0] - 2026-11-19
 
 ### Documentation
