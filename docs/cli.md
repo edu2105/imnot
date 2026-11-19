@@ -41,7 +41,8 @@ Every `imnot start` option can also come from the environment. Precedence: flag,
 | `IMNOT_INSTANCE_NAME` | `--instance-name` | Optional label (a team, an environment), up to 64 characters. Shown in the admin UI header and tab title, in `/healthz` (`instance`) and in the startup summary |
 | `IMNOT_STATELESS` | `--stateless` | `1`, `true`, `yes` or `on` |
 | `IMNOT_STRICT` | `--strict` | `1`, `true`, `yes` or `on` |
-| `IMNOT_ADMIN_KEY` | `--admin-key` | |
+| `IMNOT_ADMIN_KEY` | `--admin-key` | A key shorter than 16 characters starts with a warning |
+| `IMNOT_REQUIRE_ADMIN_KEY` | `--require-admin-key` | Exit 1 when no admin key is set. For shared deployments |
 
 The other settings (log level, UI, page size) live in `imnot.toml`.
 
