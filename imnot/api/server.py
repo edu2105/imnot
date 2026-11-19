@@ -25,6 +25,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 from imnot.config import UIConfig, load_config
+from imnot.engine.egress import CallbackPolicy
 from imnot.engine.journal import JournalMiddleware
 from imnot.engine.router import _IMNOT_VERSION, register_routes, seed_payloads
 from imnot.engine.session_store import SessionStore
@@ -78,6 +79,7 @@ def create_app(
     ui_config: UIConfig | None = None,
     stateless: bool = False,
     instance_name: str | None = None,
+    callback_allowed_hosts: str | None = None,
 ) -> FastAPI:
     """Build and return a fully configured FastAPI application.
 
@@ -92,7 +94,11 @@ def create_app(
 
     *instance_name* is a free-text label (a team, an environment) reported by ``/healthz`` and shown
     in the admin UI, so users can tell several imnot servers apart.
+
+    *callback_allowed_hosts* restricts where ``callback`` deliveries may go (``egress.CallbackPolicy``;
+    raises ValueError on a bad entry). Link-local and metadata addresses are refused either way.
     """
+    callback_policy = CallbackPolicy.parse(callback_allowed_hosts)
     store = SessionStore(db_path=db_path)
     stress_store = StressStore(db_path=db_path)
     partners = load_partners(partners_dir) if partners_dir is not None else []
@@ -120,6 +126,7 @@ def create_app(
     app.state.stress_store = stress_store
     app.state.stateless = stateless
     app.state.instance_name = instance_name
+    app.state.callback_policy = callback_policy
     app.add_middleware(LoggingMiddleware)
     app.add_middleware(JournalMiddleware)
     register_routes(
@@ -146,6 +153,7 @@ def create_app_from_env() -> FastAPI:
     - ``IMNOT_ADMIN_KEY``     (default: none)
     - ``IMNOT_BASE_URL``      (default: ``base_url`` from ``imnot.toml``)
     - ``IMNOT_INSTANCE_NAME`` (default: none)
+    - ``IMNOT_CALLBACK_ALLOWED_HOSTS`` (default: none)
 
     - ``IMNOT_CONFIG_PATH``   (default: ``imnot.toml`` in the CWD)
 
@@ -169,6 +177,7 @@ def create_app_from_env() -> FastAPI:
         admin_key=admin_key,
         base_url=os.environ.get("IMNOT_BASE_URL") or config.server.base_url,
         instance_name=os.environ.get("IMNOT_INSTANCE_NAME") or None,
+        callback_allowed_hosts=os.environ.get("IMNOT_CALLBACK_ALLOWED_HOSTS") or None,
         default_limit=default_limit,
         ui_config=config.ui,
     )

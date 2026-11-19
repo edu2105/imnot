@@ -43,6 +43,7 @@ Every `imnot start` option can also come from the environment. Precedence: flag,
 | `IMNOT_STRICT` | `--strict` | `1`, `true`, `yes` or `on` |
 | `IMNOT_ADMIN_KEY` | `--admin-key` | A key shorter than 16 characters starts with a warning |
 | `IMNOT_REQUIRE_ADMIN_KEY` | `--require-admin-key` | Exit 1 when no admin key is set. For shared deployments |
+| `IMNOT_CALLBACK_ALLOWED_HOSTS` | `--callback-allowed-hosts` | Comma-separated host names, `*.` suffixes and CIDRs (`orders.team-a,*.team-a.svc.cluster.local,10.20.0.0/16`). When set, a `callback` submit to anything else gets `422`. Link-local and cloud metadata addresses are refused with or without it |
 
 The other settings (log level, UI, page size) live in `imnot.toml`.
 
