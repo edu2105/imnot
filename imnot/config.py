@@ -42,11 +42,17 @@ class UIConfig:
 
 
 @dataclass
+class MetricsConfig:
+    enabled: bool = False
+
+
+@dataclass
 class ImnotConfig:
     server: ServerConfig = field(default_factory=ServerConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     pagination: PaginationConfig = field(default_factory=PaginationConfig)
     ui: UIConfig = field(default_factory=UIConfig)
+    metrics: MetricsConfig = field(default_factory=MetricsConfig)
 
 
 def _from_dict(cls, data: dict):
@@ -61,7 +67,7 @@ class ConfigError(ValueError):
 # Every key of these imnot.toml sections can also be set as IMNOT_<SECTION>_<KEY> (e.g. IMNOT_LOGGING_FORMAT,
 # IMNOT_UI_ENABLED), so a container needs no imnot.toml. [server] is not here: its settings already have
 # their own names (IMNOT_BIND_HOST, IMNOT_DB_PATH…, see cli.py), and one setting gets one name.
-ENV_SECTIONS = ("logging", "pagination", "ui")
+ENV_SECTIONS = ("logging", "pagination", "ui", "metrics")
 # Kubernetes injects <SERVICE>_SERVICE_HOST, <SERVICE>_PORT, <SERVICE>_PORT_8000_TCP… for every Service in the
 # namespace: a Service named "imnot-ui" gives IMNOT_UI_PORT, "imnot-ui-backend" IMNOT_UI_BACKEND_SERVICE_HOST…
 # Those are skipped, not errors (no real setting ends in _PORT or _SERVICE_HOST).
@@ -111,7 +117,8 @@ def _apply_env(config: ImnotConfig, environ: Mapping[str, str]) -> None:
 def load_config(path: Path | None, environ: Mapping[str, str] | None = None) -> ImnotConfig:
     """Load imnot.toml from *path* (all defaults if None or absent), then apply IMNOT_<SECTION>_<KEY> overrides.
 
-    Raises ConfigError for an unknown or malformed IMNOT_LOGGING_* / IMNOT_PAGINATION_* / IMNOT_UI_* variable.
+    Raises ConfigError for an unknown or malformed IMNOT_LOGGING_* / IMNOT_PAGINATION_* / IMNOT_UI_* /
+    IMNOT_METRICS_* variable.
     """
     config = ImnotConfig()
     if path is not None and path.exists():
@@ -122,6 +129,7 @@ def load_config(path: Path | None, environ: Mapping[str, str] | None = None) -> 
             logging=_from_dict(LoggingConfig, data.get("logging", {})),
             pagination=_from_dict(PaginationConfig, data.get("pagination", {})),
             ui=_from_dict(UIConfig, data.get("ui", {})),
+            metrics=_from_dict(MetricsConfig, data.get("metrics", {})),
         )
     _apply_env(config, os.environ if environ is None else environ)
     return config
