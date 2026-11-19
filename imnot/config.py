@@ -63,8 +63,11 @@ class ConfigError(ValueError):
 # their own names (IMNOT_BIND_HOST, IMNOT_DB_PATH…, see cli.py), and one setting gets one name.
 ENV_SECTIONS = ("logging", "pagination", "ui")
 # Kubernetes injects <SERVICE>_SERVICE_HOST, <SERVICE>_PORT, <SERVICE>_PORT_8000_TCP… for every Service in the
-# namespace: a Service named "imnot-ui" gives IMNOT_UI_PORT and friends. Those are skipped, not errors.
-_K8S_SERVICE_LINK = re.compile(r"(SERVICE_HOST|SERVICE_PORT(_\w+)?|PORT(_\d+_(TCP|UDP|SCTP)(_PROTO|_PORT|_ADDR)?)?)")
+# namespace: a Service named "imnot-ui" gives IMNOT_UI_PORT, "imnot-ui-backend" IMNOT_UI_BACKEND_SERVICE_HOST…
+# Those are skipped, not errors (no real setting ends in _PORT or _SERVICE_HOST).
+_K8S_SERVICE_LINK = re.compile(
+    r"(\w+_)?(SERVICE_HOST|SERVICE_PORT(_\w+)?|PORT(_\d+_(TCP|UDP|SCTP)(_PROTO|_PORT|_ADDR)?)?)"
+)
 _TRUE = {"1", "true", "yes", "on"}
 _FALSE = {"0", "false", "no", "off"}
 

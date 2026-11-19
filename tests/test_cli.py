@@ -1031,8 +1031,13 @@ def test_json_logs_with_strict_log_the_partner_checks(runner, tmp_path):
     (good / "partner.yaml").write_text("partner: good\nnope: 1\n")
     result, run = _start_with(runner, tmp_path, "--strict", env={"IMNOT_LOGGING_FORMAT": "json"})
     assert result.exit_code == 1
-    assert result.output == ""  # the FAIL lines and the refusal are logged, not printed
     run.assert_not_called()
+    # Classic mode logs to files only by default, yet the refusal must reach the console, as JSON.
+    entries = [json.loads(line) for line in result.output.splitlines() if line.strip()]
+    messages = [e["message"] for e in entries]
+    assert any(m.startswith("FAIL  good/partner.yaml") for m in messages)
+    assert any("refusing to start" in m for m in messages)
+    assert all(e["level"] == "ERROR" for e in entries)
 
 
 def test_text_logs_leave_uvicorn_logging_alone(runner, tmp_path):

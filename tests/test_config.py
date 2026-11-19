@@ -280,6 +280,8 @@ def test_kubernetes_service_links_are_skipped():
         "IMNOT_UI_PORT_80_TCP": "tcp://10.0.0.1:80",
         "IMNOT_UI_PORT_80_TCP_ADDR": "10.0.0.1",
         "IMNOT_LOGGING_PORT_8000_TCP_PROTO": "tcp",
+        "IMNOT_UI_BACKEND_SERVICE_HOST": "10.0.0.2",  # a Service named "imnot-ui-backend"
+        "IMNOT_UI_BACKEND_PORT": "tcp://10.0.0.2:80",
     }
     assert load_config(None, env).ui.enabled is True
     with pytest.raises(ConfigError, match="IMNOT_UI_PORTS: unknown setting"):

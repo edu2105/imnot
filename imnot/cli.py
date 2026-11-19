@@ -30,7 +30,7 @@ from imnot.config import ConfigError, load_config
 from imnot.engine.egress import CallbackPolicy
 from imnot.engine.session_store import SessionStore
 from imnot.loader.yaml_loader import PAYLOAD_PATTERNS, load_partners, load_payload_files, parse_partner_yaml
-from imnot.logging_setup import configure_logging, uvicorn_log_config
+from imnot.logging_setup import JsonFormatter, configure_logging, uvicorn_log_config
 from imnot.partners import EXAMPLE_PARTNERS, register_partner, write_example_partner
 from imnot.postman import build_postman_collection, collection_stats
 
@@ -677,13 +677,27 @@ def _exit_unless_partners_are_valid(partners_dir: Path | None, log: logging.Logg
 
     With *log* (JSON logs) the report and the refusal are logged instead of printed.
     """
+    console: logging.Handler | None = None
+    if log is not None and not any(
+        isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler) for h in log.handlers
+    ):
+        # Classic mode with [logging] stdout = false logs to files only: a pod that refuses to start must
+        # still say why on its console (kubectl logs). Errors only, as JSON on stderr, during the check only.
+        console = logging.StreamHandler(sys.stderr)
+        console.setFormatter(JsonFormatter())
+        console.setLevel(logging.ERROR)
+        log.addHandler(console)
     refuse = (lambda msg: log.error("%s", msg)) if log is not None else (lambda msg: click.echo(msg, err=True))
-    if partners_dir is None:
-        refuse("--strict: no partners directory found, refusing to start.")
-        raise SystemExit(1)
-    if not _report_partner_checks(partners_dir, log):
-        refuse("--strict: refusing to start. Fix the problems above (`imnot validate` shows them too).")
-        raise SystemExit(1)
+    try:
+        if partners_dir is None:
+            refuse("--strict: no partners directory found, refusing to start.")
+            raise SystemExit(1)
+        if not _report_partner_checks(partners_dir, log):
+            refuse("--strict: refusing to start. Fix the problems above (`imnot validate` shows them too).")
+            raise SystemExit(1)
+    finally:
+        if console is not None and log is not None:
+            log.removeHandler(console)
 
 
 @cli.command()
