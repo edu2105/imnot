@@ -27,6 +27,7 @@ import yaml
 
 from imnot.api.server import create_app
 from imnot.config import load_config
+from imnot.engine.egress import CallbackPolicy
 from imnot.engine.session_store import SessionStore
 from imnot.loader.yaml_loader import PAYLOAD_PATTERNS, load_partners, load_payload_files, parse_partner_yaml
 from imnot.logging_setup import configure_logging
@@ -200,6 +201,14 @@ def cli() -> None:
     "[env: IMNOT_STRICT]",
 )
 @click.option(
+    "--callback-allowed-hosts",
+    default=None,
+    envvar="IMNOT_CALLBACK_ALLOWED_HOSTS",
+    help="Comma-separated host names, *.suffixes and CIDRs that callback deliveries may go to; "
+    "anything else gets a 422. Link-local and cloud metadata addresses are always refused. "
+    "[env: IMNOT_CALLBACK_ALLOWED_HOSTS]",
+)
+@click.option(
     "--require-admin-key",
     is_flag=True,
     default=False,
@@ -224,6 +233,7 @@ def start(
     reload: bool,
     stateless: bool,
     strict: bool,
+    callback_allowed_hosts: str | None,
     require_admin_key: bool,
     admin_key: str | None,
 ) -> None:
@@ -232,6 +242,10 @@ def start(
         # Before anything is created or written: this is a deployment mistake, not a degraded mode.
         click.echo("--require-admin-key: no admin key set (IMNOT_ADMIN_KEY), refusing to start.", err=True)
         sys.exit(1)
+    try:
+        CallbackPolicy.parse(callback_allowed_hosts)
+    except ValueError as exc:
+        raise click.UsageError(f"--callback-allowed-hosts: {exc}") from exc
     instance_name = (instance_name or "").strip() or None
     if instance_name and len(instance_name) > _INSTANCE_NAME_MAX:
         raise click.UsageError(f"--instance-name is too long (max {_INSTANCE_NAME_MAX} characters).")
@@ -361,6 +375,8 @@ def start(
                 os.environ["IMNOT_BASE_URL"] = base_url
             if instance_name:
                 os.environ["IMNOT_INSTANCE_NAME"] = instance_name
+            if callback_allowed_hosts:
+                os.environ["IMNOT_CALLBACK_ALLOWED_HOSTS"] = callback_allowed_hosts
             uvicorn.run(
                 "imnot.api.server:create_app_from_env",
                 host=effective_host,
@@ -379,6 +395,7 @@ def start(
                 ui_config=config.ui,
                 stateless=stateless,
                 instance_name=instance_name,
+                callback_allowed_hosts=callback_allowed_hosts,
             )
             uvicorn.run(app, host=effective_host, port=effective_port)
     finally:

@@ -489,6 +489,7 @@ def _register_admin_routes(
                 callback_method=row["callback_method"],
                 context={"request_id": request_id},  # the submit request itself is not stored
                 delivery=delivery_config(datapoint.endpoints[0].response),
+                policy=getattr(request.app.state, "callback_policy", None),
             )
             return JSONResponse({"status": "dispatched", "request_id": request_id})
 
