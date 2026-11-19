@@ -339,7 +339,7 @@ def start(
         cli_log.warning("No partners directory found — starting with zero partners")
 
     if strict:
-        _exit_unless_partners_are_valid(resolved_partners_dir)
+        _exit_unless_partners_are_valid(resolved_partners_dir, cli_log if json_logs else None)
 
     effective_admin_key = admin_key or None
     # No pid file in stateless mode: nothing is written, and `imnot stop` is not how a container stops.
@@ -630,44 +630,59 @@ def _check_partners(partners_dir: Path) -> list[tuple[str, int, list[str]]]:
     return results
 
 
-def _report_partner_checks(partners_dir: Path) -> bool:
+def _report_partner_checks(partners_dir: Path, log: logging.Logger | None = None) -> bool:
     """Print one OK/FAIL line per partner file. False if any has problems.
 
     No partner.yaml at all: fine when the directory is completely empty (an instance that starts
     with no partners and gets them from the UI), a failure when it holds anything else, because
     then the partners are there but in the wrong layout.
+
+    With *log* (``start --strict`` with JSON logs) the same lines are logged instead of printed,
+    so stdout stays JSON only.
     """
+
+    def out(text: str, *, error: bool = False, styled: str | None = None) -> None:
+        if log is not None:
+            log.log(logging.ERROR if error else logging.INFO, "%s", text.strip())
+        else:
+            click.echo(styled or text, err=error and styled is None)
+
     results = _check_partners(partners_dir)
     if not results:
         # Dotfiles (.gitkeep, the ..data of a mounted ConfigMap) are not a layout mistake.
         if not any(not entry.name.startswith(".") for entry in partners_dir.iterdir()):
-            click.echo(f"No partners: {partners_dir} is empty. Nothing to check.")
+            out(f"No partners: {partners_dir} is empty. Nothing to check.")
             return True
-        click.echo(
+        out(
             f"No partner.yaml files found in {partners_dir}. Expected {partners_dir.name}/<partner>/partner.yaml.",
-            err=True,
+            error=True,
         )
         return False
     for label, datapoints, problems in results:
         if problems:
-            click.echo(f"{click.style('FAIL', fg='red')}  {label}")
+            out(f"FAIL  {label}", error=True, styled=f"{click.style('FAIL', fg='red')}  {label}")
             for problem in problems:
-                click.echo(f"      {problem}")
+                out(f"FAIL  {label}: {problem}", error=True, styled=f"      {problem}")
         else:
-            click.echo(f"{click.style('OK', fg='green')}    {label}  ({datapoints} datapoint(s))")
+            ok = f"{label}  ({datapoints} datapoint(s))"
+            out(f"OK    {ok}", styled=f"{click.style('OK', fg='green')}    {ok}")
     failed = sum(1 for _, _, problems in results if problems)
     if failed:
-        click.echo(f"\n{failed} of {len(results)} partner file(s) have problems.", err=True)
+        out(f"\n{failed} of {len(results)} partner file(s) have problems.", error=True)
     return not failed
 
 
-def _exit_unless_partners_are_valid(partners_dir: Path | None) -> None:
-    """`imnot start --strict`: the same bar as `imnot validate`, so a broken partner stops the rollout."""
+def _exit_unless_partners_are_valid(partners_dir: Path | None, log: logging.Logger | None = None) -> None:
+    """`imnot start --strict`: the same bar as `imnot validate`, so a broken partner stops the rollout.
+
+    With *log* (JSON logs) the report and the refusal are logged instead of printed.
+    """
+    refuse = (lambda msg: log.error("%s", msg)) if log is not None else (lambda msg: click.echo(msg, err=True))
     if partners_dir is None:
-        click.echo("--strict: no partners directory found, refusing to start.", err=True)
+        refuse("--strict: no partners directory found, refusing to start.")
         raise SystemExit(1)
-    if not _report_partner_checks(partners_dir):
-        click.echo("--strict: refusing to start. Fix the problems above (`imnot validate` shows them too).", err=True)
+    if not _report_partner_checks(partners_dir, log):
+        refuse("--strict: refusing to start. Fix the problems above (`imnot validate` shows them too).")
         raise SystemExit(1)
 
 

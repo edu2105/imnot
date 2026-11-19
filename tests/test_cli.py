@@ -1016,6 +1016,25 @@ def test_json_logs_keep_stdout_json_only_and_configure_uvicorn(runner, tmp_path)
     assert run.call_args.kwargs["log_config"]["formatters"]["json"]["()"] == "imnot.logging_setup.JsonFormatter"
 
 
+def test_json_logs_with_strict_log_the_partner_checks(runner, tmp_path):
+    good = tmp_path / "partners" / "good"
+    good.mkdir(parents=True)
+    (good / "partner.yaml").write_text(
+        "partner: good\ndescription: d\ndatapoints:\n  - name: t\n    description: d\n    pattern: static\n"
+        "    endpoints:\n      - method: GET\n        path: /good\n        response: {status: 200, body: {}}\n"
+    )
+    result, run = _start_with(runner, tmp_path, "--strict", env={"IMNOT_LOGGING_FORMAT": "json"})
+    assert result.exit_code == 0, result.output
+    assert "OK" not in result.output and "partner.yaml" not in result.output
+    run.assert_called_once()
+
+    (good / "partner.yaml").write_text("partner: good\nnope: 1\n")
+    result, run = _start_with(runner, tmp_path, "--strict", env={"IMNOT_LOGGING_FORMAT": "json"})
+    assert result.exit_code == 1
+    assert result.output == ""  # the FAIL lines and the refusal are logged, not printed
+    run.assert_not_called()
+
+
 def test_text_logs_leave_uvicorn_logging_alone(runner, tmp_path):
     result, run = _start_with(runner, tmp_path)
     assert "Starting imnot on" in result.output

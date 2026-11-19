@@ -268,3 +268,19 @@ def test_default_reads_os_environ(monkeypatch):
 def test_bad_env_values_are_errors(env, message):
     with pytest.raises(ConfigError, match=message):
         load_config(None, env)
+
+
+def test_kubernetes_service_links_are_skipped():
+    # A Service named "imnot-ui" or "imnot-logging" in the namespace injects these into every pod.
+    env = {
+        "IMNOT_UI_PORT": "tcp://10.0.0.1:80",
+        "IMNOT_UI_SERVICE_HOST": "10.0.0.1",
+        "IMNOT_UI_SERVICE_PORT": "80",
+        "IMNOT_UI_SERVICE_PORT_HTTP": "80",
+        "IMNOT_UI_PORT_80_TCP": "tcp://10.0.0.1:80",
+        "IMNOT_UI_PORT_80_TCP_ADDR": "10.0.0.1",
+        "IMNOT_LOGGING_PORT_8000_TCP_PROTO": "tcp",
+    }
+    assert load_config(None, env).ui.enabled is True
+    with pytest.raises(ConfigError, match="IMNOT_UI_PORTS: unknown setting"):
+        load_config(None, {"IMNOT_UI_PORTS": "1"})

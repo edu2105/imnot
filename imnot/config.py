@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import tomllib
 import typing
 from dataclasses import dataclass, field, fields
@@ -61,6 +62,9 @@ class ConfigError(ValueError):
 # IMNOT_UI_ENABLED), so a container needs no imnot.toml. [server] is not here: its settings already have
 # their own names (IMNOT_BIND_HOST, IMNOT_DB_PATH…, see cli.py), and one setting gets one name.
 ENV_SECTIONS = ("logging", "pagination", "ui")
+# Kubernetes injects <SERVICE>_SERVICE_HOST, <SERVICE>_PORT, <SERVICE>_PORT_8000_TCP… for every Service in the
+# namespace: a Service named "imnot-ui" gives IMNOT_UI_PORT and friends. Those are skipped, not errors.
+_K8S_SERVICE_LINK = re.compile(r"(SERVICE_HOST|SERVICE_PORT(_\w+)?|PORT(_\d+_(TCP|UDP|SCTP)(_PROTO|_PORT|_ADDR)?)?)")
 _TRUE = {"1", "true", "yes", "on"}
 _FALSE = {"0", "false", "no", "off"}
 
@@ -94,6 +98,8 @@ def _apply_env(config: ImnotConfig, environ: Mapping[str, str]) -> None:
             hints = typing.get_type_hints(type(section))
             key = name[len(prefix) :].lower()
             if key not in hints:
+                if _K8S_SERVICE_LINK.fullmatch(key.upper()):
+                    continue
                 known = ", ".join(prefix + k.upper() for k in hints)
                 raise ConfigError(f"{name}: unknown setting. Known: {known}")
             setattr(section, key, _coerce(name, raw, hints[key]))

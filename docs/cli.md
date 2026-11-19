@@ -57,7 +57,7 @@ Every key of the `[logging]`, `[pagination]` and `[ui]` sections of `imnot.toml`
 | `IMNOT_UI_ENABLED` | `[ui] enabled` | true/false as above |
 | `IMNOT_UI_DEFAULT_THEME` | `[ui] default_theme` | `light`, `dark` or `system` |
 
-An unknown `IMNOT_LOGGING_*` / `IMNOT_PAGINATION_*` / `IMNOT_UI_*` name or a value of the wrong type stops `imnot` with an error. `[server]` keys use the names in the table above (`IMNOT_BIND_HOST`, `IMNOT_DB_PATH`…), not `IMNOT_SERVER_*`.
+An unknown `IMNOT_LOGGING_*` / `IMNOT_PAGINATION_*` / `IMNOT_UI_*` name or a value of the wrong type stops `imnot` with an error. `[server]` keys use the names in the table above (`IMNOT_BIND_HOST`, `IMNOT_DB_PATH`…), not `IMNOT_SERVER_*`. The variables Kubernetes adds for a Service named `imnot-ui`, `imnot-logging`… (`IMNOT_UI_PORT`, `IMNOT_UI_SERVICE_HOST`…) are ignored.
 
 ---
 
