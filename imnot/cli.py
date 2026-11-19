@@ -36,6 +36,7 @@ from imnot.postman import build_postman_collection, collection_stats
 DEFAULT_PARTNERS_DIR = "partners"
 DEFAULT_DB = Path("imnot.db")
 _INSTANCE_NAME_MAX = 64
+_ADMIN_KEY_MIN_LENGTH = 16
 
 _IMNOT_TOML_TEMPLATE = """\
 # imnot.toml — runtime configuration for imnot
@@ -199,6 +200,14 @@ def cli() -> None:
     "[env: IMNOT_STRICT]",
 )
 @click.option(
+    "--require-admin-key",
+    is_flag=True,
+    default=False,
+    envvar="IMNOT_REQUIRE_ADMIN_KEY",
+    help="Exit with an error when no admin key is set, so a shared deployment never starts with an open "
+    "admin API. [env: IMNOT_REQUIRE_ADMIN_KEY]",
+)
+@click.option(
     "--admin-key",
     default=None,
     envvar="IMNOT_ADMIN_KEY",
@@ -215,9 +224,14 @@ def start(
     reload: bool,
     stateless: bool,
     strict: bool,
+    require_admin_key: bool,
     admin_key: str | None,
 ) -> None:
     """Start the mock server and load partner definitions."""
+    if require_admin_key and not admin_key:
+        # Before anything is created or written: this is a deployment mistake, not a degraded mode.
+        click.echo("--require-admin-key: no admin key set (IMNOT_ADMIN_KEY), refusing to start.", err=True)
+        sys.exit(1)
     instance_name = (instance_name or "").strip() or None
     if instance_name and len(instance_name) > _INSTANCE_NAME_MAX:
         raise click.UsageError(f"--instance-name is too long (max {_INSTANCE_NAME_MAX} characters).")
@@ -310,6 +324,13 @@ def start(
         )
         click.echo(_warn, err=True)
         cli_log.warning("Binding to 0.0.0.0 with no IMNOT_ADMIN_KEY — admin endpoints are unauthenticated")
+    if effective_admin_key and len(effective_admin_key) < _ADMIN_KEY_MIN_LENGTH:
+        click.echo(
+            f"WARNING: the admin key is shorter than {_ADMIN_KEY_MIN_LENGTH} characters and can be guessed. "
+            "Use a long random one, e.g. `openssl rand -hex 32`.",
+            err=True,
+        )
+        cli_log.warning("Admin key shorter than %d characters", _ADMIN_KEY_MIN_LENGTH)
 
     click.echo(f"Starting imnot on http://{effective_host}:{effective_port}")
     if instance_name:
